@@ -8,6 +8,7 @@ message LogEvent {
   oneof event {
     UnknownLogMessage unknown_log_message = 3;
     BlockConnectedLog block_connected_log = 4;
+    BlockCheckedLog block_checked_log = 5;
   }
 }
 
@@ -52,4 +53,11 @@ message UnknownLogMessage {
 message BlockConnectedLog {
   required string block_hash = 1;
   required uint32 block_height = 2;
+}
+
+// 2025-10-28T02:20:12Z [validation] BlockChecked: block hash=1811952798ccd2ad1264b064c3da6313fba7497159b999ee045afb046c7d0232 state=bad-txns-duplicate, duplicate transaction
+message BlockCheckedLog {
+  required string block_hash = 1;
+  required string state = 2;
+  required string debug_message = 3;
 }

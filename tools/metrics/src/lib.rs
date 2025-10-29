@@ -961,5 +961,6 @@ fn handle_log_event(e: &log_event::Event, metrics: metrics::Metrics) {
         log_event::Event::BlockConnectedLog(_) => {
             metrics.log_block_connected_events.inc();
         }
+        log_event::Event::BlockCheckedLog(_) => {},
     }
 }

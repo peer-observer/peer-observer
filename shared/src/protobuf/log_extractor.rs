@@ -19,11 +19,24 @@ impl fmt::Display for BlockConnectedLog {
     }
 }
 
+impl fmt::Display for BlockCheckedLog {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "BlockChecked(hash={}, state={}, debug_message={})",
+            self.block_hash, self.state, self.debug_message
+        )
+    }
+}
+
 impl fmt::Display for log_event::Event {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             log_event::Event::UnknownLogMessage(message) => write!(f, "{}", message),
             log_event::Event::BlockConnectedLog(block) => write!(f, "{}", block),
+            log_event::Event::BlockCheckedLog(block) => {
+                write!(f, "{}", block)
+            }
         }
     }
 }

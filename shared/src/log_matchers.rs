@@ -1,6 +1,6 @@
 use crate::protobuf::log_extractor::log_event::Event;
 use crate::protobuf::log_extractor::{
-    BlockConnectedLog, LogDebugCategory, LogEvent, UnknownLogMessage,
+    BlockCheckedLog, BlockConnectedLog, LogDebugCategory, LogEvent, UnknownLogMessage,
 };
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -23,6 +23,14 @@ static RFC3339_DATE_REGEX: &str = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1
 
 static BLOCK_HASH_PATTERN: &str = r"[0-9a-f]{64}";
 
+/// Regular expression for matching the output of `ValidationState::ToString()`.
+///
+/// Matches strings produced by the `ToString()` method of a validation state object:
+/// - `(.*?)`: Captures the **primary reject reason**, non-greedily matching everything up to the first comma and space `", "` or the end of the string.
+/// - `(?:,\s|$)`: Non-capturing group that matches either the separator `", "` or the end of the string.
+/// - `(.+)?`: Optionally captures the **debug message** that follows the separator, if present.
+static VALIDATION_STATE_PATTERN: &str = r"(.*?)(?:,\s|$)(.+)?";
+
 lazy_static! {
     /// Regular expression for parsing default infos from log lines.
     ///
@@ -43,6 +51,13 @@ lazy_static! {
     static ref BLOCK_CONNECTED_REGEX: Regex = Regex::new(&format!(
         r"BlockConnected: block hash=({}) block height=(\d+)",
         BLOCK_HASH_PATTERN
+    ))
+    .unwrap();
+
+    static ref BLOCK_CHECKED_REGEX: Regex = Regex::new(&format!(
+        r"BlockChecked: block hash=({}) state={}",
+        BLOCK_HASH_PATTERN,
+        VALIDATION_STATE_PATTERN
     ))
     .unwrap();
 }
@@ -74,10 +89,30 @@ impl LogMatcher for BlockConnectedLog {
     }
 }
 
+impl LogMatcher for BlockCheckedLog {
+    fn parse_event(line: &str) -> Option<Event> {
+        let Some(caps) = BLOCK_CHECKED_REGEX.captures(&line) else {
+            return None;
+        };
+
+        let block_hash = caps.get(1)?.as_str().to_string();
+        let state = caps.get(2)?.as_str().to_string();
+        let debug_message = caps
+            .get(3)
+            .map_or_else(|| String::new(), |m| m.as_str().to_string());
+        Some(Event::BlockCheckedLog(BlockCheckedLog {
+            block_hash,
+            state,
+            debug_message,
+        }))
+    }
+}
+
 pub fn parse_log_event(line: &str) -> LogEvent {
     let (timestamp_micro, category, message) = parse_common_log_data(line);
 
-    let matchers: Vec<fn(&str) -> Option<Event>> = vec![BlockConnectedLog::parse_event];
+    let matchers: Vec<fn(&str) -> Option<Event>> =
+        vec![BlockConnectedLog::parse_event, BlockCheckedLog::parse_event];
     for matcher in &matchers {
         if let Some(event) = matcher(&message) {
             return LogEvent {
@@ -281,5 +316,45 @@ mod tests {
             return;
         }
         panic!("Expected UnknownLogMessage event");
+    }
+
+    #[test]
+    fn test_log_matcher_block_checked() {
+        let log = "2025-10-28T02:18:37Z [validation] BlockChecked: block hash=3909cd2a5ff36b9a40368609f92945e5b7111bca3cb4d04b72c39964aeb5d156 state=Valid";
+        let log_event = parse_log_event(log);
+
+        assert_eq!(log_event.log_timestamp, 1761617917000000);
+        assert_eq!(log_event.category, LogDebugCategory::Validation as i32);
+
+        if let Some(Event::BlockCheckedLog(event)) = log_event.event {
+            assert_eq!(
+                event.block_hash,
+                "3909cd2a5ff36b9a40368609f92945e5b7111bca3cb4d04b72c39964aeb5d156"
+            );
+            assert_eq!(event.state, "Valid");
+            assert_eq!(event.debug_message, "");
+            return;
+        }
+        panic!("Expected BlockCheckedLog event");
+    }
+
+    #[test]
+    fn test_log_matcher_block_checked_with_debug_message() {
+        let log = "2025-10-28T02:18:37Z [validation] BlockChecked: block hash=3909cd2a5ff36b9a40368609f92945e5b7111bca3cb4d04b72c39964aeb5d156 state=bad-txnmrklroot, hashMerkleRoot mismatch";
+        let log_event = parse_log_event(log);
+
+        assert_eq!(log_event.log_timestamp, 1761617917000000);
+        assert_eq!(log_event.category, LogDebugCategory::Validation as i32);
+
+        if let Some(Event::BlockCheckedLog(event)) = log_event.event {
+            assert_eq!(
+                event.block_hash,
+                "3909cd2a5ff36b9a40368609f92945e5b7111bca3cb4d04b72c39964aeb5d156"
+            );
+            assert_eq!(event.state, "bad-txnmrklroot");
+            assert_eq!(event.debug_message, "hashMerkleRoot mismatch");
+            return;
+        }
+        panic!("Expected BlockCheckedLog event");
     }
 }
