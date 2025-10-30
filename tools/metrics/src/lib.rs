@@ -10,7 +10,7 @@ use shared::prost::Message;
 use shared::protobuf::addrman::addrman_event;
 use shared::protobuf::event_msg;
 use shared::protobuf::event_msg::event_msg::Event;
-use shared::protobuf::log_extractor::log_event;
+use shared::protobuf::log_extractor::{log_event, LogDebugCategory, LogEvent};
 use shared::protobuf::mempool::mempool_event;
 use shared::protobuf::net_conn::connection_event;
 use shared::protobuf::net_msg;
@@ -150,9 +150,7 @@ fn handle_event(
                 }
             }
             Event::LogExtractorEvent(l) => {
-                if let Some(e) = l.event {
-                    handle_log_event(&e, metrics);
-                }
+                handle_log_event(&l, metrics);
             }
         }
     }
@@ -954,8 +952,15 @@ fn handle_p2p_message(msg: &net_msg::Message, timestamp: u64, metrics: metrics::
     }
 }
 
-fn handle_log_event(e: &log_event::Event, metrics: metrics::Metrics) {
-    metrics.log_events.inc();
+fn handle_log_event(log: &LogEvent, metrics: metrics::Metrics) {
+    let category = LogDebugCategory::try_from(log.category)
+        .unwrap_or(LogDebugCategory::Unknown)
+        .as_str_name()
+        .to_lowercase();
+
+    metrics.log_events.with_label_values(&[&category]).inc();
+
+    let Some(e) = &log.event else { return };
     match e {
         log_event::Event::UnknownLogMessage(_) => {}
         log_event::Event::BlockConnectedLog(_) => {
