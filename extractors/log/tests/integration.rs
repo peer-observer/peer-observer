@@ -3,7 +3,9 @@
 
 use log_extractor::Args;
 use shared::{
-    async_nats, bitcoin, corepc_node,
+    async_nats,
+    bitcoin::{self, Block},
+    corepc_node,
     futures::StreamExt,
     log,
     prost::Message,
@@ -132,6 +134,17 @@ async fn check(
 
     shutdown_tx.send(true).unwrap();
     log_extractor_handle.await.unwrap();
+}
+
+pub fn update_merkle_root(block: &mut Block) -> () {
+    block.header.merkle_root = block.compute_merkle_root().unwrap();
+}
+
+pub fn mine_block(block: &mut Block) {
+    let target = block.header.target();
+    while !block.header.validate_pow(target).is_ok() {
+        block.header.nonce += 1;
+    }
 }
 
 #[tokio::test]
@@ -276,6 +289,43 @@ async fn test_integration_logextractor_extralogging() {
                             log_event::Event::BlockConnectedLog(block_connected) => {
                                 assert!(block_connected.block_height > 0);
                                 log::info!("BlockConnectedLog event {}", block_connected);
+                                return true;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => panic!("unexpected event {:?}", event),
+            };
+            false
+        },
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_logextractor_block_checked() {
+    println!("test that we receive block checked log events");
+
+    check(
+        vec!["-debug=validation"],
+        |node1| {
+            let address: bitcoin::address::Address =
+                bitcoin::address::Address::from_str("bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw")
+                    .unwrap()
+                    .require_network(bitcoin::Network::Regtest)
+                    .unwrap();
+            node1.generate_to_address(1, &address).unwrap();
+        },
+        |event| {
+            match event {
+                Event::LogExtractorEvent(r) => {
+                    if let Some(ref e) = r.event {
+                        match e {
+                            log_event::Event::BlockCheckedLog(block_checked) => {
+                                assert!(block_checked.block_hash.len() > 0);
+                                assert_eq!(block_checked.state, "Valid");
+                                log::info!("BlockCheckedLog event {}", block_checked);
                                 return true;
                             }
                             _ => {}

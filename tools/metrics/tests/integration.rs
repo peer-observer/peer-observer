@@ -2823,3 +2823,33 @@ async fn test_integration_metrics_logextractor_blockconnected_events() {
     )
     .await;
 }
+
+#[tokio::test]
+async fn test_integration_metrics_logextractor_blockchecked_events() {
+    println!("test that log-extractor block checked log events metric work");
+
+    publish_and_check(
+        &[
+            EventMsg::new(Event::LogExtractorEvent(log_extractor::LogEvent {
+                category: LogDebugCategory::Validation.into(),
+                log_timestamp: 345,
+                event: Some(log_extractor::log_event::Event::BlockCheckedLog(
+                    log_extractor::BlockCheckedLog {
+                        debug_message: "".to_string(),
+                        state: "Valid".to_string(),
+                        block_hash:
+                            "309665469cc06cecdd0be45f3070aa446b4871bb5d1b0bc97965895d1d35f541"
+                                .to_string(),
+                    },
+                )),
+            }))
+            .unwrap(),
+        ],
+        Subject::LogExtractor,
+        r#"
+        peerobserver_log_block_checked_events 1
+        peerobserver_log_events{category="validation"} 1
+        "#,
+    )
+    .await;
+}
