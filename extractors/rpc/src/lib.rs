@@ -63,6 +63,14 @@ pub struct Args {
     /// Disable quering and publishing of `getmempoolinfo` data.
     #[arg(long, default_value_t = false)]
     pub disable_getmempoolinfo: bool,
+
+    /// Disable quering and publishing of `uptime` data.
+    #[arg(long, default_value_t = false)]
+    pub disable_uptime: bool,
+
+    /// Disable quering and publishing of `getnettotals` data.
+    #[arg(long, default_value_t = false)]
+    pub disable_getnettotals: bool,
 }
 
 impl Args {
@@ -74,6 +82,8 @@ impl Args {
         query_interval: u64,
         disable_getpeerinfo: bool,
         disable_getmempoolinfo: bool,
+        disable_uptime: bool,
+        disable_getnettotals: bool,
     ) -> Args {
         Self {
             nats_address,
@@ -85,6 +95,8 @@ impl Args {
             query_interval,
             disable_getpeerinfo,
             disable_getmempoolinfo,
+            disable_uptime,
+            disable_getnettotals,
             // when adding more disable_* args, make sure to update the disable_all below
         }
     }
@@ -119,8 +131,16 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         "Querying getmempoolinfo enabled: {}",
         !args.disable_getmempoolinfo
     );
+    log::info!("Querying uptime enabled:         {}", !args.disable_uptime);
+    log::info!(
+        "Querying getnettotals enabled:   {}",
+        !args.disable_getnettotals
+    );
     // check if we have at least one RPC to query
-    let disable_all = args.disable_getpeerinfo && args.disable_getmempoolinfo;
+    let disable_all = args.disable_getpeerinfo
+        && args.disable_getmempoolinfo
+        && args.disable_uptime
+        && args.disable_getnettotals;
     if disable_all {
         log::warn!("No RPC configured to be queried!");
     }
@@ -136,6 +156,16 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
                 if !args.disable_getmempoolinfo {
                     if let Err(e) = getmempoolinfo(&rpc_client, &nats_client).await {
                         log::error!("Could not fetch and publish 'getmempoolinfo': {}", e)
+                    }
+                }
+                if !args.disable_uptime {
+                    if let Err(e) = uptime(&rpc_client, &nats_client).await {
+                        log::error!("Could not fetch and publish 'uptime': {}", e)
+                    }
+                }
+                if !args.disable_getnettotals {
+                    if let Err(e) = getnettotals(&rpc_client, &nats_client).await {
+                        log::error!("Could not fetch and publish 'getnettotals': {}", e)
                     }
                 }
             }
@@ -183,6 +213,38 @@ async fn getmempoolinfo(
 
     let proto = EventMsg::new(Event::Rpc(rpc::RpcEvent {
         event: Some(rpc::rpc_event::Event::MempoolInfo(mempool_info.into())),
+    }))?;
+
+    nats_client
+        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
+        .await?;
+    Ok(())
+}
+
+async fn uptime(
+    rpc_client: &Client,
+    nats_client: &async_nats::Client,
+) -> Result<(), FetchOrPublishError> {
+    let uptime_seconds = rpc_client.uptime()?;
+
+    let proto = EventMsg::new(Event::Rpc(rpc::RpcEvent {
+        event: Some(rpc::rpc_event::Event::Uptime(uptime_seconds)),
+    }))?;
+
+    nats_client
+        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
+        .await?;
+    Ok(())
+}
+
+async fn getnettotals(
+    rpc_client: &Client,
+    nats_client: &async_nats::Client,
+) -> Result<(), FetchOrPublishError> {
+    let net_totals = rpc_client.get_net_totals()?;
+
+    let proto = EventMsg::new(Event::Rpc(rpc::RpcEvent {
+        event: Some(rpc::rpc_event::Event::NetTotals(net_totals.into())),
     }))?;
 
     nats_client

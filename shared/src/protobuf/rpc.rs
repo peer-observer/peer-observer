@@ -1,3 +1,5 @@
+use corepc_client::types::v17::GetNetTotals as RPCGetNetTotals;
+use corepc_client::types::v17::UploadTarget as RPCUploadTarget;
 use corepc_client::types::v26::{
     GetMempoolInfo, GetPeerInfo as RPCGetPeerInfo, PeerInfo as RPCPeerInfo,
 };
@@ -32,6 +34,8 @@ impl fmt::Display for rpc_event::Event {
         match self {
             rpc_event::Event::PeerInfos(infos) => write!(f, "{}", infos),
             rpc_event::Event::MempoolInfo(info) => write!(f, "{}", info),
+            rpc_event::Event::Uptime(seconds) => write!(f, "Uptime({}s)", seconds),
+            rpc_event::Event::NetTotals(totals) => write!(f, "{}", totals),
         }
     }
 }
@@ -110,6 +114,50 @@ impl fmt::Display for MempoolInfo {
             f,
             "MempoolInfo(size={}txn, bytes={}vB, usage={}b)",
             self.size, self.bytes, self.usage
+        )
+    }
+}
+
+impl From<RPCGetNetTotals> for NetTotals {
+    fn from(totals: RPCGetNetTotals) -> Self {
+        NetTotals {
+            total_bytes_received: totals.total_bytes_received,
+            total_bytes_sent: totals.total_bytes_sent,
+            time_millis: totals.time_millis,
+            upload_target: totals.upload_target.into(),
+        }
+    }
+}
+
+impl From<RPCUploadTarget> for UploadTarget {
+    fn from(target: RPCUploadTarget) -> Self {
+        UploadTarget {
+            timeframe: target.timeframe,
+            target: target.target,
+            target_reached: target.target_reached,
+            serve_historical_blocks: target.serve_historical_blocks,
+            bytes_left_in_cycle: target.bytes_left_in_cycle,
+            time_left_in_cycle: target.time_left_in_cycle,
+        }
+    }
+}
+
+impl fmt::Display for NetTotals {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "NetTotals(recv={}B, sent={}B)",
+            self.total_bytes_received, self.total_bytes_sent
+        )
+    }
+}
+
+impl fmt::Display for UploadTarget {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "UploadTarget(target={}B, reached={})",
+            self.target, self.target_reached
         )
     }
 }

@@ -41,6 +41,10 @@ Options:
           Disable quering and publishing of `getpeerinfo` data
       --disable-getmempoolinfo
           Disable quering and publishing of `getmempoolinfo` data
+      --disable-uptime
+          Disable quering and publishing of `uptime` data
+      --disable-getnettotals
+          Disable quering and publishing of `getnettotals` data
   -h, --help
           Print help
   -V, --version

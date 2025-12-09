@@ -6,6 +6,8 @@ message RPCEvent {
   oneof event {
     PeerInfos peer_infos = 1;
     MempoolInfo mempool_info = 2;
+    uint32 uptime = 3;
+    NetTotals net_totals = 4;
   }
 }
 
@@ -77,4 +79,22 @@ message MempoolInfo {
   // These were both added in v30.0, but aren't in v29. Can be added later, if needed
   // required bool     permitbaremultisig      = 12; // True if the mempool accepts transactions with bare multisig outputs
   // required uint32   maxdatacarriersize      = 13; // Maximum number of bytes that can be used by OP_RETURN outputs in the mempool
+}
+
+// A getnettotals RPC result: Returns information about network traffic, including bytes in, bytes out, and current time.
+message NetTotals {
+  required uint64       total_bytes_received     = 1; // Total bytes received
+  required uint64       total_bytes_sent         = 2; // Total bytes sent
+  required uint64       time_millis              = 3; // Current UNIX time in milliseconds
+  required UploadTarget upload_target            = 4; // Upload target statistics
+}
+
+// Upload target statistics. Part of getnettotals.
+message UploadTarget {
+  required uint64 timeframe                = 1; // Length of the measuring timeframe in seconds
+  required uint64 target                   = 2; // Target in bytes
+  required bool   target_reached           = 3; // True if target is reached
+  required bool   serve_historical_blocks  = 4; // True if serving historical blocks
+  required uint64 bytes_left_in_cycle      = 5; // Bytes left in current time cycle
+  required uint64 time_left_in_cycle       = 6; // Seconds left in current time cycle
 }
