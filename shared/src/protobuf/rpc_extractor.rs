@@ -5,8 +5,8 @@ use corepc_client::types::v26::{
 };
 use std::fmt;
 
-// structs are generated via the rpc.proto file
-include!(concat!(env!("OUT_DIR"), "/rpc.rs"));
+// structs are generated via the rpc_extractor.proto file
+include!(concat!(env!("OUT_DIR"), "/rpc_extractor.rs"));
 
 impl fmt::Display for PeerInfos {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

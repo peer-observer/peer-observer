@@ -21,7 +21,7 @@ use shared::{
         },
         p2p_extractor,
         primitive::{self, inventory_item::Item, Address, InventoryItem},
-        rpc::{self, MempoolInfo, NetTotals, PeerInfo, PeerInfos, UploadTarget},
+        rpc_extractor::{self, MempoolInfo, NetTotals, PeerInfo, PeerInfos, UploadTarget},
         validation::{self, BlockConnected},
     },
     rand::{self, Rng},
@@ -1568,8 +1568,8 @@ async fn test_integration_metrics_rpc_peerinfo() {
     println!("test that the RPC peer-info metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc::RpcEvent {
-            event: Some(rpc::rpc_event::Event::PeerInfos(PeerInfos {
+        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
+            event: Some(rpc_extractor::rpc_event::Event::PeerInfos(PeerInfos {
                 infos: vec![
                     PeerInfo {
                         addr_processed: 1234,
@@ -1783,8 +1783,8 @@ async fn test_integration_metrics_rpc_peerinfo_sub1satvbyte() {
     bytes_received_per_message.insert("tx".to_string(), 1234);
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc::RpcEvent {
-            event: Some(rpc::rpc_event::Event::PeerInfos(PeerInfos {
+        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
+            event: Some(rpc_extractor::rpc_event::Event::PeerInfos(PeerInfos {
                 infos: vec![
                     // This peer is a sub-1 sat/vbyte peer as the minfeefilter is 0.1 sat/vbyte
                     // and it has received txns (bytes_received_per_message).
@@ -1933,8 +1933,8 @@ async fn test_integration_metrics_rpc_peerinfo_invtosend() {
     println!("test that the invtosend metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc::RpcEvent {
-            event: Some(rpc::rpc_event::Event::PeerInfos(PeerInfos {
+        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
+            event: Some(rpc_extractor::rpc_event::Event::PeerInfos(PeerInfos {
                 infos: vec![
                     // This peer has an inv-to-send queue of 77.
                     PeerInfo {
@@ -2085,8 +2085,8 @@ async fn test_integration_metrics_rpc_peerinfo_cpuload() {
     println!("test that the cpuload metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc::RpcEvent {
-            event: Some(rpc::rpc_event::Event::PeerInfos(PeerInfos {
+        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
+            event: Some(rpc_extractor::rpc_event::Event::PeerInfos(PeerInfos {
                 infos: vec![
                     // This peer has a cpu_load 5.0
                     PeerInfo {
@@ -2237,8 +2237,8 @@ async fn test_integration_metrics_rpc_peerinfo_ipv4_inbound_diversity() {
     println!("test that the ipv4 inbound diversity metric works");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc::RpcEvent {
-            event: Some(rpc::rpc_event::Event::PeerInfos(PeerInfos {
+        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
+            event: Some(rpc_extractor::rpc_event::Event::PeerInfos(PeerInfos {
                 infos: vec![
                     // The first two peers are from the same /16 (123.123.*) and
                     // the third peer is from a distict (234.234.*) subnet. This results
@@ -2383,8 +2383,8 @@ async fn test_integration_metrics_rpc_peerinfo_peer_list_bitprojects() {
     println!("test that the bitprojects in/outbound peers metric works");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc::RpcEvent {
-            event: Some(rpc::rpc_event::Event::PeerInfos(PeerInfos {
+        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
+            event: Some(rpc_extractor::rpc_event::Event::PeerInfos(PeerInfos {
                 infos: vec![
                     // A bitprojects inbound peer.
                     PeerInfo {
@@ -2578,8 +2578,8 @@ async fn test_integration_metrics_rpc_mempoolinfo() {
     println!("test that the mempoolinfo metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc::RpcEvent {
-            event: Some(rpc::rpc_event::Event::MempoolInfo(MempoolInfo {
+        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
+            event: Some(rpc_extractor::rpc_event::Event::MempoolInfo(MempoolInfo {
                 loaded: true,
                 size: 1000,
                 bytes: 2000,

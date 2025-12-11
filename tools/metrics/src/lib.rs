@@ -16,7 +16,7 @@ use shared::protobuf::net_conn::connection_event;
 use shared::protobuf::net_msg;
 use shared::protobuf::net_msg::{message::Msg, reject::RejectReason};
 use shared::protobuf::p2p_extractor::p2p_extractor_event;
-use shared::protobuf::rpc::rpc_event;
+use shared::protobuf::rpc_extractor::rpc_event;
 use shared::protobuf::validation::validation_event;
 use shared::tokio::sync::watch;
 use shared::util::{self, is_on_linkinglion_banlist};

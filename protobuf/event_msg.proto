@@ -2,15 +2,15 @@ syntax = "proto2";
 
 package event_msg;
 
-// ebpf extractor
+// ebpf-extractor
 import "net_msg.proto";
 import "net_conn.proto";
 import "addrman.proto";
 import "mempool.proto";
 import "validation.proto";
 
-// rpc extractor
-import "rpc.proto";
+// rpc-extractor
+import "rpc_extractor.proto";
 
 // p2p-extractor
 import "p2p_extractor.proto";
@@ -27,7 +27,7 @@ message EventMsg {
     addrman.AddrmanEvent addrman = 3;
     mempool.MempoolEvent mempool = 4;
     validation.ValidationEvent validation = 5;
-    rpc.RPCEvent rpc = 6;
+    rpc_extractor.RPCEvent rpc = 6;
     p2p_extractor.P2PExtractorEvent P2PExtractorEvent = 7;
     log_extractor.LogEvent logExtractorEvent = 8;
   }

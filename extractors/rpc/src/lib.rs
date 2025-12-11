@@ -6,7 +6,7 @@ use shared::nats_subjects::Subject;
 use shared::prost::Message;
 use shared::protobuf::event_msg::EventMsg;
 use shared::protobuf::event_msg::event_msg::Event;
-use shared::protobuf::rpc;
+use shared::protobuf::rpc_extractor;
 use shared::tokio::sync::watch;
 use shared::tokio::time::{self, Duration};
 use shared::{async_nats, clap};
@@ -195,8 +195,8 @@ async fn getpeerinfo(
 ) -> Result<(), FetchOrPublishError> {
     let peer_info = rpc_client.get_peer_info()?;
 
-    let proto = EventMsg::new(Event::Rpc(rpc::RpcEvent {
-        event: Some(rpc::rpc_event::Event::PeerInfos(peer_info.into())),
+    let proto = EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
+        event: Some(rpc_extractor::rpc_event::Event::PeerInfos(peer_info.into())),
     }))?;
 
     nats_client
@@ -211,8 +211,10 @@ async fn getmempoolinfo(
 ) -> Result<(), FetchOrPublishError> {
     let mempool_info = rpc_client.get_mempool_info()?;
 
-    let proto = EventMsg::new(Event::Rpc(rpc::RpcEvent {
-        event: Some(rpc::rpc_event::Event::MempoolInfo(mempool_info.into())),
+    let proto = EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
+        event: Some(rpc_extractor::rpc_event::Event::MempoolInfo(
+            mempool_info.into(),
+        )),
     }))?;
 
     nats_client
@@ -227,8 +229,8 @@ async fn uptime(
 ) -> Result<(), FetchOrPublishError> {
     let uptime_seconds = rpc_client.uptime()?;
 
-    let proto = EventMsg::new(Event::Rpc(rpc::RpcEvent {
-        event: Some(rpc::rpc_event::Event::Uptime(uptime_seconds)),
+    let proto = EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
+        event: Some(rpc_extractor::rpc_event::Event::Uptime(uptime_seconds)),
     }))?;
 
     nats_client
@@ -243,8 +245,10 @@ async fn getnettotals(
 ) -> Result<(), FetchOrPublishError> {
     let net_totals = rpc_client.get_net_totals()?;
 
-    let proto = EventMsg::new(Event::Rpc(rpc::RpcEvent {
-        event: Some(rpc::rpc_event::Event::NetTotals(net_totals.into())),
+    let proto = EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
+        event: Some(rpc_extractor::rpc_event::Event::NetTotals(
+            net_totals.into(),
+        )),
     }))?;
 
     nats_client

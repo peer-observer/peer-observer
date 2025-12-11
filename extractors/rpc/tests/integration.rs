@@ -7,7 +7,7 @@ use shared::{
     log::{self, info},
     prost::Message,
     protobuf::event_msg::{EventMsg, event_msg::Event},
-    protobuf::rpc::rpc_event::Event::{MempoolInfo, NetTotals, PeerInfos, Uptime},
+    protobuf::rpc_extractor::rpc_event::Event::{MempoolInfo, NetTotals, PeerInfos, Uptime},
     simple_logger::SimpleLogger,
     testing::nats_server::NatsServerForTesting,
     tokio::{self, sync::watch},

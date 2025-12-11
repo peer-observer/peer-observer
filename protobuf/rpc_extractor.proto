@@ -1,6 +1,6 @@
 syntax = "proto2";
 
-package rpc;
+package rpc_extractor;
 
 message RPCEvent {
   oneof event {

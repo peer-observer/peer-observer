@@ -14,7 +14,7 @@ use shared::{
         net_conn::{self, Connection, InboundConnection},
         net_msg::{self, message::Msg, Metadata, Ping, Pong},
         p2p_extractor,
-        rpc::{self, PeerInfo, PeerInfos},
+        rpc_extractor::{self, PeerInfo, PeerInfos},
         validation::{self, BlockConnected},
     },
     testing::{nats_publisher::NatsPublisherForTesting, nats_server::NatsServerForTesting},
@@ -303,8 +303,8 @@ async fn test_integration_logger_rpc_peerinfo() {
     println!("test that RPC events are logged");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc::RpcEvent {
-            event: Some(rpc::rpc_event::Event::PeerInfos(PeerInfos {
+        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
+            event: Some(rpc_extractor::rpc_event::Event::PeerInfos(PeerInfos {
                 infos: vec![
                     PeerInfo {
                         addr_processed: 1234,
