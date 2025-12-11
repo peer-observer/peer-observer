@@ -5,8 +5,8 @@ use bitcoin::hashes::{sha256d, Hash};
 use bitcoin::hex::*;
 use bitcoin::p2p::message::{NetworkMessage, RawNetworkMessage};
 
-use crate::protobuf::net_msg;
-use crate::protobuf::primitive::ConnType;
+use crate::protobuf::bitcoin_primitives::ConnType;
+use crate::protobuf::ebpf_extractor::net_msg;
 
 // Tor v3 addresses are 62 chars + 6 chars for the port (':12345').
 const MAX_PEER_ADDR_LENGTH: usize = 62 + 6;

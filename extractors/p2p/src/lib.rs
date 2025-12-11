@@ -15,8 +15,9 @@ use shared::{
     nats_subjects::Subject,
     prost::Message,
     protobuf::{
+        bitcoin_primitives,
         event_msg::{EventMsg, event_msg::Event},
-        p2p_extractor, primitive,
+        p2p_extractor,
     },
     rand::{self, Rng},
     tokio::{
@@ -285,7 +286,7 @@ async fn handle_connection(
                             }
                             NetworkMessage::AddrV2(addrs) => {
                                 log::debug!(target: addr, "received addrv2: {:?}", addrs);
-                                let addresses: Vec<primitive::Address>  = addrs
+                                let addresses: Vec<bitcoin_primitives::Address>  = addrs
                                     .iter()
                                     .map(|addr_entry| addr_entry.clone().into())
                                     .collect();
@@ -294,7 +295,7 @@ async fn handle_connection(
                             NetworkMessage::Inv(inventory) => {
                                 log::debug!(target: addr, "received inv: {:?}", inventory);
                                 if !args.disable_invs {
-                                    let items: Vec<primitive::InventoryItem> = inventory
+                                    let items: Vec<bitcoin_primitives::InventoryItem> = inventory
                                         .iter()
                                         .map(|i| i.clone().into())
                                         .collect();
@@ -329,7 +330,7 @@ async fn handle_connection(
 }
 
 async fn publish_addr_announcement_event(
-    addresses: Vec<primitive::Address>,
+    addresses: Vec<bitcoin_primitives::Address>,
     nats_client: &async_nats::Client,
 ) {
     let proto_result = EventMsg::new(Event::P2pExtractorEvent(p2p_extractor::P2pExtractorEvent {
@@ -361,7 +362,7 @@ async fn publish_addr_announcement_event(
 }
 
 async fn publish_inventory_announcement_event(
-    inventory: Vec<primitive::InventoryItem>,
+    inventory: Vec<bitcoin_primitives::InventoryItem>,
     nats_client: &async_nats::Client,
 ) {
     let proto_result = EventMsg::new(Event::P2pExtractorEvent(p2p_extractor::P2pExtractorEvent {

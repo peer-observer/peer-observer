@@ -8,21 +8,26 @@ use shared::{
     nats_subjects::Subject,
     prost::Message,
     protobuf::{
-        addrman::{self, InsertNew, InsertTried},
+        bitcoin_primitives::{self, inventory_item::Item, Address, InventoryItem},
+        ebpf_extractor::{
+            addrman::{self, InsertNew, InsertTried},
+            ebpf_event,
+            mempool::{self, Added, Rejected, Removed, Replaced},
+            net_conn::{
+                self, ClosedConnection, Connection, EvictedInboundConnection, InboundConnection,
+                MisbehavingConnection,
+            },
+            net_msg::{
+                self, message::Msg, Addr, AddrV2, FeeFilter, Inv, Metadata, Ping, Pong, Reject,
+                Version,
+            },
+            validation::{self, BlockConnected},
+            EbpfEvent,
+        },
         event_msg::{event_msg::Event, EventMsg},
         log_extractor::{self, LogDebugCategory},
-        mempool::{self, Added, Rejected, Removed, Replaced},
-        net_conn::{
-            self, ClosedConnection, Connection, EvictedInboundConnection, InboundConnection,
-            MisbehavingConnection,
-        },
-        net_msg::{
-            self, message::Msg, Addr, AddrV2, FeeFilter, Inv, Metadata, Ping, Pong, Reject, Version,
-        },
         p2p_extractor,
-        primitive::{self, inventory_item::Item, Address, InventoryItem},
         rpc_extractor::{self, MempoolInfo, NetTotals, PeerInfo, PeerInfos, UploadTarget},
-        validation::{self, BlockConnected},
     },
     rand::{self, Rng},
     simple_logger::SimpleLogger,
@@ -232,28 +237,32 @@ async fn test_integration_metrics_p2p_message_count() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 0,
-                    addr: "127.0.0.1:8333".to_string(),
-                    conn_type: 1,
-                    command: "ping".to_string(),
-                    inbound: true,
-                    size: 8,
-                },
-                msg: Some(Msg::Ping(Ping { value: 1 })),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 0,
+                        addr: "127.0.0.1:8333".to_string(),
+                        conn_type: 1,
+                        command: "ping".to_string(),
+                        inbound: true,
+                        size: 8,
+                    },
+                    msg: Some(Msg::Ping(Ping { value: 1 })),
+                })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 0,
-                    addr: "127.0.0.1:8333".to_string(),
-                    conn_type: 1,
-                    command: "pong".to_string(),
-                    inbound: false,
-                    size: 8,
-                },
-                msg: Some(Msg::Pong(Pong { value: 1 })),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 0,
+                        addr: "127.0.0.1:8333".to_string(),
+                        conn_type: 1,
+                        command: "pong".to_string(),
+                        inbound: false,
+                        size: 8,
+                    },
+                    msg: Some(Msg::Pong(Pong { value: 1 })),
+                })),
             }))
             .unwrap(),
         ],
@@ -274,28 +283,32 @@ async fn test_integration_metrics_p2p_traffic_linkinglion() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 0,
-                    addr: "162.218.65.123".to_string(), // an IP belonging to LinkingLion
-                    conn_type: 1,
-                    command: "ping".to_string(),
-                    inbound: true,
-                    size: 8,
-                },
-                msg: Some(Msg::Ping(Ping { value: 1 })),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 0,
+                        addr: "162.218.65.123".to_string(), // an IP belonging to LinkingLion
+                        conn_type: 1,
+                        command: "ping".to_string(),
+                        inbound: true,
+                        size: 8,
+                    },
+                    msg: Some(Msg::Ping(Ping { value: 1 })),
+                })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 0,
-                    addr: "91.198.115.23:8333".to_string(), // another IP belonging to LinkingLion
-                    conn_type: 1,
-                    command: "pong".to_string(),
-                    inbound: true,
-                    size: 8,
-                },
-                msg: Some(Msg::Pong(Pong { value: 1 })),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 0,
+                        addr: "91.198.115.23:8333".to_string(), // another IP belonging to LinkingLion
+                        conn_type: 1,
+                        command: "pong".to_string(),
+                        inbound: true,
+                        size: 8,
+                    },
+                    msg: Some(Msg::Pong(Pong { value: 1 })),
+                })),
             }))
             .unwrap(),
         ],
@@ -321,38 +334,40 @@ async fn test_integration_metrics_p2p_addr() {
     let timestamp_now = current_timestamp() as u32;
 
     publish_and_check(
-        &[EventMsg::new(Event::Msg(net_msg::Message {
-            meta: Metadata {
-                peer_id: 4,
-                addr: "127.0.0.1:1234".to_string(),
-                conn_type: 1,
-                command: "addr".to_string(),
-                inbound: true,
-                size: 1234,
-            },
-            msg: Some(Msg::Addr(Addr {
-                addresses: [
-                    Address {
-                        port: 1234,
-                        services: 1234,
-                        timestamp: timestamp_now + 200,
-                        address: Some(primitive::address::Address::Ipv4(String::from("127.0.0.1"))),
-                    },
-                    Address {
-                        port: 2412,
-                        services: 2311,
-                        timestamp: timestamp_now,
-                        address: Some(primitive::address::Address::Ipv4(String::from("127.0.0.1"))),
-                    },
-                    Address {
-                        port: 2412,
-                        services: u64::MAX,
-                        timestamp: timestamp_now,
-                        address: Some(primitive::address::Address::Ipv4(String::from("127.0.0.1"))),
-                    },
-                ]
-                .to_vec(),
-            })),
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                meta: Metadata {
+                    peer_id: 4,
+                    addr: "127.0.0.1:1234".to_string(),
+                    conn_type: 1,
+                    command: "addr".to_string(),
+                    inbound: true,
+                    size: 1234,
+                },
+                msg: Some(Msg::Addr(Addr {
+                    addresses: [
+                        Address {
+                            port: 1234,
+                            services: 1234,
+                            timestamp: timestamp_now + 200,
+                            address: Some(bitcoin_primitives::address::Address::Ipv4(String::from("127.0.0.1"))),
+                        },
+                        Address {
+                            port: 2412,
+                            services: 2311,
+                            timestamp: timestamp_now,
+                            address: Some(bitcoin_primitives::address::Address::Ipv4(String::from("127.0.0.1"))),
+                        },
+                        Address {
+                            port: 2412,
+                            services: u64::MAX,
+                            timestamp: timestamp_now,
+                            address: Some(bitcoin_primitives::address::Address::Ipv4(String::from("127.0.0.1"))),
+                        },
+                    ]
+                    .to_vec(),
+                }))
+            }))
         }))
         .unwrap()],
         Subject::NetMsg,
@@ -533,32 +548,34 @@ async fn test_integration_metrics_p2p_addrv2() {
     let timestamp_now = current_timestamp() as u32;
 
     publish_and_check(
-        &[EventMsg::new(Event::Msg(net_msg::Message {
-            meta: Metadata {
-                peer_id: 8,
-                addr: "127.0.0.1:1111".to_string(),
-                conn_type: 2,
-                command: "addrv2".to_string(),
-                inbound: true,
-                size: 5432,
-            },
-            msg: Some(Msg::Addrv2(AddrV2 {
-                addresses: [
-                    Address {
-                        port: 1234,
-                        services: u64::MAX,
-                        timestamp: timestamp_now + 512,
-                        address: Some(primitive::address::Address::Ipv4(String::from("127.0.0.1"))),
-                    },
-                    Address {
-                        port: 2412,
-                        services: 2311,
-                        timestamp: timestamp_now,
-                        address: Some(primitive::address::Address::Ipv4(String::from("127.0.0.1"))),
-                    },
-                ]
-                .to_vec(),
-            })),
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                meta: Metadata {
+                    peer_id: 8,
+                    addr: "127.0.0.1:1111".to_string(),
+                    conn_type: 2,
+                    command: "addrv2".to_string(),
+                    inbound: true,
+                    size: 5432,
+                },
+                msg: Some(Msg::Addrv2(AddrV2 {
+                    addresses: [
+                        Address {
+                            port: 1234,
+                            services: u64::MAX,
+                            timestamp: timestamp_now + 512,
+                            address: Some(bitcoin_primitives::address::Address::Ipv4(String::from("127.0.0.1"))),
+                        },
+                        Address {
+                            port: 2412,
+                            services: 2311,
+                            timestamp: timestamp_now,
+                            address: Some(bitcoin_primitives::address::Address::Ipv4(String::from("127.0.0.1"))),
+                        },
+                    ]
+                    .to_vec(),
+                })),
+            }))
         }))
         .unwrap()],
         Subject::NetMsg,
@@ -738,67 +755,79 @@ async fn test_integration_metrics_p2p_version() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 6,
-                    addr: "127.0.0.1:9999".to_string(),
-                    conn_type: 2,
-                    command: "version".to_string(),
-                    inbound: true,
-                    size: 2,
-                },
-                msg: Some(Msg::Version(Version {
-                    nonce: 2,
-                    receiver: Address {
-                        port: 1234,
-                        services: 1234,
-                        timestamp: timestamp_now + 512,
-                        address: Some(primitive::address::Address::Ipv4(String::from("127.0.0.1"))),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 6,
+                        addr: "127.0.0.1:9999".to_string(),
+                        conn_type: 2,
+                        command: "version".to_string(),
+                        inbound: true,
+                        size: 2,
                     },
-                    sender: Address {
-                        port: 1234,
-                        services: 1234,
-                        timestamp: timestamp_now + 512,
-                        address: Some(primitive::address::Address::Ipv4(String::from("127.0.0.1"))),
-                    },
-                    services: 2341,
-                    start_height: 1,
-                    relay: false,
-                    timestamp: timestamp_now as i64 - 10,
-                    user_agent: "user_agent".to_string(),
-                    version: 70016,
+                    msg: Some(Msg::Version(Version {
+                        nonce: 2,
+                        receiver: Address {
+                            port: 1234,
+                            services: 1234,
+                            timestamp: timestamp_now + 512,
+                            address: Some(bitcoin_primitives::address::Address::Ipv4(
+                                String::from("127.0.0.1"),
+                            )),
+                        },
+                        sender: Address {
+                            port: 1234,
+                            services: 1234,
+                            timestamp: timestamp_now + 512,
+                            address: Some(bitcoin_primitives::address::Address::Ipv4(
+                                String::from("127.0.0.1"),
+                            )),
+                        },
+                        services: 2341,
+                        start_height: 1,
+                        relay: false,
+                        timestamp: timestamp_now as i64 - 10,
+                        user_agent: "user_agent".to_string(),
+                        version: 70016,
+                    })),
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 2,
-                    addr: "162.218.65.123:1234".to_string(),
-                    conn_type: 1,
-                    command: "version".to_string(),
-                    inbound: true,
-                    size: 1,
-                },
-                msg: Some(Msg::Version(Version {
-                    nonce: 2,
-                    receiver: Address {
-                        port: 1234,
-                        services: 1234,
-                        timestamp: timestamp_now + 512,
-                        address: Some(primitive::address::Address::Ipv4(String::from("127.0.0.1"))),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 2,
+                        addr: "162.218.65.123:1234".to_string(),
+                        conn_type: 1,
+                        command: "version".to_string(),
+                        inbound: true,
+                        size: 1,
                     },
-                    sender: Address {
-                        port: 1234,
-                        services: 1234,
-                        timestamp: timestamp_now + 512,
-                        address: Some(primitive::address::Address::Ipv4(String::from("127.0.0.1"))),
-                    },
-                    services: 2341,
-                    start_height: 1,
-                    relay: false,
-                    timestamp: timestamp_now as i64 - 10,
-                    user_agent: "user_agent".to_string(),
-                    version: 70016,
+                    msg: Some(Msg::Version(Version {
+                        nonce: 2,
+                        receiver: Address {
+                            port: 1234,
+                            services: 1234,
+                            timestamp: timestamp_now + 512,
+                            address: Some(bitcoin_primitives::address::Address::Ipv4(
+                                String::from("127.0.0.1"),
+                            )),
+                        },
+                        sender: Address {
+                            port: 1234,
+                            services: 1234,
+                            timestamp: timestamp_now + 512,
+                            address: Some(bitcoin_primitives::address::Address::Ipv4(
+                                String::from("127.0.0.1"),
+                            )),
+                        },
+                        services: 2341,
+                        start_height: 1,
+                        relay: false,
+                        timestamp: timestamp_now as i64 - 10,
+                        user_agent: "user_agent".to_string(),
+                        version: 70016,
+                    })),
                 })),
             }))
             .unwrap(),
@@ -823,18 +852,20 @@ async fn test_integration_metrics_p2p_feefilter() {
     println!("test that the P2P feefilter metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Msg(net_msg::Message {
-            meta: Metadata {
-                peer_id: 6,
-                addr: "127.0.0.1:2134".to_string(),
-                conn_type: 5,
-                command: "feefilter".to_string(),
-                inbound: true,
-                size: 6,
-            },
-            msg: Some(Msg::Feefilter(FeeFilter {
-                fee: 12345
-            })),
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                meta: Metadata {
+                    peer_id: 6,
+                    addr: "127.0.0.1:2134".to_string(),
+                    conn_type: 5,
+                    command: "feefilter".to_string(),
+                    inbound: true,
+                    size: 6,
+                },
+                msg: Some(Msg::Feefilter(FeeFilter {
+                    fee: 12345
+                })),
+            }))
         }))
         .unwrap()],
         Subject::NetMsg,
@@ -852,38 +883,42 @@ async fn test_integration_metrics_p2p_rejected() {
     println!("test that the P2P rejected metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Msg(net_msg::Message {
-            meta: Metadata {
-                peer_id: 6,
-                addr: "127.0.0.1:2134".to_string(),
-                conn_type: 5,
-                command: "rejected".to_string(),
-                inbound: true,
-                size: 6,
-            },
-            msg: Some(Msg::Reject(Reject {
-                reason: 1,
-                reason_details: "details".to_string(),
-                rejected_command: "tx".to_string(),
-                hash: vec![],
-            })),
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                meta: Metadata {
+                    peer_id: 6,
+                    addr: "127.0.0.1:2134".to_string(),
+                    conn_type: 5,
+                    command: "rejected".to_string(),
+                    inbound: true,
+                    size: 6,
+                },
+                msg: Some(Msg::Reject(Reject {
+                    reason: 1,
+                    reason_details: "details".to_string(),
+                    rejected_command: "tx".to_string(),
+                    hash: vec![],
+                })),
+            }))
         }))
         .unwrap(),
-        EventMsg::new(Event::Msg(net_msg::Message {
-            meta: Metadata {
-                peer_id: 6,
-                addr: "127.0.0.1:2134".to_string(),
-                conn_type: 5,
-                command: "rejected".to_string(),
-                inbound: true,
-                size: 6,
-            },
-            msg: Some(Msg::Reject(Reject {
-                reason: 10000,
-                reason_details: "details".to_string(),
-                rejected_command: "tx".to_string(),
-                hash: vec![],
-            })),
+        EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                meta: Metadata {
+                    peer_id: 6,
+                    addr: "127.0.0.1:2134".to_string(),
+                    conn_type: 5,
+                    command: "rejected".to_string(),
+                    inbound: true,
+                    size: 6,
+                },
+                msg: Some(Msg::Reject(Reject {
+                    reason: 10000,
+                    reason_details: "details".to_string(),
+                    rejected_command: "tx".to_string(),
+                    hash: vec![],
+                })),
+            }))
         }))
         .unwrap()],
         Subject::NetMsg,
@@ -903,49 +938,53 @@ async fn test_integration_metrics_p2p_inv() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 1,
-                    addr: "127.0.0.1:2134".to_string(),
-                    conn_type: 3,
-                    command: "inv".to_string(),
-                    inbound: true,
-                    size: 80,
-                },
-                msg: Some(Msg::Inv(Inv {
-                    // homogenus
-                    items: [
-                        InventoryItem {
-                            item: Some(Item::Transaction(vec![])),
-                        },
-                        InventoryItem {
-                            item: Some(Item::Transaction(vec![])),
-                        },
-                    ]
-                    .to_vec(),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 1,
+                        addr: "127.0.0.1:2134".to_string(),
+                        conn_type: 3,
+                        command: "inv".to_string(),
+                        inbound: true,
+                        size: 80,
+                    },
+                    msg: Some(Msg::Inv(Inv {
+                        // homogenus
+                        items: [
+                            InventoryItem {
+                                item: Some(Item::Transaction(vec![])),
+                            },
+                            InventoryItem {
+                                item: Some(Item::Transaction(vec![])),
+                            },
+                        ]
+                        .to_vec(),
+                    })),
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 1,
-                    addr: "127.0.0.1:2134".to_string(),
-                    conn_type: 3,
-                    command: "inv".to_string(),
-                    inbound: true,
-                    size: 80,
-                },
-                msg: Some(Msg::Inv(Inv {
-                    // heterogenous
-                    items: [
-                        InventoryItem {
-                            item: Some(Item::Transaction(vec![])),
-                        },
-                        InventoryItem {
-                            item: Some(Item::Block(vec![])),
-                        },
-                    ]
-                    .to_vec(),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 1,
+                        addr: "127.0.0.1:2134".to_string(),
+                        conn_type: 3,
+                        command: "inv".to_string(),
+                        inbound: true,
+                        size: 80,
+                    },
+                    msg: Some(Msg::Inv(Inv {
+                        // heterogenous
+                        items: [
+                            InventoryItem {
+                                item: Some(Item::Transaction(vec![])),
+                            },
+                            InventoryItem {
+                                item: Some(Item::Block(vec![])),
+                            },
+                        ]
+                        .to_vec(),
+                    })),
                 })),
             }))
             .unwrap(),
@@ -1030,53 +1069,59 @@ async fn test_integration_metrics_p2p_inv_large_outbound() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 1,
-                    addr: "127.0.0.1:2134".to_string(),
-                    conn_type: 3,
-                    command: "inv".to_string(),
-                    inbound: false,
-                    size: 1000,
-                },
-                msg: Some(Msg::Inv(Inv {
-                    items: large_inv_items_tx,
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 1,
+                        addr: "127.0.0.1:2134".to_string(),
+                        conn_type: 3,
+                        command: "inv".to_string(),
+                        inbound: false,
+                        size: 1000,
+                    },
+                    msg: Some(Msg::Inv(Inv {
+                        items: large_inv_items_tx,
+                    })),
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 2,
-                    addr: "127.0.0.1:2134".to_string(),
-                    conn_type: 3,
-                    command: "inv".to_string(),
-                    inbound: false,
-                    size: 1000,
-                },
-                msg: Some(Msg::Inv(Inv {
-                    items: large_inv_items_wtx,
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 2,
+                        addr: "127.0.0.1:2134".to_string(),
+                        conn_type: 3,
+                        command: "inv".to_string(),
+                        inbound: false,
+                        size: 1000,
+                    },
+                    msg: Some(Msg::Inv(Inv {
+                        items: large_inv_items_wtx,
+                    })),
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 3,
-                    addr: "127.0.0.1:2134".to_string(),
-                    conn_type: 3,
-                    command: "inv".to_string(),
-                    inbound: false,
-                    size: 80,
-                },
-                msg: Some(Msg::Inv(Inv {
-                    items: [
-                        InventoryItem {
-                            item: Some(Item::Transaction(vec![])),
-                        },
-                        InventoryItem {
-                            item: Some(Item::Transaction(vec![])),
-                        },
-                    ]
-                    .to_vec(),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 3,
+                        addr: "127.0.0.1:2134".to_string(),
+                        conn_type: 3,
+                        command: "inv".to_string(),
+                        inbound: false,
+                        size: 80,
+                    },
+                    msg: Some(Msg::Inv(Inv {
+                        items: [
+                            InventoryItem {
+                                item: Some(Item::Transaction(vec![])),
+                            },
+                            InventoryItem {
+                                item: Some(Item::Transaction(vec![])),
+                            },
+                        ]
+                        .to_vec(),
+                    })),
                 })),
             }))
             .unwrap(),
@@ -1094,16 +1139,18 @@ async fn test_integration_metrics_p2p_oldping() {
     println!("test that the P2P oldping metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Msg(net_msg::Message {
-            meta: Metadata {
-                peer_id: 6,
-                addr: "127.0.0.1:2134".to_string(),
-                conn_type: 2,
-                command: "ping".to_string(),
-                inbound: true,
-                size: 0,
-            },
-            msg: Some(Msg::Oldping(false)),
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                meta: Metadata {
+                    peer_id: 6,
+                    addr: "127.0.0.1:2134".to_string(),
+                    conn_type: 2,
+                    command: "ping".to_string(),
+                    inbound: true,
+                    size: 0,
+                },
+                msg: Some(Msg::Oldping(false)),
+            })),
         }))
         .unwrap()],
         Subject::NetMsg,
@@ -1139,16 +1186,18 @@ async fn test_integration_metrics_p2p_ping_value() {
     let events: Vec<EventMsg> = values
         .iter()
         .map(|v| {
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 6,
-                    addr: "127.0.0.1:2134".to_string(),
-                    conn_type: 2,
-                    command: "ping".to_string(),
-                    inbound: true,
-                    size: 8,
-                },
-                msg: Some(Msg::Ping(Ping { value: *v })),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 6,
+                        addr: "127.0.0.1:2134".to_string(),
+                        conn_type: 2,
+                        command: "ping".to_string(),
+                        inbound: true,
+                        size: 8,
+                    },
+                    msg: Some(Msg::Ping(Ping { value: *v })),
+                })),
             }))
             .unwrap()
         })
@@ -1173,16 +1222,18 @@ async fn test_integration_metrics_p2p_empty_addrv2() {
     println!("test that the P2P emptyaddrv2 metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Msg(net_msg::Message {
-            meta: Metadata {
-                peer_id: 6,
-                addr: "127.0.0.1:2134".to_string(),
-                conn_type: 2,
-                command: "addrv2".to_string(),
-                inbound: true,
-                size: 0,
-            },
-            msg: Some(Msg::Emptyaddrv2(false)),
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                meta: Metadata {
+                    peer_id: 6,
+                    addr: "127.0.0.1:2134".to_string(),
+                    conn_type: 2,
+                    command: "addrv2".to_string(),
+                    inbound: true,
+                    size: 0,
+                },
+                msg: Some(Msg::Emptyaddrv2(false)),
+            })),
         }))
         .unwrap()],
         Subject::NetMsg,
@@ -1200,18 +1251,20 @@ async fn test_integration_metrics_conn_inbound() {
     println!("test that the inbound connection metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Conn(net_conn::ConnectionEvent {
-            event: Some(net_conn::connection_event::Event::Inbound(
-                InboundConnection {
-                    conn: Connection {
-                        addr: "127.0.0.1:8333".to_string(),
-                        conn_type: 1,
-                        network: 2,
-                        peer_id: 7,
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+                event: Some(net_conn::connection_event::Event::Inbound(
+                    InboundConnection {
+                        conn: Connection {
+                            addr: "127.0.0.1:8333".to_string(),
+                            conn_type: 1,
+                            network: 2,
+                            peer_id: 7,
+                        },
+                        existing_connections: 123,
                     },
-                    existing_connections: 123,
-                },
-            )),
+                )),
+            })),
         }))
         .unwrap()],
         Subject::NetConn,
@@ -1229,18 +1282,20 @@ async fn test_integration_metrics_conn_outbound() {
     println!("test that the outbound connection metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Conn(net_conn::ConnectionEvent {
-            event: Some(net_conn::connection_event::Event::Outbound(
-                shared::protobuf::net_conn::OutboundConnection {
-                    conn: Connection {
-                        addr: "1.1.1.1:48333".to_string(),
-                        conn_type: 2,
-                        network: 3,
-                        peer_id: 11,
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+                event: Some(net_conn::connection_event::Event::Outbound(
+                    net_conn::OutboundConnection {
+                        conn: Connection {
+                            addr: "1.1.1.1:48333".to_string(),
+                            conn_type: 2,
+                            network: 3,
+                            peer_id: 11,
+                        },
+                        existing_connections: 321,
                     },
-                    existing_connections: 321,
-                },
-            )),
+                )),
+            })),
         }))
         .unwrap()],
         Subject::NetConn,
@@ -1261,18 +1316,20 @@ async fn test_integration_metrics_conn_closed() {
     let timestamp_now = current_timestamp();
 
     publish_and_check(
-        &[EventMsg::new(Event::Conn(net_conn::ConnectionEvent {
-            event: Some(net_conn::connection_event::Event::Closed(
-                ClosedConnection {
-                    conn: Connection {
-                        addr: "2.2.2.2:48333".to_string(),
-                        conn_type: 4,
-                        network: 4,
-                        peer_id: 1,
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+                event: Some(net_conn::connection_event::Event::Closed(
+                    ClosedConnection {
+                        conn: Connection {
+                            addr: "2.2.2.2:48333".to_string(),
+                            conn_type: 4,
+                            network: 4,
+                            peer_id: 1,
+                        },
+                        time_established: timestamp_now - 1000,
                     },
-                    time_established: timestamp_now - 1000,
-                },
-            )),
+                )),
+            })),
         }))
         .unwrap()],
         Subject::NetConn,
@@ -1292,18 +1349,20 @@ async fn test_integration_metrics_conn_inbound_evicted() {
     let timestamp_now = current_timestamp();
 
     publish_and_check(
-        &[EventMsg::new(Event::Conn(net_conn::ConnectionEvent {
-            event: Some(net_conn::connection_event::Event::InboundEvicted(
-                EvictedInboundConnection {
-                    conn: Connection {
-                        addr: "2.2.2.2:48333".to_string(),
-                        conn_type: 2,
-                        network: 2,
-                        peer_id: 1,
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+                event: Some(net_conn::connection_event::Event::InboundEvicted(
+                    EvictedInboundConnection {
+                        conn: Connection {
+                            addr: "2.2.2.2:48333".to_string(),
+                            conn_type: 2,
+                            network: 2,
+                            peer_id: 1,
+                        },
+                        time_established: timestamp_now - 1000,
                     },
-                    time_established: timestamp_now - 1000,
-                },
-            )),
+                )),
+            })),
         }))
         .unwrap()],
         Subject::NetConn,
@@ -1319,13 +1378,15 @@ async fn test_integration_metrics_conn_misbehaving() {
     println!("test that the misbehaving connection metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Conn(net_conn::ConnectionEvent {
-            event: Some(net_conn::connection_event::Event::Misbehaving(
-                MisbehavingConnection {
-                    id: 2,
-                    message: "reason".to_string(),
-                },
-            )),
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+                event: Some(net_conn::connection_event::Event::Misbehaving(
+                    MisbehavingConnection {
+                        id: 2,
+                        message: "reason".to_string(),
+                    },
+                )),
+            })),
         }))
         .unwrap()],
         Subject::NetConn,
@@ -1343,34 +1404,38 @@ async fn test_integration_metrics_conn_special_ip() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Conn(net_conn::ConnectionEvent {
-                event: Some(net_conn::connection_event::Event::Inbound(
-                    InboundConnection {
-                        conn: Connection {
-                            addr: "162.218.65.123".to_string(), // an IP belonging to LinkingLion & banned on Gmax banlist
-                            conn_type: 1,
-                            network: 2,
-                            peer_id: 7,
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+                    event: Some(net_conn::connection_event::Event::Inbound(
+                        InboundConnection {
+                            conn: Connection {
+                                addr: "162.218.65.123".to_string(), // an IP belonging to LinkingLion & banned on Gmax banlist
+                                conn_type: 1,
+                                network: 2,
+                                peer_id: 7,
+                            },
+                            existing_connections: 1,
                         },
-                        existing_connections: 1,
-                    },
-                )),
+                    )),
+                })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Conn(net_conn::ConnectionEvent {
-                event: Some(net_conn::connection_event::Event::Inbound(
-                    InboundConnection {
-                        conn: Connection {
-                            // a random IP belonging to a tor exit node.
-                            // This might not be a tor exit node IP in the future and the IP would need to updated.
-                            addr: "179.43.182.232:1234".to_string(),
-                            conn_type: 1,
-                            network: 2,
-                            peer_id: 7,
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+                    event: Some(net_conn::connection_event::Event::Inbound(
+                        InboundConnection {
+                            conn: Connection {
+                                // a random IP belonging to a tor exit node.
+                                // This might not be a tor exit node IP in the future and the IP would need to updated.
+                                addr: "179.43.182.232:1234".to_string(),
+                                conn_type: 1,
+                                network: 2,
+                                peer_id: 7,
+                            },
+                            existing_connections: 2,
                         },
-                        existing_connections: 2,
-                    },
-                )),
+                    )),
+                })),
             }))
             .unwrap(),
         ],
@@ -1393,8 +1458,8 @@ async fn test_integration_metrics_validation() {
     println!("test that validation metrics work");
 
     publish_and_check(
-        &[
-            EventMsg::new(Event::Validation(validation::ValidationEvent {
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Validation(validation::ValidationEvent {
                 event: Some(validation::validation_event::Event::BlockConnected(
                     BlockConnected {
                         hash: vec![0],
@@ -1405,9 +1470,9 @@ async fn test_integration_metrics_validation() {
                         connection_time: 5000,
                     },
                 )),
-            }))
-            .unwrap(),
-        ],
+            })),
+        }))
+        .unwrap()],
         Subject::Validation,
         r#"
         peerobserver_validation_block_connected_connection_time 5
@@ -1426,11 +1491,13 @@ async fn test_integration_metrics_mempool_added() {
     println!("test that the mempool added metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Mempool(mempool::MempoolEvent {
-            event: Some(mempool::mempool_event::Event::Added(Added {
-                fee: 0,       // not covered by test
-                txid: vec![], // not covered by test
-                vsize: 453,
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+                event: Some(mempool::mempool_event::Event::Added(Added {
+                    fee: 0,       // not covered by test
+                    txid: vec![], // not covered by test
+                    vsize: 453,
+                })),
             })),
         }))
         .unwrap()],
@@ -1449,11 +1516,13 @@ async fn test_integration_metrics_mempool_added_mass() {
 
     let events: Vec<EventMsg> = (0..54321)
         .map(|_| {
-            EventMsg::new(Event::Mempool(mempool::MempoolEvent {
-                event: Some(mempool::mempool_event::Event::Added(Added {
-                    fee: 0,       // not covered by test
-                    txid: vec![], // not covered by test
-                    vsize: 100,
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+                    event: Some(mempool::mempool_event::Event::Added(Added {
+                        fee: 0,       // not covered by test
+                        txid: vec![], // not covered by test
+                        vsize: 100,
+                    })),
                 })),
             }))
             .unwrap()
@@ -1476,16 +1545,18 @@ async fn test_integration_metrics_mempool_replaced() {
     println!("test that the mempool replaced metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Mempool(mempool::MempoolEvent {
-            event: Some(mempool::mempool_event::Event::Replaced(Replaced {
-                replaced_fee: 0, // not covered by test
-                replaced_vsize: 17,
-                replaced_entry_time: 0,        // not covered by test
-                replaced_txid: vec![],         // not covered by test
-                replacement_id: vec![],        // not covered by test
-                replacement_vsize: 0,          // not covered by test
-                replacement_fee: 0,            // not covered by test
-                replaced_by_transaction: true, // not covered by test
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+                event: Some(mempool::mempool_event::Event::Replaced(Replaced {
+                    replaced_fee: 0, // not covered by test
+                    replaced_vsize: 17,
+                    replaced_entry_time: 0,        // not covered by test
+                    replaced_txid: vec![],         // not covered by test
+                    replacement_id: vec![],        // not covered by test
+                    replacement_vsize: 0,          // not covered by test
+                    replacement_fee: 0,            // not covered by test
+                    replaced_by_transaction: true, // not covered by test
+                })),
             })),
         }))
         .unwrap()],
@@ -1504,17 +1575,21 @@ async fn test_integration_metrics_mempool_rejected() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Mempool(mempool::MempoolEvent {
-                event: Some(mempool::mempool_event::Event::Rejected(Rejected {
-                    reason: "ABC".to_string(),
-                    txid: vec![], // not covered by test
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+                    event: Some(mempool::mempool_event::Event::Rejected(Rejected {
+                        reason: "ABC".to_string(),
+                        txid: vec![], // not covered by test
+                    })),
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Mempool(mempool::MempoolEvent {
-                event: Some(mempool::mempool_event::Event::Rejected(Rejected {
-                    reason: "DEF".to_string(),
-                    txid: vec![], // not covered by test
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+                    event: Some(mempool::mempool_event::Event::Rejected(Rejected {
+                        reason: "DEF".to_string(),
+                        txid: vec![], // not covered by test
+                    })),
                 })),
             }))
             .unwrap(),
@@ -1533,23 +1608,27 @@ async fn test_integration_metrics_mempool_removed() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Mempool(mempool::MempoolEvent {
-                event: Some(mempool::mempool_event::Event::Removed(Removed {
-                    entry_time: 0, // not covered by test
-                    fee: 0,        // not covered by test
-                    vsize: 0,      // not covered by test
-                    txid: vec![],  // not covered by test
-                    reason: "expired".to_string(),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+                    event: Some(mempool::mempool_event::Event::Removed(Removed {
+                        entry_time: 0, // not covered by test
+                        fee: 0,        // not covered by test
+                        vsize: 0,      // not covered by test
+                        txid: vec![],  // not covered by test
+                        reason: "expired".to_string(),
+                    })),
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Mempool(mempool::MempoolEvent {
-                event: Some(mempool::mempool_event::Event::Removed(Removed {
-                    entry_time: 0, // not covered by test
-                    fee: 0,        // not covered by test
-                    vsize: 0,      // not covered by test
-                    txid: vec![],  // not covered by test
-                    reason: "evicted".to_string(),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+                    event: Some(mempool::mempool_event::Event::Removed(Removed {
+                        entry_time: 0, // not covered by test
+                        fee: 0,        // not covered by test
+                        vsize: 0,      // not covered by test
+                        txid: vec![],  // not covered by test
+                        reason: "evicted".to_string(),
+                    })),
                 })),
             }))
             .unwrap(),
@@ -1742,26 +1821,30 @@ async fn test_integration_metrics_addrman() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Addrman(addrman::AddrmanEvent {
-                event: Some(addrman::addrman_event::Event::New(InsertNew {
-                    addr: "127.0.0.1:2340".to_string(),
-                    addr_as: 2,
-                    bucket: 2,
-                    bucket_pos: 2,
-                    inserted: false,
-                    source: "127.0.0.1:2340".to_string(),
-                    source_as: 0,
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Addrman(addrman::AddrmanEvent {
+                    event: Some(addrman::addrman_event::Event::New(InsertNew {
+                        addr: "127.0.0.1:2340".to_string(),
+                        addr_as: 2,
+                        bucket: 2,
+                        bucket_pos: 2,
+                        inserted: false,
+                        source: "127.0.0.1:2340".to_string(),
+                        source_as: 0,
+                    })),
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Addrman(addrman::AddrmanEvent {
-                event: Some(addrman::addrman_event::Event::Tried(InsertTried {
-                    addr: "127.0.0.1:2340".to_string(),
-                    addr_as: 2,
-                    bucket: 2,
-                    bucket_pos: 2,
-                    source: "127.0.0.1:2340".to_string(),
-                    source_as: 0,
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Addrman(addrman::AddrmanEvent {
+                    event: Some(addrman::addrman_event::Event::Tried(InsertTried {
+                        addr: "127.0.0.1:2340".to_string(),
+                        addr_as: 2,
+                        bucket: 2,
+                        bucket_pos: 2,
+                        source: "127.0.0.1:2340".to_string(),
+                        source_as: 0,
+                    })),
                 })),
             }))
             .unwrap(),
@@ -2530,8 +2613,8 @@ async fn test_integration_metrics_rpc_uptime() {
     println!("test that the uptime metric works");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc::RpcEvent {
-            event: Some(rpc::rpc_event::Event::Uptime(1234)),
+        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
+            event: Some(rpc_extractor::rpc_event::Event::Uptime(1234)),
         }))
         .unwrap()],
         Subject::Rpc,
@@ -2547,8 +2630,8 @@ async fn test_integration_metrics_rpc_getnettotals() {
     println!("test that the getnettotal metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc::RpcEvent {
-            event: Some(rpc::rpc_event::Event::NetTotals(NetTotals {
+        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
+            event: Some(rpc_extractor::rpc_event::Event::NetTotals(NetTotals {
                 total_bytes_received: 2222,
                 total_bytes_sent: 3333,
                 // not covered
@@ -2646,7 +2729,7 @@ async fn test_integration_metrics_p2pextractor_address_annoucement() {
                                     timestamp: 0,
                                     port: 1,
                                     services: 1,
-                                    address: Some(primitive::address::Address::Ipv4(
+                                    address: Some(bitcoin_primitives::address::Address::Ipv4(
                                         "1.2.3.4".to_string(),
                                     )),
                                 },
@@ -2654,7 +2737,7 @@ async fn test_integration_metrics_p2pextractor_address_annoucement() {
                                     timestamp: 2,
                                     port: 3,
                                     services: 4,
-                                    address: Some(primitive::address::Address::Ipv6(
+                                    address: Some(bitcoin_primitives::address::Address::Ipv6(
                                         "b10c::1".to_string(),
                                     )),
                                 },

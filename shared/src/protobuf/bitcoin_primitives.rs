@@ -9,7 +9,7 @@ use std::fmt;
 use std::net::SocketAddr;
 
 // structs are generated via the p2p.proto file
-include!(concat!(env!("OUT_DIR"), "/primitive.rs"));
+include!(concat!(env!("OUT_DIR"), "/bitcoin_primitives.rs"));
 
 impl From<bitcoin::block::Header> for BlockHeader {
     fn from(header: bitcoin::block::Header) -> Self {
@@ -338,7 +338,7 @@ impl fmt::Display for UnknownAddress {
 mod tests {
     #[test]
     fn test_address_into_addrtype_onion() {
-        use crate::protobuf::primitive;
+        use crate::protobuf::bitcoin_primitives;
         use bitcoin::p2p::address::Address;
         use bitcoin::p2p::ServiceFlags;
 
@@ -352,8 +352,8 @@ mod tests {
             port: 0,
         };
         assert_eq!(
-            primitive::address::Address::from(a),
-            primitive::address::Address::Torv2(String::from("5wyqrzbvrdsumnok.onion"))
+            bitcoin_primitives::address::Address::from(a),
+            bitcoin_primitives::address::Address::Torv2(String::from("5wyqrzbvrdsumnok.onion"))
         );
     }
 }

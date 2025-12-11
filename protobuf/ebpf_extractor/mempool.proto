@@ -1,6 +1,6 @@
 syntax = "proto2";
 
-package mempool;
+package ebpf_extractor.mempool;
 
 message MempoolEvent {
   oneof event {

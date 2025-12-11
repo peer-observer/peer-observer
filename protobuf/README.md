@@ -56,7 +56,7 @@ async def main():
 
         p2pmsg = event.msg
         print(f"{"inbound" if p2pmsg.meta.inbound else "outbound"} {p2pmsg.meta.command}")
-        
+
     await nc.subscribe("netmsg", cb=message_handler)
     print("Subscribed to 'netmsg' topic...")
 

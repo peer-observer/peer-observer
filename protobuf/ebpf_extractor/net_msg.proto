@@ -1,14 +1,14 @@
 syntax = "proto2";
 
-import "primitive.proto";
+import "bitcoin_primitives.proto";
 
-package net_msg;
+package ebpf_extractor.net_msg;
 
 // Metadata for a P2P message.
 message Metadata {
   required uint64  peer_id                 = 1;  // Peer id assigned by Bitcoin Core
   required string  addr                    = 2;  // Address of the peer
-  required primitive.ConnType conn_type    = 3;
+  required bitcoin_primitives.ConnType conn_type    = 3;
   required string  command                 = 4;  // Command or message type
   required bool    inbound                 = 5;  // Message direction
   required uint64  size                    = 6;  // Serialized message size
@@ -76,35 +76,35 @@ message Pong {
 
 // A "inv" message.
 message Inv {
-  repeated primitive.InventoryItem items = 1;
+  repeated bitcoin_primitives.InventoryItem items = 1;
 }
 
 // A "notfound" message
 message NotFound {
-  repeated primitive.InventoryItem items = 1;
+  repeated bitcoin_primitives.InventoryItem items = 1;
 }
 
 // A "cmpctblock" message
 message CompactBlock {
-  required primitive.BlockHeader header = 1;
+  required bitcoin_primitives.BlockHeader header = 1;
   required uint64 nonce = 2;
   repeated bytes short_ids = 3;
-  repeated primitive.PrefilledTransaction transactions = 4;
+  repeated bitcoin_primitives.PrefilledTransaction transactions = 4;
 }
 
 // A "tx" message
 message Tx {
-  required primitive.Transaction tx = 1;
+  required bitcoin_primitives.Transaction tx = 1;
 }
 
 // A "getdata" message
 message GetData {
-  repeated primitive.InventoryItem items = 1;
+  repeated bitcoin_primitives.InventoryItem items = 1;
 }
 
 // A "headers" message
 message Headers {
-  repeated primitive.BlockHeader headers = 1;
+  repeated bitcoin_primitives.BlockHeader headers = 1;
 }
 
 // A "getblocktxn" message
@@ -116,7 +116,7 @@ message GetBlockTxn {
 // A "blocktxn" message
 message BlockTxn {
   required bytes block_hash = 1;
-  repeated primitive.Transaction transactions = 2;
+  repeated bitcoin_primitives.Transaction transactions = 2;
 }
 
 // A "alert" message
@@ -126,12 +126,12 @@ message Alert {
 
 // A "addr" message
 message Addr {
-  repeated primitive.Address addresses = 1;
+  repeated bitcoin_primitives.Address addresses = 1;
 }
 
 // A "addrv2" message
 message AddrV2 {
-  repeated primitive.Address addresses = 1;
+  repeated bitcoin_primitives.Address addresses = 1;
 }
 
 // A "reject" message
@@ -182,8 +182,8 @@ message Version {
   required uint32 version = 1;
   required uint64 services = 2;
   required sint64 timestamp = 3;
-  required primitive.Address receiver = 4;
-  required primitive.Address sender = 5;
+  required bitcoin_primitives.Address receiver = 4;
+  required bitcoin_primitives.Address sender = 5;
   required uint64 nonce = 6;
   required string user_agent = 7;
   required sint32 start_height = 8;
@@ -192,8 +192,8 @@ message Version {
 
 // A "block" message
 message Block {
-  required primitive.BlockHeader header = 1;
-  repeated primitive.Transaction transactions = 2;
+  required bitcoin_primitives.BlockHeader header = 1;
+  repeated bitcoin_primitives.Transaction transactions = 2;
 }
 
 // A BIP37 "filteradd" message
@@ -259,7 +259,7 @@ message CFilter {
 
 // A "merkleblock" message.
 message MerkleBlock {
-  required primitive.BlockHeader header = 1;
+  required bitcoin_primitives.BlockHeader header = 1;
   required uint32 num_transactions = 2;
   repeated bool bits = 3;
   repeated bytes hashes = 4;

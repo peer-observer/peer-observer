@@ -1,6 +1,6 @@
 syntax = "proto2";
 
-package addrman;
+package ebpf_extractor.addrman;
 
 message AddrmanEvent {
   oneof event {

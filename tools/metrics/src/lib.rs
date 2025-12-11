@@ -7,24 +7,27 @@ use shared::futures::StreamExt;
 use shared::log::{self, warn};
 use shared::metricserver;
 use shared::prost::Message;
-use shared::protobuf::addrman::addrman_event;
-use shared::protobuf::event_msg;
-use shared::protobuf::event_msg::event_msg::Event;
-use shared::protobuf::log_extractor::{log_event, LogDebugCategory, LogEvent};
-use shared::protobuf::mempool::mempool_event;
-use shared::protobuf::net_conn::connection_event;
-use shared::protobuf::net_msg;
-use shared::protobuf::net_msg::{message::Msg, reject::RejectReason};
-use shared::protobuf::p2p_extractor::p2p_extractor_event;
-use shared::protobuf::rpc_extractor::rpc_event;
-use shared::protobuf::validation::validation_event;
+use shared::protobuf::{
+    ebpf_extractor::{
+        addrman::addrman_event,
+        ebpf_event,
+        mempool::mempool_event,
+        net_conn::connection_event,
+        net_msg,
+        net_msg::{message::Msg, reject::RejectReason},
+        validation::validation_event,
+    },
+    event_msg::{event_msg::Event, EventMsg},
+    log_extractor::{log_event, LogDebugCategory, LogEvent},
+    p2p_extractor::p2p_extractor_event,
+    rpc_extractor::rpc_event,
+};
 use shared::tokio::sync::watch;
 use shared::util::{self, is_on_linkinglion_banlist};
 use shared::{async_nats, clap};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
-use std::convert::TryFrom;
 
 pub mod error;
 mod metrics;
@@ -113,32 +116,26 @@ fn handle_event(
     msg: async_nats::Message,
     metrics: metrics::Metrics,
 ) -> Result<(), error::RuntimeError> {
-    let unwrapped = event_msg::EventMsg::decode(msg.payload)?;
+    let unwrapped = EventMsg::decode(msg.payload)?;
     if let Some(event) = unwrapped.event {
         match event {
-            Event::Msg(msg) => {
-                handle_p2p_message(&msg, unwrapped.timestamp, metrics);
-            }
-            Event::Conn(c) => {
-                if let Some(e) = c.event {
-                    handle_connection_event(&e, unwrapped.timestamp, metrics);
+            Event::Ebpf(ebpf) => match ebpf.event.unwrap() {
+                ebpf_event::Event::Msg(msg) => {
+                    handle_p2p_message(&msg, unwrapped.timestamp, metrics);
                 }
-            }
-            Event::Addrman(a) => {
-                if let Some(e) = a.event {
-                    handle_addrman_event(&e, metrics);
+                ebpf_event::Event::Conn(conn) => {
+                    handle_connection_event(&conn.event.unwrap(), unwrapped.timestamp, metrics);
                 }
-            }
-            Event::Mempool(m) => {
-                if let Some(e) = m.event {
-                    handle_mempool_event(&e, metrics);
+                ebpf_event::Event::Addrman(addrman) => {
+                    handle_addrman_event(&addrman.event.unwrap(), metrics);
                 }
-            }
-            Event::Validation(v) => {
-                if let Some(e) = v.event {
-                    handle_validation_event(&e, metrics);
+                ebpf_event::Event::Mempool(mempool) => {
+                    handle_mempool_event(&mempool.event.unwrap(), metrics);
                 }
-            }
+                ebpf_event::Event::Validation(validation) => {
+                    handle_validation_event(&validation.event.unwrap(), metrics);
+                }
+            },
             Event::Rpc(r) => {
                 if let Some(e) = r.event {
                     handle_rpc_event(&e, metrics);

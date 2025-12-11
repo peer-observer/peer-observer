@@ -1,6 +1,6 @@
 syntax = "proto2";
 
-package primitive;
+package bitcoin_primitives;
 
 // A transaction primitive.
 message Transaction {
