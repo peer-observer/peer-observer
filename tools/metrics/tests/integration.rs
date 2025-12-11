@@ -21,7 +21,7 @@ use shared::{
         },
         p2p_extractor,
         primitive::{self, inventory_item::Item, Address, InventoryItem},
-        rpc::{self, MempoolInfo, PeerInfo, PeerInfos},
+        rpc::{self, MempoolInfo, NetTotals, PeerInfo, PeerInfos, UploadTarget},
         validation::{self, BlockConnected},
     },
     rand::{self, Rng},
@@ -2526,7 +2526,55 @@ async fn test_integration_metrics_rpc_peerinfo_peer_list_bitprojects() {
 }
 
 #[tokio::test]
-async fn test_integration_metrics_rpc_mempolinfo() {
+async fn test_integration_metrics_rpc_uptime() {
+    println!("test that the uptime metric works");
+
+    publish_and_check(
+        &[EventMsg::new(Event::Rpc(rpc::RpcEvent {
+            event: Some(rpc::rpc_event::Event::Uptime(1234)),
+        }))
+        .unwrap()],
+        Subject::Rpc,
+        r#"
+        peerobserver_rpc_uptime 1234
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_rpc_getnettotals() {
+    println!("test that the getnettotal metrics work");
+
+    publish_and_check(
+        &[EventMsg::new(Event::Rpc(rpc::RpcEvent {
+            event: Some(rpc::rpc_event::Event::NetTotals(NetTotals {
+                total_bytes_received: 2222,
+                total_bytes_sent: 3333,
+                // not covered
+                time_millis: 1234,
+                upload_target: UploadTarget {
+                    timeframe: 1,
+                    target: 1,
+                    target_reached: true,
+                    serve_historical_blocks: true,
+                    bytes_left_in_cycle: 1,
+                    time_left_in_cycle: 1,
+                },
+            })),
+        }))
+        .unwrap()],
+        Subject::Rpc,
+        r#"
+        peerobserver_rpc_nettotals_total_bytes_received 2222
+        peerobserver_rpc_nettotals_total_bytes_sent 3333
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_rpc_mempoolinfo() {
     println!("test that the mempoolinfo metrics work");
 
     publish_and_check(
