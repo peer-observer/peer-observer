@@ -9,11 +9,11 @@ use shared::{
     log::{self, info},
     prost::Message,
     protobuf::{
+        bitcoin_primitives::inventory_item::Item,
         event_msg::{EventMsg, event_msg::Event},
         p2p_extractor::p2p_extractor_event::Event::{
             AddressAnnouncement, FeefilterAnnouncement, InventoryAnnouncement, PingDuration,
         },
-        primitive::inventory_item::Item,
     },
     rand::{self, Rng},
     simple_logger::SimpleLogger,

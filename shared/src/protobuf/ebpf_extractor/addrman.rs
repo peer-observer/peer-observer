@@ -1,8 +1,8 @@
-use crate::protobuf::ctypes;
+use crate::protobuf::ebpf_extractor::ctypes;
 use std::fmt;
 
 // structs are generated via the addrman.proto file
-include!(concat!(env!("OUT_DIR"), "/addrman.rs"));
+include!(concat!(env!("OUT_DIR"), "/ebpf_extractor.addrman.rs"));
 
 impl From<ctypes::AddrmanInsertNew> for InsertNew {
     fn from(new: ctypes::AddrmanInsertNew) -> Self {
@@ -56,6 +56,15 @@ impl fmt::Display for addrman_event::Event {
         match self {
             addrman_event::Event::New(new) => write!(f, "{}", new),
             addrman_event::Event::Tried(tried) => write!(f, "{}", tried),
+        }
+    }
+}
+
+impl fmt::Display for AddrmanEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.event {
+            Some(event) => write!(f, "{}", event),
+            None => write!(f, "AddrmanEvent(None)"),
         }
     }
 }

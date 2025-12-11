@@ -1,6 +1,6 @@
 syntax = "proto2";
 
-import "primitive.proto";
+import "bitcoin_primitives.proto";
 
 // This file is only for Events of the p2p-extractor.
 package p2p_extractor;
@@ -21,10 +21,10 @@ message PingDuration {
 
 // An addrv2 message that the p2p-extractor received from the node.
 message AddressAnnouncement {
-  repeated primitive.Address addresses = 1;
+  repeated bitcoin_primitives.Address addresses = 1;
 }
 
 // An inv message that the p2p-extractor received from the node.
 message InventoryAnnouncement {
-  repeated primitive.InventoryItem inventory = 1;
+  repeated bitcoin_primitives.InventoryItem inventory = 1;
 }

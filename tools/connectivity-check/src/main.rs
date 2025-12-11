@@ -13,12 +13,13 @@ use shared::futures::stream::StreamExt;
 use shared::log;
 use shared::metricserver;
 use shared::prost::Message as ProstMessage;
+use shared::protobuf::bitcoin_primitives::address::Address as AddressType;
+use shared::protobuf::bitcoin_primitives::Address;
+use shared::protobuf::ebpf_extractor::ebpf_event::Event as EEvent;
+use shared::protobuf::ebpf_extractor::net_msg::message::Msg;
+use shared::protobuf::ebpf_extractor::net_msg::Message as NetMessage;
 use shared::protobuf::event_msg;
 use shared::protobuf::event_msg::event_msg::Event;
-use shared::protobuf::net_msg::message::Msg;
-use shared::protobuf::net_msg::Message as NetMessage;
-use shared::protobuf::primitive::address::Address as AddressType;
-use shared::protobuf::primitive::Address;
 use shared::simple_logger;
 use shared::util;
 use shared::{async_nats, clap, tokio};
@@ -213,11 +214,14 @@ fn worker(
 
 fn handle_event(event: Event, timestamp: u64, input_sender: Sender<Input>) {
     match event {
-        Event::Msg(msg) => {
-            if msg.meta.inbound {
-                handle_inbound_message(msg, timestamp, input_sender);
+        Event::Ebpf(event) => match event.event.unwrap() {
+            EEvent::Msg(msg) => {
+                if msg.meta.inbound {
+                    handle_inbound_message(msg, timestamp, input_sender);
+                }
             }
-        }
+            _ => (),
+        },
         _ => (),
     }
 }

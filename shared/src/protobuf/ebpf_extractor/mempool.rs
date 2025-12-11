@@ -1,9 +1,9 @@
-use crate::protobuf::ctypes;
+use crate::protobuf::ebpf_extractor::ctypes;
 use bitcoin::hashes::Hash;
 use std::fmt;
 
 // structs are generated via the mempool.proto file
-include!(concat!(env!("OUT_DIR"), "/mempool.rs"));
+include!(concat!(env!("OUT_DIR"), "/ebpf_extractor.mempool.rs"));
 
 impl From<ctypes::MempoolAdded> for Added {
     fn from(added: ctypes::MempoolAdded) -> Self {
@@ -122,6 +122,15 @@ impl fmt::Display for mempool_event::Event {
             mempool_event::Event::Removed(removed) => write!(f, "{}", removed),
             mempool_event::Event::Rejected(rejected) => write!(f, "{}", rejected),
             mempool_event::Event::Replaced(replaced) => write!(f, "{}", replaced),
+        }
+    }
+}
+
+impl fmt::Display for MempoolEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.event {
+            Some(event) => write!(f, "{}", event),
+            None => write!(f, "MempoolEvent(None)"),
         }
     }
 }

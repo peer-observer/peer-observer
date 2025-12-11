@@ -1,9 +1,9 @@
 use crate::bitcoin::hashes::Hash;
-use crate::protobuf::ctypes;
+use crate::protobuf::ebpf_extractor::ctypes;
 use std::fmt;
 
 // structs are generated via the validation.proto file
-include!(concat!(env!("OUT_DIR"), "/validation.rs"));
+include!(concat!(env!("OUT_DIR"), "/ebpf_extractor.validation.rs"));
 
 impl From<ctypes::ValidationBlockConnected> for BlockConnected {
     fn from(connected: ctypes::ValidationBlockConnected) -> Self {
@@ -39,6 +39,15 @@ impl fmt::Display for validation_event::Event {
             validation_event::Event::BlockConnected(connected) => {
                 write!(f, "{}", connected.to_string())
             }
+        }
+    }
+}
+
+impl fmt::Display for ValidationEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.event {
+            Some(event) => write!(f, "{}", event),
+            None => write!(f, "ValidationEvent(None)"),
         }
     }
 }

@@ -5,10 +5,10 @@ use bitcoin::p2p;
 
 use std::fmt;
 
-use crate::protobuf::primitive::{Address, BlockHeader, PrefilledTransaction};
+use crate::protobuf::bitcoin_primitives::{Address, BlockHeader, PrefilledTransaction};
 
 // structs are generated via the p2p.proto file
-include!(concat!(env!("OUT_DIR"), "/net_msg.rs"));
+include!(concat!(env!("OUT_DIR"), "/ebpf_extractor.net_msg.rs"));
 
 impl From<bip152::HeaderAndShortIds> for CompactBlock {
     fn from(cmpct_block: bip152::HeaderAndShortIds) -> Self {
@@ -403,6 +403,16 @@ impl fmt::Display for Block {
     }
 }
 
+impl fmt::Display for Metadata {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Metadata(peer_id={}, addr={}, conn_type={}, command={}, inbound={}, size={})",
+            self.peer_id, self.addr, self.conn_type, self.command, self.inbound, self.size
+        )
+    }
+}
+
 impl fmt::Display for Version {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Version(version={}, services={}, timestamp={}, receiver={}, sender={}, nonce={}, user_agent={}, start_height={}, relay={})", self.version, self.services, self.timestamp, self.receiver, self.sender, self.nonce, self.user_agent, self.start_height, self.relay)
@@ -634,6 +644,26 @@ impl fmt::Display for message::Msg {
             message::Msg::Sendaddrv2(_) => write!(f, "sendaddrv2"),
             message::Msg::Emptyaddrv2(_) => write!(f, "empty_addrv2"),
             message::Msg::Oldping(_) => write!(f, "old_ping"),
+        }
+    }
+}
+
+impl fmt::Display for Message {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.msg {
+            Some(msg) => write!(
+                f,
+                "{} id={} (conn_type={}): {}",
+                if self.meta.inbound {
+                    "inbound from"
+                } else {
+                    "outbound to"
+                },
+                self.meta.peer_id,
+                self.meta.conn_type,
+                msg
+            ),
+            None => write!(f, "Message(meta={}, msg=None)", self.meta),
         }
     }
 }

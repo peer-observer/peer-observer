@@ -2,33 +2,18 @@ syntax = "proto2";
 
 package event_msg;
 
-// ebpf-extractor
-import "net_msg.proto";
-import "net_conn.proto";
-import "addrman.proto";
-import "mempool.proto";
-import "validation.proto";
-
-// rpc-extractor
+import "ebpf_extractor.proto";
 import "rpc_extractor.proto";
-
-// p2p-extractor
 import "p2p_extractor.proto";
-
-// log-extractor
 import "log_extractor.proto";
 
 message EventMsg {
   required uint64  timestamp = 10;  // Timestamp (seconds since UNIX epoch) when the message was received.
   required uint32  timestamp_subsec_micros = 11;  // The fractional part of the timestamp, in whole milliseconds. Always represents a fractional portion of a second (i.e., it is less than one million).
   oneof event {
-    net_msg.Message msg = 1;
-    net_conn.ConnectionEvent conn = 2;
-    addrman.AddrmanEvent addrman = 3;
-    mempool.MempoolEvent mempool = 4;
-    validation.ValidationEvent validation = 5;
-    rpc_extractor.RPCEvent rpc = 6;
-    p2p_extractor.P2PExtractorEvent P2PExtractorEvent = 7;
-    log_extractor.LogEvent logExtractorEvent = 8;
+    ebpf_extractor.EBPFEvent ebpf = 1;
+    rpc_extractor.RPCEvent rpc = 2;
+    p2p_extractor.P2PExtractorEvent P2PExtractorEvent = 3;
+    log_extractor.LogEvent logExtractorEvent = 4;
   }
 }

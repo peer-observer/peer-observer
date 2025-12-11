@@ -4,6 +4,7 @@ use shared::clap::Parser;
 use shared::futures::stream::StreamExt;
 use shared::log;
 use shared::prost::Message;
+use shared::protobuf::ebpf_extractor::ebpf_event;
 use shared::protobuf::event_msg::event_msg::Event;
 use shared::protobuf::event_msg::{self, EventMsg};
 use shared::protobuf::log_extractor::LogDebugCategory;
@@ -157,42 +158,33 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
 fn log_event(event_msg: EventMsg, args: Args) {
     let log_all = args.show_all();
     match event_msg.event.unwrap() {
-        Event::Msg(msg) => {
-            if log_all || args.messages {
-                log::info!(
-                    "message: {} {} id={} (conn_type={:?}): {}",
-                    if msg.meta.inbound {
-                        "inbound"
-                    } else {
-                        "outbound"
-                    },
-                    if msg.meta.inbound { "from" } else { "to" },
-                    msg.meta.peer_id,
-                    msg.meta.conn_type,
-                    msg.msg.unwrap()
-                );
+        event_msg::event_msg::Event::Ebpf(ebpf) => match ebpf.event.unwrap() {
+            ebpf_event::Event::Msg(msg) => {
+                if log_all || args.messages {
+                    log::info!("message: {}", msg);
+                }
             }
-        }
-        Event::Conn(c) => {
-            if log_all || args.connections {
-                log::info!("connection: {}", c.event.unwrap());
+            ebpf_event::Event::Conn(conn) => {
+                if log_all || args.connections {
+                    log::info!("connection: {}", conn);
+                }
             }
-        }
-        Event::Addrman(a) => {
-            if log_all || args.addrman {
-                log::info!("addrman: {}", a.event.unwrap());
+            ebpf_event::Event::Addrman(addrman) => {
+                if log_all || args.addrman {
+                    log::info!("addrman: {}", addrman);
+                }
             }
-        }
-        Event::Mempool(m) => {
-            if log_all || args.mempool {
-                log::info!("mempool: {}", m.event.unwrap());
+            ebpf_event::Event::Mempool(mempool) => {
+                if log_all || args.mempool {
+                    log::info!("mempool: {}", mempool);
+                }
             }
-        }
-        Event::Validation(v) => {
-            if log_all || args.validation {
-                log::info!("validation: {}", v.event.unwrap());
+            ebpf_event::Event::Validation(validation) => {
+                if log_all || args.validation {
+                    log::info!("validation: {}", validation);
+                }
             }
-        }
+        },
         Event::Rpc(r) => {
             if log_all || args.rpc {
                 log::info!("rpc: {}", r.event.unwrap());

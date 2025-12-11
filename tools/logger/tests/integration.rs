@@ -7,15 +7,19 @@ use shared::{
     nats_subjects::Subject,
     prost::Message,
     protobuf::{
-        addrman::{self, InsertNew, InsertTried},
+        ebpf_extractor::{
+            addrman::{self, InsertNew, InsertTried},
+            ebpf_event,
+            mempool::{self, Added},
+            net_conn::{self, Connection, InboundConnection},
+            net_msg::{self, message::Msg, Metadata, Ping, Pong},
+            validation::{self, BlockConnected},
+            EbpfEvent,
+        },
         event_msg::{event_msg::Event, EventMsg},
         log_extractor::{self, LogDebugCategory},
-        mempool::{self, Added},
-        net_conn::{self, Connection, InboundConnection},
-        net_msg::{self, message::Msg, Metadata, Ping, Pong},
         p2p_extractor,
         rpc_extractor::{self, PeerInfo, PeerInfos},
-        validation::{self, BlockConnected},
     },
     testing::{nats_publisher::NatsPublisherForTesting, nats_server::NatsServerForTesting},
     tokio::{self, sync::watch, time::sleep},
@@ -185,28 +189,32 @@ async fn test_integration_logger_p2p_messages() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 0,
-                    addr: "127.0.0.1:8333".to_string(),
-                    conn_type: 1,
-                    command: "ping".to_string(),
-                    inbound: true,
-                    size: 8,
-                },
-                msg: Some(Msg::Ping(Ping { value: 1336 })),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 0,
+                        addr: "127.0.0.1:8333".to_string(),
+                        conn_type: 1,
+                        command: "ping".to_string(),
+                        inbound: true,
+                        size: 8,
+                    },
+                    msg: Some(Msg::Ping(Ping { value: 1336 })),
+                })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 0,
-                    addr: "127.0.0.1:8333".to_string(),
-                    conn_type: 1,
-                    command: "pong".to_string(),
-                    inbound: false,
-                    size: 8,
-                },
-                msg: Some(Msg::Pong(Pong { value: 1337 })),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 0,
+                        addr: "127.0.0.1:8333".to_string(),
+                        conn_type: 1,
+                        command: "pong".to_string(),
+                        inbound: false,
+                        size: 8,
+                    },
+                    msg: Some(Msg::Pong(Pong { value: 1337 })),
+                })),
             }))
             .unwrap(),
         ],
@@ -224,18 +232,20 @@ async fn test_integration_logger_connections() {
     println!("test that connections are logged");
 
     publish_and_check(
-        &[EventMsg::new(Event::Conn(net_conn::ConnectionEvent {
-            event: Some(net_conn::connection_event::Event::Inbound(
-                InboundConnection {
-                    conn: Connection {
-                        addr: "127.0.0.1:8333".to_string(),
-                        conn_type: 1,
-                        network: 2,
-                        peer_id: 7,
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+                event: Some(net_conn::connection_event::Event::Inbound(
+                    InboundConnection {
+                        conn: Connection {
+                            addr: "127.0.0.1:8333".to_string(),
+                            conn_type: 1,
+                            network: 2,
+                            peer_id: 7,
+                        },
+                        existing_connections: 123,
                     },
-                    existing_connections: 123,
-                },
-            )),
+                )),
+            })),
         }))
         .unwrap()],
         Subject::NetConn,
@@ -251,8 +261,8 @@ async fn test_integration_logger_validation() {
     println!("test that validation events are logged");
 
     publish_and_check(
-        &[
-            EventMsg::new(Event::Validation(validation::ValidationEvent {
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Validation(validation::ValidationEvent {
                 event: Some(validation::validation_event::Event::BlockConnected(
                     BlockConnected {
                         hash: vec![0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31],
@@ -263,9 +273,8 @@ async fn test_integration_logger_validation() {
                         connection_time: 5000,
                     },
                 )),
-            }))
-            .unwrap(),
-        ],
+            })),
+        })).unwrap()],
         Subject::Validation,
         r#"
         validation: BlockConnected(hash=1f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100, height=1337, transactions=13, inputs=3, sigops=7, time=5000ns)
@@ -279,15 +288,17 @@ async fn test_integration_logger_mempool_added() {
     println!("test that mempool events are logged");
 
     publish_and_check(
-        &[EventMsg::new(Event::Mempool(mempool::MempoolEvent {
-            event: Some(mempool::mempool_event::Event::Added(Added {
-                fee: 123,
-                txid: vec![
-                    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
-                    22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-                ],
-                vsize: 453,
-            })),
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+                event: Some(mempool::mempool_event::Event::Added(Added {
+                    fee: 123,
+                    txid: vec![
+                        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+                        22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+                    ],
+                    vsize: 453,
+                })),
+            }))
         }))
         .unwrap()],
         Subject::Mempool,
@@ -448,8 +459,8 @@ async fn test_integration_logger_addrman() {
     println!("test that addrman events are logged");
 
     publish_and_check(
-        &[
-            EventMsg::new(Event::Addrman(addrman::AddrmanEvent {
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Addrman(addrman::AddrmanEvent {
                 event: Some(addrman::addrman_event::Event::New(InsertNew {
                     addr: "127.0.0.1:2340".to_string(),
                     addr_as: 2,
@@ -459,9 +470,10 @@ async fn test_integration_logger_addrman() {
                     source: "127.0.0.1:2340".to_string(),
                     source_as: 0,
                 })),
-            }))
-            .unwrap(),
-            EventMsg::new(Event::Addrman(addrman::AddrmanEvent {
+            })),
+        })).unwrap(),
+        EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Addrman(addrman::AddrmanEvent {
                 event: Some(addrman::addrman_event::Event::Tried(InsertTried {
                     addr: "127.0.0.1:2340".to_string(),
                     addr_as: 2,
@@ -470,8 +482,8 @@ async fn test_integration_logger_addrman() {
                     source: "127.0.0.1:2340".to_string(),
                     source_as: 0,
                 })),
-            }))
-            .unwrap(),
+            })),
+        })).unwrap(),
         ],
         Subject::Addrman,
         r#"

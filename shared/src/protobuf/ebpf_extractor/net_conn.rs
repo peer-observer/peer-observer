@@ -1,9 +1,10 @@
-use crate::protobuf::ctypes;
-use crate::protobuf::primitive::ConnType;
+use crate::protobuf::bitcoin_primitives::ConnType;
+use crate::protobuf::ebpf_extractor::ctypes;
+
 use std::fmt;
 
 // structs are generated via the connection.proto file
-include!(concat!(env!("OUT_DIR"), "/net_conn.rs"));
+include!(concat!(env!("OUT_DIR"), "/ebpf_extractor.net_conn.rs"));
 
 impl From<ctypes::Connection> for Connection {
     fn from(conn: ctypes::Connection) -> Self {
@@ -132,6 +133,15 @@ impl fmt::Display for connection_event::Event {
             connection_event::Event::Misbehaving(misbehaving) => {
                 write!(f, "{}", misbehaving)
             }
+        }
+    }
+}
+
+impl fmt::Display for ConnectionEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.event {
+            Some(event) => write!(f, "{}", event),
+            None => write!(f, "ConnectionEvent(None)"),
         }
     }
 }

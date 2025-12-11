@@ -5,9 +5,13 @@ use shared::{
     log::{self, warn},
     nats_subjects::Subject,
     prost::Message,
+    protobuf::ebpf_extractor::{
+        ebpf_event,
+        net_conn::{self, Connection},
+        net_msg::{self, message::Msg, Metadata, Ping, Pong},
+        EbpfEvent,
+    },
     protobuf::event_msg::{event_msg::Event, EventMsg},
-    protobuf::net_conn::{self, Connection},
-    protobuf::net_msg::{self, message::Msg, Metadata, Ping, Pong},
     rand::{self, Rng},
     simple_logger::SimpleLogger,
     testing::nats_publisher::NatsPublisherForTesting,
@@ -164,21 +168,23 @@ async fn publish_and_check(
 async fn test_integration_websocket_conn_inbound() {
     println!("test that inbound connections work");
 
-    publish_and_check(&[EventMsg::new(Event::Conn(net_conn::ConnectionEvent {
-        event: Some(net_conn::connection_event::Event::Inbound(
-            shared::protobuf::net_conn::InboundConnection {
-                conn: Connection {
-                    addr: "127.0.0.1:8333".to_string(),
-                    conn_type: 1,
-                    network: 2,
-                    peer_id: 7,
+    publish_and_check(&[EventMsg::new(Event::Ebpf(EbpfEvent {
+        event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+            event: Some(net_conn::connection_event::Event::Inbound(
+                net_conn::InboundConnection {
+                    conn: Connection {
+                        addr: "127.0.0.1:8333".to_string(),
+                        conn_type: 1,
+                        network: 2,
+                        peer_id: 7,
+                    },
+                    existing_connections: 123,
                 },
-                existing_connections: 123,
-            },
-        )),
+            )),
+        }))
     }))
     .unwrap()], Subject::NetConn, &vec![
-        r#"{"Conn":{"event":{"Inbound":{"conn":{"peer_id":7,"addr":"127.0.0.1:8333","conn_type":1,"network":2},"existing_connections":123}}}}"#,
+        r#"{"Ebpf":{"event":{"Conn":{"event":{"Inbound":{"conn":{"peer_id":7,"addr":"127.0.0.1:8333","conn_type":1,"network":2},"existing_connections":123}}}}}}"#,
     ],1, None).await;
 }
 
@@ -188,35 +194,39 @@ async fn test_integration_websocket_p2p_message_ping() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 0,
-                    addr: "127.0.0.1:8333".to_string(),
-                    conn_type: 1,
-                    command: "ping".to_string(),
-                    inbound: true,
-                    size: 8,
-                },
-                msg: Some(Msg::Ping(Ping { value: 1 })),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 0,
+                        addr: "127.0.0.1:8333".to_string(),
+                        conn_type: 1,
+                        command: "ping".to_string(),
+                        inbound: true,
+                        size: 8,
+                    },
+                    msg: Some(Msg::Ping(Ping { value: 1 })),
+                }))
             }))
             .unwrap(),
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 0,
-                    addr: "127.0.0.1:8333".to_string(),
-                    conn_type: 1,
-                    command: "pong".to_string(),
-                    inbound: false,
-                    size: 8,
-                },
-                msg: Some(Msg::Pong(Pong { value: 1 })),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 0,
+                        addr: "127.0.0.1:8333".to_string(),
+                        conn_type: 1,
+                        command: "pong".to_string(),
+                        inbound: false,
+                        size: 8,
+                    },
+                    msg: Some(Msg::Pong(Pong { value: 1 })),
+                }))
             }))
             .unwrap(),
         ],
         Subject::NetMsg,
         &vec![
-            r#"{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"ping","inbound":true,"size":8},"msg":{"Ping":{"value":1}}}}"#,
-            r#"{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"pong","inbound":false,"size":8},"msg":{"Pong":{"value":1}}}}"#,
+            r#"{"Ebpf":{"event":{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"ping","inbound":true,"size":8},"msg":{"Ping":{"value":1}}}}}}"#,
+            r#"{"Ebpf":{"event":{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"pong","inbound":false,"size":8},"msg":{"Pong":{"value":1}}}}}}"#,
         ],
         1,
         None
@@ -230,35 +240,39 @@ async fn test_integration_websocket_multi_client() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 0,
-                    addr: "127.0.0.1:8333".to_string(),
-                    conn_type: 1,
-                    command: "ping".to_string(),
-                    inbound: true,
-                    size: 8,
-                },
-                msg: Some(Msg::Ping(Ping { value: 1 })),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 0,
+                        addr: "127.0.0.1:8333".to_string(),
+                        conn_type: 1,
+                        command: "ping".to_string(),
+                        inbound: true,
+                        size: 8,
+                    },
+                    msg: Some(Msg::Ping(Ping { value: 1 })),
+                }))
             }))
             .unwrap(),
-            EventMsg::new(Event::Msg(net_msg::Message {
-                meta: Metadata {
-                    peer_id: 0,
-                    addr: "127.0.0.1:8333".to_string(),
-                    conn_type: 1,
-                    command: "pong".to_string(),
-                    inbound: false,
-                    size: 8,
-                },
-                msg: Some(Msg::Pong(Pong { value: 1 })),
+            EventMsg::new(Event::Ebpf(EbpfEvent {
+                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+                    meta: Metadata {
+                        peer_id: 0,
+                        addr: "127.0.0.1:8333".to_string(),
+                        conn_type: 1,
+                        command: "pong".to_string(),
+                        inbound: false,
+                        size: 8,
+                    },
+                    msg: Some(Msg::Pong(Pong { value: 1 })),
+                }))
             }))
             .unwrap(),
         ],
         Subject::NetMsg,
         &vec![
-            r#"{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"ping","inbound":true,"size":8},"msg":{"Ping":{"value":1}}}}"#,
-            r#"{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"pong","inbound":false,"size":8},"msg":{"Pong":{"value":1}}}}"#,
+            r#"{"Ebpf":{"event":{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"ping","inbound":true,"size":8},"msg":{"Ping":{"value":1}}}}}}"#,
+            r#"{"Ebpf":{"event":{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"pong","inbound":false,"size":8},"msg":{"Pong":{"value":1}}}}}}"#,
         ],
         12,
         None
@@ -273,25 +287,25 @@ async fn test_integration_websocket_closed_client() {
     );
 
     publish_and_check(
-        &[
-            EventMsg::new(Event::Conn(net_conn::ConnectionEvent {
-            event: Some(net_conn::connection_event::Event::Outbound(
-                shared::protobuf::net_conn::OutboundConnection {
-                    conn: Connection {
-                        addr: "1.1.1.1:48333".to_string(),
-                        conn_type: 2,
-                        network: 3,
-                        peer_id: 11,
+        &[EventMsg::new(Event::Ebpf(EbpfEvent {
+            event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+                event: Some(net_conn::connection_event::Event::Outbound(
+                    net_conn::OutboundConnection {
+                        conn: Connection {
+                            addr: "1.1.1.1:48333".to_string(),
+                            conn_type: 2,
+                            network: 3,
+                            peer_id: 11,
+                        },
+                        existing_connections: 321,
                     },
-                    existing_connections: 321,
-                },
-            )),
+                )),
+            }))
         }))
-        .unwrap()
-        ],
+        .unwrap()],
         Subject::NetConn,
         &vec![
-            r#"{"Conn":{"event":{"Outbound":{"conn":{"peer_id":11,"addr":"1.1.1.1:48333","conn_type":2,"network":3},"existing_connections":321}}}}"#,
+            r#"{"Ebpf":{"event":{"Conn":{"event":{"Outbound":{"conn":{"peer_id":11,"addr":"1.1.1.1:48333","conn_type":2,"network":3},"existing_connections":321}}}}}}"#,
         ],
         4,
         Some(2)
