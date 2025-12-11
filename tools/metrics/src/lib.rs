@@ -162,6 +162,17 @@ fn handle_event(
 
 fn handle_rpc_event(e: &rpc_event::Event, metrics: metrics::Metrics) {
     match e {
+        rpc_event::Event::Uptime(uptime_seconds) => {
+            metrics.rpc_uptime.set(*uptime_seconds as i64);
+        }
+        rpc_event::Event::NetTotals(net_totals) => {
+            metrics
+                .rpc_nettotals_total_bytes_received
+                .set(net_totals.total_bytes_received as i64);
+            metrics
+                .rpc_nettotals_total_bytes_sent
+                .set(net_totals.total_bytes_sent as i64);
+        }
         rpc_event::Event::MempoolInfo(info) => {
             metrics
                 .rpc_mempoolinfo_mempool_loaded

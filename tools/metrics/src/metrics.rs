@@ -267,6 +267,13 @@ pub struct Metrics {
     pub rpc_mempoolinfo_min_relay_tx_feerate: Gauge,
     pub rpc_mempoolinfo_incremental_relay_feerate: Gauge,
 
+    // uptime
+    pub rpc_uptime: IntGauge,
+
+    // getnettotals
+    pub rpc_nettotals_total_bytes_received: IntGauge,
+    pub rpc_nettotals_total_bytes_sent: IntGauge,
+
     // P2P-extractor
     pub p2pextractor_ping_duration_nanoseconds: IntGauge,
     pub p2pextractor_addrv2relay_addresses: IntCounterVec,
@@ -397,6 +404,13 @@ impl Metrics {
         g!(rpc_mempoolinfo_min_relay_tx_feerate, "(minrelaytxfee) Current minimum relay fee for transactions", registry);
         g!(rpc_mempoolinfo_incremental_relay_feerate, "(incrementalrelayfee) minimum fee rate increment for mempool limiting or replacement in BTC/kvB", registry);
 
+        // uptime
+        ig!(rpc_uptime, "Node uptime in seconds", registry);
+
+        // getnettotals
+        ig!(rpc_nettotals_total_bytes_received, "Total bytes received by the node", registry);
+        ig!(rpc_nettotals_total_bytes_sent, "Total bytes sent by the node", registry);
+
         // P2P-extractor
         ig!(p2pextractor_ping_duration_nanoseconds, "The time it takes for a connected Bitcoin node to respond to a ping with a pong in nanoseconds.", registry);
         icv!(p2pextractor_addrv2relay_addresses, "The total number of addresses relayed to the p2p-extractor by the node, per network", ["network"], registry);
@@ -522,6 +536,13 @@ impl Metrics {
             rpc_mempoolinfo_min_mempool_feerate,
             rpc_mempoolinfo_min_relay_tx_feerate,
             rpc_mempoolinfo_incremental_relay_feerate,
+
+            // uptime
+            rpc_uptime,
+
+            // getnettotals
+            rpc_nettotals_total_bytes_received,
+            rpc_nettotals_total_bytes_sent,
 
             // p2p-extractor
             p2pextractor_ping_duration_nanoseconds,
