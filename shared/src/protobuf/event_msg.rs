@@ -3,7 +3,7 @@ use std::time::SystemTime;
 use std::time::SystemTimeError;
 
 // structs are generated via the wrapper.proto file
-include!(concat!(env!("OUT_DIR"), "/event_msg.rs"));
+include!(concat!(env!("OUT_DIR"), "/event.rs"));
 
 impl EventMsg {
     pub fn new(event: event_msg::Event) -> Result<EventMsg, SystemTimeError> {

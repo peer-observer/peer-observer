@@ -1,6 +1,6 @@
 syntax = "proto2";
 
-package event_msg;
+package event;
 
 import "ebpf_extractor.proto";
 import "rpc_extractor.proto";
