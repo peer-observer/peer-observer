@@ -17,7 +17,7 @@ use shared::protobuf::{
         net_msg::{message::Msg, reject::RejectReason},
         validation::validation_event,
     },
-    event_msg::{event_msg::PeerObserverEvent, EventMsg},
+    event::{event::PeerObserverEvent, Event},
     log_extractor::{log, Log, LogDebugCategory},
     p2p_extractor::p2p,
     rpc_extractor::rpc,
@@ -116,7 +116,7 @@ fn handle_event(
     msg: async_nats::Message,
     metrics: metrics::Metrics,
 ) -> Result<(), error::RuntimeError> {
-    let unwrapped = EventMsg::decode(msg.payload)?;
+    let unwrapped = Event::decode(msg.payload)?;
     if let Some(event) = unwrapped.peer_observer_event {
         match event {
             PeerObserverEvent::EbpfExtractor(ebpf) => match ebpf.ebpf_event.unwrap() {

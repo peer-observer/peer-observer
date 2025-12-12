@@ -18,8 +18,8 @@ use shared::protobuf::bitcoin_primitives::Address;
 use shared::protobuf::ebpf_extractor::ebpf::EbpfEvent;
 use shared::protobuf::ebpf_extractor::net_msg::message::Msg;
 use shared::protobuf::ebpf_extractor::net_msg::Message as NetMessage;
-use shared::protobuf::event_msg;
-use shared::protobuf::event_msg::event_msg::PeerObserverEvent;
+use shared::protobuf::event;
+use shared::protobuf::event::event::PeerObserverEvent;
 use shared::simple_logger;
 use shared::util;
 use shared::{async_nats, clap, tokio};
@@ -342,7 +342,7 @@ async fn main() {
 
     tokio::spawn(async move {
         while let Some(msg) = sub.next().await {
-            let wrapped = event_msg::EventMsg::decode(msg.payload).unwrap();
+            let wrapped = event::Event::decode(msg.payload).unwrap();
             let unwrapped = wrapped.peer_observer_event;
             if let Some(event) = unwrapped {
                 handle_event(event, wrapped.timestamp, input_sender.clone());

@@ -11,7 +11,7 @@ use shared::{
         net_msg::{self, message::Msg, Metadata, Ping, Pong},
         Ebpf,
     },
-    protobuf::event_msg::{event_msg::PeerObserverEvent, EventMsg},
+    protobuf::event::{event::PeerObserverEvent, Event},
     rand::{self, Rng},
     simple_logger::SimpleLogger,
     testing::nats_publisher::NatsPublisherForTesting,
@@ -70,7 +70,7 @@ fn make_test_args(nats_port: u16, websocket_port: u16) -> Args {
 }
 
 async fn publish_and_check(
-    events: &[EventMsg],
+    events: &[Event],
     subject: Subject,
     expected: &[&str],
     num_clients: u8,
@@ -168,7 +168,7 @@ async fn publish_and_check(
 async fn test_integration_websocket_conn_inbound() {
     println!("test that inbound connections work");
 
-    publish_and_check(&[EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+    publish_and_check(&[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
         ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
             event: Some(net_conn::connection_event::Event::Inbound(
                 net_conn::InboundConnection {
@@ -194,7 +194,7 @@ async fn test_integration_websocket_p2p_message_ping() {
 
     publish_and_check(
         &[
-            EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
                 ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
@@ -208,7 +208,7 @@ async fn test_integration_websocket_p2p_message_ping() {
                 }))
             }))
             .unwrap(),
-            EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
                 ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
@@ -240,7 +240,7 @@ async fn test_integration_websocket_multi_client() {
 
     publish_and_check(
         &[
-            EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
                 ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
@@ -254,7 +254,7 @@ async fn test_integration_websocket_multi_client() {
                 }))
             }))
             .unwrap(),
-            EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
                 ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
@@ -287,7 +287,7 @@ async fn test_integration_websocket_closed_client() {
     );
 
     publish_and_check(
-        &[EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+        &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
             ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
                 event: Some(net_conn::connection_event::Event::Outbound(
                     net_conn::OutboundConnection {

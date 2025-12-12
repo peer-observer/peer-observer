@@ -3,7 +3,7 @@
 These protobuf definitions are used for the communication between an extractor
 and tools. They define events that the extractors publish and the tools consume.
 
-The top-level event is the `EventMsg` defined in `protobuf/event_msg.proto`.
+The top-level event is the `Event` defined in `protobuf/event.proto`.
 
 ### Rust types (fully support)
 
@@ -51,7 +51,7 @@ async def main():
         subject = msg.subject
         data = msg.data
 
-        event = event_msg_pb2.EventMsg()
+        event = event_msg_pb2.Event()
         event.ParseFromString(data)
 
         p2pmsg = event.msg

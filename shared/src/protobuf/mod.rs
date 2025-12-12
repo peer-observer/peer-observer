@@ -2,7 +2,7 @@
 pub mod bitcoin_primitives;
 
 /// Protobuf types for events.
-pub mod event_msg;
+pub mod event;
 
 /// Protobuf types for ebpf-extractor events.
 pub mod ebpf_extractor;

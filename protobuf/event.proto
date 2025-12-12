@@ -7,7 +7,7 @@ import "rpc_extractor.proto";
 import "p2p_extractor.proto";
 import "log_extractor.proto";
 
-message EventMsg {
+message Event {
   required uint64  timestamp = 10;  // Timestamp (milliseconds since UNIX epoch) when the event was constructed.
   oneof peer_observer_event {
     ebpf_extractor.ebpf         ebpf_extractor  = 1;

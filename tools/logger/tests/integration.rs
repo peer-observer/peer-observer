@@ -16,7 +16,7 @@ use shared::{
             validation::{self, BlockConnected},
             Ebpf,
         },
-        event_msg::{event_msg::PeerObserverEvent, EventMsg},
+        event::{event::PeerObserverEvent, Event},
         log_extractor::{self, LogDebugCategory},
         p2p_extractor,
         rpc_extractor::{self, PeerInfo, PeerInfos},
@@ -107,7 +107,7 @@ fn check_logs(expected: &[&str]) -> Result<bool, std::io::Error> {
     return Ok(no_lines_missing);
 }
 
-async fn publish_and_check(events: &[EventMsg], subject: Subject, expected: &str) {
+async fn publish_and_check(events: &[Event], subject: Subject, expected: &str) {
     init_logger().unwrap();
 
     let nats_server = NatsServerForTesting::new().await;
@@ -189,7 +189,7 @@ async fn test_integration_logger_p2p_messages() {
 
     publish_and_check(
         &[
-            EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
                 ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
@@ -203,7 +203,7 @@ async fn test_integration_logger_p2p_messages() {
                 })),
             }))
             .unwrap(),
-            EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
                 ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
@@ -232,7 +232,7 @@ async fn test_integration_logger_connections() {
     println!("test that connections are logged");
 
     publish_and_check(
-        &[EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+        &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
             ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
                 event: Some(net_conn::connection_event::Event::Inbound(
                     InboundConnection {
@@ -261,7 +261,7 @@ async fn test_integration_logger_validation() {
     println!("test that validation events are logged");
 
     publish_and_check(
-        &[EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+        &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
             ebpf_event: Some(ebpf::EbpfEvent::Validation(validation::ValidationEvent {
                 event: Some(validation::validation_event::Event::BlockConnected(
                     BlockConnected {
@@ -288,7 +288,7 @@ async fn test_integration_logger_mempool_added() {
     println!("test that mempool events are logged");
 
     publish_and_check(
-        &[EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+        &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
             ebpf_event: Some(ebpf::EbpfEvent::Mempool(mempool::MempoolEvent {
                 event: Some(mempool::mempool_event::Event::Added(Added {
                     fee: 123,
@@ -315,7 +315,7 @@ async fn test_integration_logger_rpc_peerinfo() {
 
     publish_and_check(
         &[
-            EventMsg::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+            Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
                 rpc_event: Some(rpc_extractor::rpc::RpcEvent::PeerInfos(PeerInfos {
                     infos: vec![
                         PeerInfo {
@@ -461,7 +461,7 @@ async fn test_integration_logger_addrman() {
     println!("test that addrman events are logged");
 
     publish_and_check(
-        &[EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+        &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
             ebpf_event: Some(ebpf::EbpfEvent::Addrman(addrman::AddrmanEvent {
                 event: Some(addrman::addrman_event::Event::New(InsertNew {
                     addr: "127.0.0.1:2340".to_string(),
@@ -474,7 +474,7 @@ async fn test_integration_logger_addrman() {
                 })),
             })),
         })).unwrap(),
-        EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+        Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
             ebpf_event: Some(ebpf::EbpfEvent::Addrman(addrman::AddrmanEvent {
                 event: Some(addrman::addrman_event::Event::Tried(InsertTried {
                     addr: "127.0.0.1:2340".to_string(),
@@ -502,7 +502,7 @@ async fn test_integration_logger_p2pextractor_ping_duration() {
 
     publish_and_check(
         &[
-            EventMsg::new(PeerObserverEvent::P2pExtractor(p2p_extractor::P2p {
+            Event::new(PeerObserverEvent::P2pExtractor(p2p_extractor::P2p {
                 p2p_event: Some(p2p_extractor::p2p::P2pEvent::PingDuration(
                     p2p_extractor::PingDuration { duration: 1234567 },
                 )),
@@ -523,7 +523,7 @@ async fn test_integration_logger_logextractor_unknown_log() {
 
     publish_and_check(
         &[
-            EventMsg::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
+            Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
                 category: LogDebugCategory::Unknown.into(),
                 log_timestamp: 1234,
                 log_event: Some(log_extractor::log::LogEvent::UnknownLogMessage(
@@ -548,7 +548,7 @@ async fn test_integration_logger_logextractor_blockconnected_log() {
 
     publish_and_check(
         &[
-            EventMsg::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
+            Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
                 category: LogDebugCategory::Validation.into(),
                 log_timestamp: 345,
                 log_event: Some(log_extractor::log::LogEvent::BlockConnectedLog(

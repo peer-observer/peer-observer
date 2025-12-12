@@ -6,8 +6,8 @@ use shared::log;
 use shared::log_matchers::parse_log_event;
 use shared::nats_subjects::Subject;
 use shared::prost::Message;
-use shared::protobuf::event_msg::EventMsg;
-use shared::protobuf::event_msg::event_msg::PeerObserverEvent;
+use shared::protobuf::event::Event;
+use shared::protobuf::event::event::PeerObserverEvent;
 use shared::tokio::{
     self,
     fs::{File, OpenOptions},
@@ -117,7 +117,7 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
 
 async fn process_log(nats_client: &async_nats::Client, line: &str) {
     log::trace!("Read log line: {}", line);
-    match EventMsg::new(PeerObserverEvent::LogExtractor(parse_log_event(line))) {
+    match Event::new(PeerObserverEvent::LogExtractor(parse_log_event(line))) {
         Ok(proto) => {
             if let Err(e) = nats_client
                 .publish(
@@ -132,10 +132,7 @@ async fn process_log(nats_client: &async_nats::Client, line: &str) {
             }
         }
         Err(e) => {
-            log::error!(
-                "Could not create new EventMsg due to SystemTimeError: {}",
-                e
-            );
+            log::error!("Could not create new Event due to SystemTimeError: {}", e);
         }
     };
 }

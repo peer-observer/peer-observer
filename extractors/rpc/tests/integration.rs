@@ -6,7 +6,7 @@ use shared::{
     futures::StreamExt,
     log::{self, info},
     prost::Message,
-    protobuf::event_msg::{EventMsg, event_msg::PeerObserverEvent},
+    protobuf::event::{Event, event::PeerObserverEvent},
     protobuf::rpc_extractor::rpc::RpcEvent::{MempoolInfo, NetTotals, PeerInfos, Uptime},
     simple_logger::SimpleLogger,
     testing::nats_server::NatsServerForTesting,
@@ -113,7 +113,7 @@ async fn check(
     let mut sub = nc.subscribe("*").await.unwrap();
 
     while let Some(msg) = sub.next().await {
-        let unwrapped = EventMsg::decode(msg.payload).unwrap();
+        let unwrapped = Event::decode(msg.payload).unwrap();
         if let Some(event) = unwrapped.peer_observer_event {
             check_expected(event);
             break;

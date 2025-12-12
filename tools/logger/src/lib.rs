@@ -5,8 +5,8 @@ use shared::futures::stream::StreamExt;
 use shared::log;
 use shared::prost::Message;
 use shared::protobuf::ebpf_extractor::ebpf;
-use shared::protobuf::event_msg::event_msg::PeerObserverEvent;
-use shared::protobuf::event_msg::{self, EventMsg};
+use shared::protobuf::event::event::PeerObserverEvent;
+use shared::protobuf::event::{self, Event};
 use shared::protobuf::log_extractor::LogDebugCategory;
 use shared::tokio::sync::watch;
 use shared::{async_nats, clap};
@@ -129,7 +129,7 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         shared::tokio::select! {
             maybe_msg = sub.next() => {
                 if let Some(msg) = maybe_msg {
-                    let event = event_msg::EventMsg::decode(msg.payload)?;
+                    let event = event::Event::decode(msg.payload)?;
                     log_event(event, args.clone());
                 } else {
                     break; // subscription ended
@@ -155,9 +155,9 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
     Ok(())
 }
 
-fn log_event(event_msg: EventMsg, args: Args) {
+fn log_event(event: Event, args: Args) {
     let log_all = args.show_all();
-    match event_msg.peer_observer_event.unwrap() {
+    match event.peer_observer_event.unwrap() {
         PeerObserverEvent::EbpfExtractor(ebpf) => match ebpf.ebpf_event.unwrap() {
             ebpf::EbpfEvent::Msg(msg) => {
                 if log_all || args.messages {

@@ -16,7 +16,7 @@ use shared::{
     prost::Message,
     protobuf::{
         bitcoin_primitives,
-        event_msg::{EventMsg, event_msg::PeerObserverEvent},
+        event::{Event, event::PeerObserverEvent},
         p2p_extractor,
     },
     rand::{self, Rng},
@@ -333,7 +333,7 @@ async fn publish_addr_announcement_event(
     addresses: Vec<bitcoin_primitives::Address>,
     nats_client: &async_nats::Client,
 ) {
-    let proto_result = EventMsg::new(PeerObserverEvent::P2pExtractor(p2p_extractor::P2p {
+    let proto_result = Event::new(PeerObserverEvent::P2pExtractor(p2p_extractor::P2p {
         p2p_event: Some(p2p_extractor::p2p::P2pEvent::AddressAnnouncement(
             p2p_extractor::AddressAnnouncement { addresses },
         )),
@@ -363,7 +363,7 @@ async fn publish_inventory_announcement_event(
     inventory: Vec<bitcoin_primitives::InventoryItem>,
     nats_client: &async_nats::Client,
 ) {
-    let proto_result = EventMsg::new(PeerObserverEvent::P2pExtractor(p2p_extractor::P2p {
+    let proto_result = Event::new(PeerObserverEvent::P2pExtractor(p2p_extractor::P2p {
         p2p_event: Some(p2p_extractor::p2p::P2pEvent::InventoryAnnouncement(
             p2p_extractor::InventoryAnnouncement { inventory },
         )),
@@ -390,7 +390,7 @@ async fn publish_inventory_announcement_event(
 }
 
 async fn publish_feefilter_announcement_event(feefilter: i64, nats_client: &async_nats::Client) {
-    let proto_result = EventMsg::new(PeerObserverEvent::P2pExtractor(p2p_extractor::P2p {
+    let proto_result = Event::new(PeerObserverEvent::P2pExtractor(p2p_extractor::P2p {
         p2p_event: Some(p2p_extractor::p2p::P2pEvent::FeefilterAnnouncement(
             feefilter,
         )),
@@ -417,7 +417,7 @@ async fn publish_feefilter_announcement_event(feefilter: i64, nats_client: &asyn
 }
 
 async fn publish_ping_measurement_event(duration: u64, nats_client: &async_nats::Client) {
-    let proto_result = EventMsg::new(PeerObserverEvent::P2pExtractor(p2p_extractor::P2p {
+    let proto_result = Event::new(PeerObserverEvent::P2pExtractor(p2p_extractor::P2p {
         p2p_event: Some(p2p_extractor::p2p::P2pEvent::PingDuration(
             p2p_extractor::PingDuration { duration },
         )),

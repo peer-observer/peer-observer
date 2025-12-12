@@ -10,7 +10,7 @@ use shared::{
     prost::Message,
     protobuf::{
         bitcoin_primitives::inventory_item::Item,
-        event_msg::{EventMsg, event_msg::PeerObserverEvent},
+        event::{Event, event::PeerObserverEvent},
         p2p_extractor::p2p::P2pEvent::{
             AddressAnnouncement, FeefilterAnnouncement, InventoryAnnouncement, PingDuration,
         },
@@ -180,7 +180,7 @@ async fn check(
     sleep(Duration::from_secs(1)).await;
 
     while let Some(msg) = sub.next().await {
-        let unwrapped = EventMsg::decode(msg.payload).unwrap();
+        let unwrapped = Event::decode(msg.payload).unwrap();
         if let Some(event) = unwrapped.peer_observer_event {
             if check_expected(event) {
                 break;

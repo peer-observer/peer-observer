@@ -4,7 +4,7 @@ use shared::corepc_client::client_sync::v29::Client;
 use shared::log;
 use shared::nats_subjects::Subject;
 use shared::prost::Message;
-use shared::protobuf::event_msg::{EventMsg, event_msg::PeerObserverEvent};
+use shared::protobuf::event::{Event, event::PeerObserverEvent};
 use shared::protobuf::rpc_extractor;
 use shared::tokio::sync::watch;
 use shared::tokio::time::{self, Duration};
@@ -194,7 +194,7 @@ async fn getpeerinfo(
 ) -> Result<(), FetchOrPublishError> {
     let peer_info = rpc_client.get_peer_info()?;
 
-    let proto = EventMsg::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
         rpc_event: Some(rpc_extractor::rpc::RpcEvent::PeerInfos(peer_info.into())),
     }))?;
 
@@ -210,7 +210,7 @@ async fn getmempoolinfo(
 ) -> Result<(), FetchOrPublishError> {
     let mempool_info = rpc_client.get_mempool_info()?;
 
-    let proto = EventMsg::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
         rpc_event: Some(rpc_extractor::rpc::RpcEvent::MempoolInfo(
             mempool_info.into(),
         )),
@@ -228,7 +228,7 @@ async fn uptime(
 ) -> Result<(), FetchOrPublishError> {
     let uptime_seconds = rpc_client.uptime()?;
 
-    let proto = EventMsg::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
         rpc_event: Some(rpc_extractor::rpc::RpcEvent::Uptime(uptime_seconds)),
     }))?;
 
@@ -244,7 +244,7 @@ async fn getnettotals(
 ) -> Result<(), FetchOrPublishError> {
     let net_totals = rpc_client.get_net_totals()?;
 
-    let proto = EventMsg::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
         rpc_event: Some(rpc_extractor::rpc::RpcEvent::NetTotals(net_totals.into())),
     }))?;
 

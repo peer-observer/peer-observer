@@ -4,7 +4,7 @@ use shared::clap::Parser;
 use shared::futures::{stream::SplitSink, SinkExt, StreamExt};
 use shared::log;
 use shared::prost::Message;
-use shared::protobuf::event_msg::{self, event_msg::PeerObserverEvent};
+use shared::protobuf::event::{self, event::PeerObserverEvent};
 use shared::{
     async_nats, clap,
     tokio::{
@@ -69,7 +69,7 @@ pub async fn run(
         let clients = Arc::clone(&clients);
         tokio::spawn(async move {
             while let Some(msg) = sub.next().await {
-                match event_msg::EventMsg::decode(msg.payload) {
+                match event::Event::decode(msg.payload) {
                     Ok(event) => {
                         if let Some(event) = event.peer_observer_event {
                             match serde_json::to_string::<PeerObserverEvent>(&event.clone().into())

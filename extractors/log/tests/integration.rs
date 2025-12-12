@@ -10,7 +10,7 @@ use shared::{
     log::{Level, LevelFilter, info},
     prost::Message,
     protobuf::{
-        event_msg::{EventMsg, event_msg::PeerObserverEvent},
+        event::{Event, event::PeerObserverEvent},
         log_extractor::log,
     },
     simple_logger::SimpleLogger,
@@ -124,7 +124,7 @@ async fn check(
     sleep(Duration::from_secs(1)).await;
 
     while let Some(msg) = sub.next().await {
-        let unwrapped = EventMsg::decode(msg.payload).unwrap();
+        let unwrapped = Event::decode(msg.payload).unwrap();
         if let Some(event) = unwrapped.peer_observer_event {
             if check_event(event) {
                 break;
