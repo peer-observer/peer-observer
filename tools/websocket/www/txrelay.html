@@ -291,7 +291,7 @@
       }
 
       redrawPeer(meta.peer_id)
-    } if ("Conn" in event) {
+    } if ("Connection" in event) {
       if ("Closed" in event.Conn.event) {
         closeEvent = event.Conn.event.Closed
         if (closeEvent.conn.peer_id in peers) {

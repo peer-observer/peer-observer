@@ -3,17 +3,17 @@ syntax = "proto2";
 package ebpf_extractor;
 
 import "ebpf_extractor/net_msg.proto";
-import "ebpf_extractor/net_conn.proto";
+import "ebpf_extractor/connection.proto";
 import "ebpf_extractor/addrman.proto";
 import "ebpf_extractor/mempool.proto";
 import "ebpf_extractor/validation.proto";
 
 message ebpf {
   oneof ebpf_event {
-    net_msg.Message msg = 1;
-    net_conn.ConnectionEvent conn = 2;
-    addrman.AddrmanEvent addrman = 3;
-    mempool.MempoolEvent mempool = 4;
-    validation.ValidationEvent validation = 5;
+    net_msg.Message               msg           = 1;
+    connection.ConnectionEvent    connection    = 2;
+    addrman.AddrmanEvent          addrman       = 3;
+    mempool.MempoolEvent          mempool       = 4;
+    validation.ValidationEvent    validation    = 5;
   }
 }

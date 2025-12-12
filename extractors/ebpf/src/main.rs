@@ -13,7 +13,7 @@ use shared::protobuf::ebpf_extractor::ctypes::{
     P2PMessage, ValidationBlockConnected,
 };
 use shared::protobuf::ebpf_extractor::{
-    addrman, ebpf, mempool, net_conn, net_msg, validation, Ebpf,
+    addrman, ebpf, mempool, connection, net_msg, validation, Ebpf,
 };
 use shared::protobuf::event::event::PeerObserverEvent;
 use shared::protobuf::event::Event;
@@ -426,8 +426,8 @@ async fn run() -> Result<(), RuntimeError> {
 fn handle_net_conn_closed(data: &[u8], nc: &async_nats::Client) -> i32 {
     let closed = ClosedConnection::from_bytes(data);
     let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
-            event: Some(net_conn::connection_event::Event::Closed(closed.into())),
+        ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+            event: Some(connection::connection_event::Event::Closed(closed.into())),
         })),
     })) {
         Ok(p) => p,
@@ -454,8 +454,8 @@ fn handle_net_conn_closed(data: &[u8], nc: &async_nats::Client) -> i32 {
 fn handle_net_conn_outbound(data: &[u8], nc: &async_nats::Client) -> i32 {
     let outbound = OutboundConnection::from_bytes(data);
     let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
-            event: Some(net_conn::connection_event::Event::Outbound(outbound.into())),
+        ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+            event: Some(connection::connection_event::Event::Outbound(outbound.into())),
         })),
     })) {
         Ok(p) => p,
@@ -482,8 +482,8 @@ fn handle_net_conn_outbound(data: &[u8], nc: &async_nats::Client) -> i32 {
 fn handle_net_conn_inbound(data: &[u8], nc: &async_nats::Client) -> i32 {
     let inbound = InboundConnection::from_bytes(data);
     let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
-            event: Some(net_conn::connection_event::Event::Inbound(inbound.into())),
+        ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+            event: Some(connection::connection_event::Event::Inbound(inbound.into())),
         })),
     })) {
         Ok(p) => p,
@@ -511,8 +511,8 @@ fn handle_net_conn_inbound(data: &[u8], nc: &async_nats::Client) -> i32 {
 fn handle_net_conn_inbound_evicted(data: &[u8], nc: &async_nats::Client) -> i32 {
     let evicted = ClosedConnection::from_bytes(data);
     let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
-            event: Some(net_conn::connection_event::Event::InboundEvicted(
+        ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+            event: Some(connection::connection_event::Event::InboundEvicted(
                 evicted.into(),
             )),
         })),
@@ -542,8 +542,8 @@ fn handle_net_conn_inbound_evicted(data: &[u8], nc: &async_nats::Client) -> i32 
 fn handle_net_conn_misbehaving(data: &[u8], nc: &async_nats::Client) -> i32 {
     let misbehaving = MisbehavingConnection::from_bytes(data);
     let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
-            event: Some(net_conn::connection_event::Event::Misbehaving(
+        ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+            event: Some(connection::connection_event::Event::Misbehaving(
                 misbehaving.into(),
             )),
         })),

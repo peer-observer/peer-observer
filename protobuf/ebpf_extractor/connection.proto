@@ -1,6 +1,6 @@
 syntax = "proto2";
 
-package ebpf_extractor.net_conn;
+package ebpf_extractor.connection;
 
 import "bitcoin_primitives.proto";
 

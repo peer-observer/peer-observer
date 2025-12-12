@@ -13,7 +13,7 @@ use shared::{
             addrman::{self, InsertNew, InsertTried},
             ebpf,
             mempool::{self, Added, Rejected, Removed, Replaced},
-            net_conn::{
+            connection::{
                 self, ClosedConnection, Connection, EvictedInboundConnection, InboundConnection,
                 MisbehavingConnection,
             },
@@ -1252,8 +1252,8 @@ async fn test_integration_metrics_conn_inbound() {
 
     publish_and_check(
         &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-            ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
-                event: Some(net_conn::connection_event::Event::Inbound(
+            ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                event: Some(connection::connection_event::Event::Inbound(
                     InboundConnection {
                         conn: Connection {
                             addr: "127.0.0.1:8333".to_string(),
@@ -1283,9 +1283,9 @@ async fn test_integration_metrics_conn_outbound() {
 
     publish_and_check(
         &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-            ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
-                event: Some(net_conn::connection_event::Event::Outbound(
-                    net_conn::OutboundConnection {
+            ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                event: Some(connection::connection_event::Event::Outbound(
+                    connection::OutboundConnection {
                         conn: Connection {
                             addr: "1.1.1.1:48333".to_string(),
                             conn_type: 2,
@@ -1317,8 +1317,8 @@ async fn test_integration_metrics_conn_closed() {
 
     publish_and_check(
         &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-            ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
-                event: Some(net_conn::connection_event::Event::Closed(
+            ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                event: Some(connection::connection_event::Event::Closed(
                     ClosedConnection {
                         conn: Connection {
                             addr: "2.2.2.2:48333".to_string(),
@@ -1350,8 +1350,8 @@ async fn test_integration_metrics_conn_inbound_evicted() {
 
     publish_and_check(
         &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-            ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
-                event: Some(net_conn::connection_event::Event::InboundEvicted(
+            ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                event: Some(connection::connection_event::Event::InboundEvicted(
                     EvictedInboundConnection {
                         conn: Connection {
                             addr: "2.2.2.2:48333".to_string(),
@@ -1379,8 +1379,8 @@ async fn test_integration_metrics_conn_misbehaving() {
 
     publish_and_check(
         &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-            ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
-                event: Some(net_conn::connection_event::Event::Misbehaving(
+            ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                event: Some(connection::connection_event::Event::Misbehaving(
                     MisbehavingConnection {
                         id: 2,
                         message: "reason".to_string(),
@@ -1405,8 +1405,8 @@ async fn test_integration_metrics_conn_special_ip() {
     publish_and_check(
         &[
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
-                    event: Some(net_conn::connection_event::Event::Inbound(
+                ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                    event: Some(connection::connection_event::Event::Inbound(
                         InboundConnection {
                             conn: Connection {
                                 addr: "162.218.65.123".to_string(), // an IP belonging to LinkingLion & banned on Gmax banlist
@@ -1421,8 +1421,8 @@ async fn test_integration_metrics_conn_special_ip() {
             }))
             .unwrap(),
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
-                    event: Some(net_conn::connection_event::Event::Inbound(
+                ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                    event: Some(connection::connection_event::Event::Inbound(
                         InboundConnection {
                             conn: Connection {
                                 // a random IP belonging to a tor exit node.

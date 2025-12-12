@@ -11,7 +11,7 @@ use shared::{
             addrman::{self, InsertNew, InsertTried},
             ebpf,
             mempool::{self, Added},
-            net_conn::{self, Connection, InboundConnection},
+            connection::{self, Connection, InboundConnection},
             net_msg::{self, message::Msg, Metadata, Ping, Pong},
             validation::{self, BlockConnected},
             Ebpf,
@@ -233,8 +233,8 @@ async fn test_integration_logger_connections() {
 
     publish_and_check(
         &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-            ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
-                event: Some(net_conn::connection_event::Event::Inbound(
+            ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                event: Some(connection::connection_event::Event::Inbound(
                     InboundConnection {
                         conn: Connection {
                             addr: "127.0.0.1:8333".to_string(),

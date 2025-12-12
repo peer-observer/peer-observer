@@ -164,7 +164,7 @@ fn log_event(event: Event, args: Args) {
                     log::info!("message: {}", msg);
                 }
             }
-            ebpf::EbpfEvent::Conn(conn) => {
+            ebpf::EbpfEvent::Connection(conn) => {
                 if log_all || args.connections {
                     log::info!("connection: {}", conn);
                 }

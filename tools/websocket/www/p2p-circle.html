@@ -290,7 +290,7 @@
   function handleWebsocketMessage(event) {
     const m = JSON.parse(event.data);
 
-    if (m.hasOwnProperty("Conn")) {
+    if (m.hasOwnProperty("Connection")) {
       // Handle connection events
       if (m.Conn.event.hasOwnProperty("Closed")) {
         let id = m.Conn.event.Closed.conn.peer_id;

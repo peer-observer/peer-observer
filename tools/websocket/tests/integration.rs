@@ -7,7 +7,7 @@ use shared::{
     prost::Message,
     protobuf::ebpf_extractor::{
         ebpf,
-        net_conn::{self, Connection},
+        connection::{self, Connection},
         net_msg::{self, message::Msg, Metadata, Ping, Pong},
         Ebpf,
     },
@@ -169,9 +169,9 @@ async fn test_integration_websocket_conn_inbound() {
     println!("test that inbound connections work");
 
     publish_and_check(&[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
-            event: Some(net_conn::connection_event::Event::Inbound(
-                net_conn::InboundConnection {
+        ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+            event: Some(connection::connection_event::Event::Inbound(
+                connection::InboundConnection {
                     conn: Connection {
                         addr: "127.0.0.1:8333".to_string(),
                         conn_type: 1,
@@ -184,7 +184,7 @@ async fn test_integration_websocket_conn_inbound() {
         }))
     }))
     .unwrap()], Subject::NetConn, &vec![
-        r#"{"EbpfExtractor":{"ebpf_event":{"Conn":{"event":{"Inbound":{"conn":{"peer_id":7,"addr":"127.0.0.1:8333","conn_type":1,"network":2},"existing_connections":123}}}}}}"#,
+        r#"{"EbpfExtractor":{"ebpf_event":{"Connection":{"event":{"Inbound":{"conn":{"peer_id":7,"addr":"127.0.0.1:8333","conn_type":1,"network":2},"existing_connections":123}}}}}}"#,
     ],1, None).await;
 }
 
@@ -288,9 +288,9 @@ async fn test_integration_websocket_closed_client() {
 
     publish_and_check(
         &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-            ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
-                event: Some(net_conn::connection_event::Event::Outbound(
-                    net_conn::OutboundConnection {
+            ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                event: Some(connection::connection_event::Event::Outbound(
+                    connection::OutboundConnection {
                         conn: Connection {
                             addr: "1.1.1.1:48333".to_string(),
                             conn_type: 2,
@@ -305,7 +305,7 @@ async fn test_integration_websocket_closed_client() {
         .unwrap()],
         Subject::NetConn,
         &vec![
-            r#"{"EbpfExtractor":{"ebpf_event":{"Conn":{"event":{"Outbound":{"conn":{"peer_id":11,"addr":"1.1.1.1:48333","conn_type":2,"network":3},"existing_connections":321}}}}}}"#,
+            r#"{"EbpfExtractor":{"ebpf_event":{"Connection":{"event":{"Outbound":{"conn":{"peer_id":11,"addr":"1.1.1.1:48333","conn_type":2,"network":3},"existing_connections":321}}}}}}"#,
         ],
         4,
         Some(2)

@@ -12,7 +12,7 @@ use shared::protobuf::{
         addrman::addrman_event,
         ebpf,
         mempool::mempool_event,
-        net_conn::connection_event,
+        connection::connection_event,
         net_msg,
         net_msg::{message::Msg, reject::RejectReason},
         validation::validation_event,
@@ -123,7 +123,7 @@ fn handle_event(
                 ebpf::EbpfEvent::Msg(msg) => {
                     handle_p2p_message(&msg, unwrapped.timestamp, metrics);
                 }
-                ebpf::EbpfEvent::Conn(conn) => {
+                ebpf::EbpfEvent::Connection(conn) => {
                     handle_connection_event(&conn.event.unwrap(), unwrapped.timestamp, metrics);
                 }
                 ebpf::EbpfEvent::Addrman(addrman) => {

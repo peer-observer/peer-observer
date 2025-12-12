@@ -4,7 +4,7 @@ use crate::protobuf::ebpf_extractor::ctypes;
 use std::fmt;
 
 // structs are generated via the connection.proto file
-include!(concat!(env!("OUT_DIR"), "/ebpf_extractor.net_conn.rs"));
+include!(concat!(env!("OUT_DIR"), "/ebpf_extractor.connection.rs"));
 
 impl From<ctypes::Connection> for Connection {
     fn from(conn: ctypes::Connection) -> Self {
