@@ -22,7 +22,6 @@ message BlockHeader {
 
 // An address primtive.
 message Address {
-  // TODO: extract this!
   required uint32 timestamp = 1;
   oneof address {
     string ipv4 = 2;
