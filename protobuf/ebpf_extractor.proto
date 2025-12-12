@@ -9,7 +9,7 @@ import "ebpf_extractor/mempool.proto";
 import "ebpf_extractor/validation.proto";
 
 message ebpf {
-  oneof event {
+  oneof ebpf_event {
     net_msg.Message msg = 1;
     net_conn.ConnectionEvent conn = 2;
     addrman.AddrmanEvent addrman = 3;

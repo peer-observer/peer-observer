@@ -29,12 +29,12 @@ impl fmt::Display for BlockCheckedLog {
     }
 }
 
-impl fmt::Display for log::Event {
+impl fmt::Display for log::LogEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            log::Event::UnknownLogMessage(message) => write!(f, "{}", message),
-            log::Event::BlockConnectedLog(block) => write!(f, "{}", block),
-            log::Event::BlockCheckedLog(block) => {
+            log::LogEvent::UnknownLogMessage(message) => write!(f, "{}", message),
+            log::LogEvent::BlockConnectedLog(block) => write!(f, "{}", block),
+            log::LogEvent::BlockCheckedLog(block) => {
                 write!(f, "{}", block)
             }
         }

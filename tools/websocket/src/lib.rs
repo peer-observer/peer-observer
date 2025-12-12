@@ -4,7 +4,7 @@ use shared::clap::Parser;
 use shared::futures::{stream::SplitSink, SinkExt, StreamExt};
 use shared::log;
 use shared::prost::Message;
-use shared::protobuf::event_msg::{self, event_msg::Event};
+use shared::protobuf::event_msg::{self, event_msg::PeerObserverEvent};
 use shared::{
     async_nats, clap,
     tokio::{
@@ -71,8 +71,9 @@ pub async fn run(
             while let Some(msg) = sub.next().await {
                 match event_msg::EventMsg::decode(msg.payload) {
                     Ok(event) => {
-                        if let Some(event) = event.event {
-                            match serde_json::to_string::<Event>(&event.clone().into()) {
+                        if let Some(event) = event.peer_observer_event {
+                            match serde_json::to_string::<PeerObserverEvent>(&event.clone().into())
+                            {
                                 Ok(msg) => {
                                     broadcast_to_clients(&msg, &clients).await;
                                 }

@@ -17,7 +17,7 @@ use shared::protobuf::{
         net_msg::{message::Msg, reject::RejectReason},
         validation::validation_event,
     },
-    event_msg::{event_msg::Event, EventMsg},
+    event_msg::{event_msg::PeerObserverEvent, EventMsg},
     log_extractor::{log, Log, LogDebugCategory},
     p2p_extractor::p2p,
     rpc_extractor::rpc,
@@ -117,36 +117,36 @@ fn handle_event(
     metrics: metrics::Metrics,
 ) -> Result<(), error::RuntimeError> {
     let unwrapped = EventMsg::decode(msg.payload)?;
-    if let Some(event) = unwrapped.event {
+    if let Some(event) = unwrapped.peer_observer_event {
         match event {
-            Event::EbpfExtractor(ebpf) => match ebpf.event.unwrap() {
-                ebpf::Event::Msg(msg) => {
+            PeerObserverEvent::EbpfExtractor(ebpf) => match ebpf.ebpf_event.unwrap() {
+                ebpf::EbpfEvent::Msg(msg) => {
                     handle_p2p_message(&msg, unwrapped.timestamp, metrics);
                 }
-                ebpf::Event::Conn(conn) => {
+                ebpf::EbpfEvent::Conn(conn) => {
                     handle_connection_event(&conn.event.unwrap(), unwrapped.timestamp, metrics);
                 }
-                ebpf::Event::Addrman(addrman) => {
+                ebpf::EbpfEvent::Addrman(addrman) => {
                     handle_addrman_event(&addrman.event.unwrap(), metrics);
                 }
-                ebpf::Event::Mempool(mempool) => {
+                ebpf::EbpfEvent::Mempool(mempool) => {
                     handle_mempool_event(&mempool.event.unwrap(), metrics);
                 }
-                ebpf::Event::Validation(validation) => {
+                ebpf::EbpfEvent::Validation(validation) => {
                     handle_validation_event(&validation.event.unwrap(), metrics);
                 }
             },
-            Event::RpcExtractor(r) => {
-                if let Some(e) = r.event {
+            PeerObserverEvent::RpcExtractor(r) => {
+                if let Some(e) = r.rpc_event {
                     handle_rpc_event(&e, metrics);
                 }
             }
-            Event::P2pExtractor(p) => {
-                if let Some(e) = p.event {
+            PeerObserverEvent::P2pExtractor(p) => {
+                if let Some(e) = p.p2p_event {
                     handle_p2p_extractor_event(&e, metrics);
                 }
             }
-            Event::LogExtractor(l) => {
+            PeerObserverEvent::LogExtractor(l) => {
                 handle_log_event(&l, metrics);
             }
         }
@@ -155,12 +155,12 @@ fn handle_event(
     Ok(())
 }
 
-fn handle_rpc_event(e: &rpc::Event, metrics: metrics::Metrics) {
+fn handle_rpc_event(e: &rpc::RpcEvent, metrics: metrics::Metrics) {
     match e {
-        rpc::Event::Uptime(uptime_seconds) => {
+        rpc::RpcEvent::Uptime(uptime_seconds) => {
             metrics.rpc_uptime.set(*uptime_seconds as i64);
         }
-        rpc::Event::NetTotals(net_totals) => {
+        rpc::RpcEvent::NetTotals(net_totals) => {
             metrics
                 .rpc_nettotals_total_bytes_received
                 .set(net_totals.total_bytes_received as i64);
@@ -168,7 +168,7 @@ fn handle_rpc_event(e: &rpc::Event, metrics: metrics::Metrics) {
                 .rpc_nettotals_total_bytes_sent
                 .set(net_totals.total_bytes_sent as i64);
         }
-        rpc::Event::MempoolInfo(info) => {
+        rpc::RpcEvent::MempoolInfo(info) => {
             metrics
                 .rpc_mempoolinfo_mempool_loaded
                 .set(if info.loaded { 1 } else { 0 });
@@ -187,7 +187,7 @@ fn handle_rpc_event(e: &rpc::Event, metrics: metrics::Metrics) {
                 .rpc_mempoolinfo_incremental_relay_feerate
                 .set(info.incrementalrelayfee);
         }
-        rpc::Event::PeerInfos(info) => {
+        rpc::RpcEvent::PeerInfos(info) => {
             let mut on_gmax_banlist = 0;
             let mut on_monero_banlist = 0;
             let mut on_tor_exit_list = 0;
@@ -664,14 +664,14 @@ fn handle_connection_event(
     }
 }
 
-fn handle_p2p_extractor_event(p2p_event: &p2p::Event, metrics: metrics::Metrics) {
+fn handle_p2p_extractor_event(p2p_event: &p2p::P2pEvent, metrics: metrics::Metrics) {
     match p2p_event {
-        p2p::Event::PingDuration(ping_duration) => {
+        p2p::P2pEvent::PingDuration(ping_duration) => {
             metrics
                 .p2pextractor_ping_duration_nanoseconds
                 .set(ping_duration.duration as i64);
         }
-        p2p::Event::AddressAnnouncement(annoucement) => {
+        p2p::P2pEvent::AddressAnnouncement(annoucement) => {
             metrics.p2pextractor_addrv2relay_messages.inc();
             if annoucement.addresses.len() <= 10 {
                 metrics
@@ -697,7 +697,7 @@ fn handle_p2p_extractor_event(p2p_event: &p2p::Event, metrics: metrics::Metrics)
                     .inc_by(*v);
             }
         }
-        p2p::Event::InventoryAnnouncement(annoucement) => {
+        p2p::P2pEvent::InventoryAnnouncement(annoucement) => {
             metrics.p2pextractor_invs_messages.inc();
             metrics
                 .p2pextractor_invs_size
@@ -716,7 +716,7 @@ fn handle_p2p_extractor_event(p2p_event: &p2p::Event, metrics: metrics::Metrics)
                     .inc_by(*v);
             }
         }
-        p2p::Event::FeefilterAnnouncement(feefilter) => {
+        p2p::P2pEvent::FeefilterAnnouncement(feefilter) => {
             metrics.p2pextractor_feefilter_messages.inc();
             metrics.p2pextractor_feefilter_last.set(*feefilter);
         }
@@ -957,13 +957,13 @@ fn handle_log_event(log: &Log, metrics: metrics::Metrics) {
 
     metrics.log_events.with_label_values(&[&category]).inc();
 
-    let Some(e) = &log.event else { return };
+    let Some(e) = &log.log_event else { return };
     match e {
-        log::Event::UnknownLogMessage(_) => {}
-        log::Event::BlockConnectedLog(_) => {
+        log::LogEvent::UnknownLogMessage(_) => {}
+        log::LogEvent::BlockConnectedLog(_) => {
             metrics.log_block_connected_events.inc();
         }
-        log::Event::BlockCheckedLog(block) => {
+        log::LogEvent::BlockCheckedLog(block) => {
             metrics.log_block_checked_events.inc();
 
             if block.is_mutated_block() {

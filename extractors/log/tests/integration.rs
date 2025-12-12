@@ -10,7 +10,7 @@ use shared::{
     log::{Level, LevelFilter, info},
     prost::Message,
     protobuf::{
-        event_msg::{EventMsg, event_msg::Event},
+        event_msg::{EventMsg, event_msg::PeerObserverEvent},
         log_extractor::log,
     },
     simple_logger::SimpleLogger,
@@ -94,7 +94,7 @@ fn setup_two_connected_nodes(node1_args: Vec<&str>) -> (corepc_node::Node, corep
 async fn check(
     args: Vec<&str>,
     test_setup: fn(&corepc_node::Client),
-    check_event: fn(Event) -> bool,
+    check_event: fn(PeerObserverEvent) -> bool,
 ) {
     setup();
     let (node1, _node2) = setup_two_connected_nodes(args);
@@ -125,7 +125,7 @@ async fn check(
 
     while let Some(msg) = sub.next().await {
         let unwrapped = EventMsg::decode(msg.payload).unwrap();
-        if let Some(event) = unwrapped.event {
+        if let Some(event) = unwrapped.peer_observer_event {
             if check_event(event) {
                 break;
             }
@@ -156,8 +156,8 @@ async fn test_integration_logextractor_log_events() {
         |_node1| (),
         |event| {
             match event {
-                Event::LogExtractor(r) => {
-                    if let Some(ref e) = r.event {
+                PeerObserverEvent::LogExtractor(r) => {
+                    if let Some(ref e) = r.log_event {
                         match e {
                             _ => {
                                 return true;
@@ -183,10 +183,10 @@ async fn test_integration_logextractor_unknown_log_events() {
         |_node1| (),
         |event| {
             match event {
-                Event::LogExtractor(r) => {
-                    if let Some(ref e) = r.event {
+                PeerObserverEvent::LogExtractor(r) => {
+                    if let Some(ref e) = r.log_event {
                         match e {
-                            log::Event::UnknownLogMessage(unknown_log_message) => {
+                            log::LogEvent::UnknownLogMessage(unknown_log_message) => {
                                 assert!(unknown_log_message.raw_message.len() > 0);
                                 info!("UnknownLogMessage {:?}", unknown_log_message);
                                 return true;
@@ -219,10 +219,10 @@ async fn test_integration_logextractor_block_connected() {
         },
         |event| {
             match event {
-                Event::LogExtractor(r) => {
-                    if let Some(ref e) = r.event {
+                PeerObserverEvent::LogExtractor(r) => {
+                    if let Some(ref e) = r.log_event {
                         match e {
-                            log::Event::BlockConnectedLog(block_connected) => {
+                            log::LogEvent::BlockConnectedLog(block_connected) => {
                                 assert!(block_connected.block_height > 0);
                                 info!("BlockConnectedLog event {}", block_connected);
                                 return true;
@@ -248,7 +248,7 @@ async fn test_integration_logextractor_logtimemicros() {
         |_node1| {},
         |event| {
             match event {
-                Event::LogExtractor(r) => {
+                PeerObserverEvent::LogExtractor(r) => {
                     // When using -logtimemicros=1, the timestamp % 1000 should
                     // (most of the time) be != 0 (or >0). 1 in 1000 cases, it will
                     // be 0, but we test multiple messages.
@@ -283,10 +283,10 @@ async fn test_integration_logextractor_extralogging() {
         },
         |event| {
             match event {
-                Event::LogExtractor(r) => {
-                    if let Some(ref e) = r.event {
+                PeerObserverEvent::LogExtractor(r) => {
+                    if let Some(ref e) = r.log_event {
                         match e {
-                            log::Event::BlockConnectedLog(block_connected) => {
+                            log::LogEvent::BlockConnectedLog(block_connected) => {
                                 assert!(block_connected.block_height > 0);
                                 info!("BlockConnectedLog event {}", block_connected);
                                 return true;
@@ -319,10 +319,10 @@ async fn test_integration_logextractor_block_checked() {
         },
         |event| {
             match event {
-                Event::LogExtractor(r) => {
-                    if let Some(ref e) = r.event {
+                PeerObserverEvent::LogExtractor(r) => {
+                    if let Some(ref e) = r.log_event {
                         match e {
-                            log::Event::BlockCheckedLog(block_checked) => {
+                            log::LogEvent::BlockCheckedLog(block_checked) => {
                                 assert!(block_checked.block_hash.len() > 0);
                                 assert_eq!(block_checked.state, "Valid");
                                 info!("BlockCheckedLog event {}", block_checked);
@@ -373,10 +373,10 @@ async fn test_integration_logextractor_mutated_block_bad_witness_nonce_size() {
         },
         |event| {
             match event {
-                Event::LogExtractor(r) => {
-                    if let Some(ref e) = r.event {
+                PeerObserverEvent::LogExtractor(r) => {
+                    if let Some(ref e) = r.log_event {
                         match e {
-                            log::Event::BlockCheckedLog(block_checked) => {
+                            log::LogEvent::BlockCheckedLog(block_checked) => {
                                 assert_eq!(block_checked.state, "bad-witness-nonce-size");
                                 assert_eq!(
                                     block_checked.debug_message,
@@ -431,10 +431,10 @@ async fn test_integration_logextractor_mutated_block_bad_txnmrklroot() {
         },
         |event| {
             match event {
-                Event::LogExtractor(r) => {
-                    if let Some(ref e) = r.event {
+                PeerObserverEvent::LogExtractor(l) => {
+                    if let Some(ref e) = l.log_event {
                         match e {
-                            log::Event::BlockCheckedLog(block_checked) => {
+                            log::LogEvent::BlockCheckedLog(block_checked) => {
                                 assert_eq!(block_checked.state, "bad-txnmrklroot");
                                 assert_eq!(block_checked.debug_message, "hashMerkleRoot mismatch");
                                 info!("BlockCheckedLog event {}", block_checked);

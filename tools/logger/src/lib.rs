@@ -5,7 +5,7 @@ use shared::futures::stream::StreamExt;
 use shared::log;
 use shared::prost::Message;
 use shared::protobuf::ebpf_extractor::ebpf;
-use shared::protobuf::event_msg::event_msg::Event;
+use shared::protobuf::event_msg::event_msg::PeerObserverEvent;
 use shared::protobuf::event_msg::{self, EventMsg};
 use shared::protobuf::log_extractor::LogDebugCategory;
 use shared::tokio::sync::watch;
@@ -157,45 +157,45 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
 
 fn log_event(event_msg: EventMsg, args: Args) {
     let log_all = args.show_all();
-    match event_msg.event.unwrap() {
-        event_msg::event_msg::Event::EbpfExtractor(ebpf) => match ebpf.event.unwrap() {
-            ebpf::Event::Msg(msg) => {
+    match event_msg.peer_observer_event.unwrap() {
+        PeerObserverEvent::EbpfExtractor(ebpf) => match ebpf.ebpf_event.unwrap() {
+            ebpf::EbpfEvent::Msg(msg) => {
                 if log_all || args.messages {
                     log::info!("message: {}", msg);
                 }
             }
-            ebpf::Event::Conn(conn) => {
+            ebpf::EbpfEvent::Conn(conn) => {
                 if log_all || args.connections {
                     log::info!("connection: {}", conn);
                 }
             }
-            ebpf::Event::Addrman(addrman) => {
+            ebpf::EbpfEvent::Addrman(addrman) => {
                 if log_all || args.addrman {
                     log::info!("addrman: {}", addrman);
                 }
             }
-            ebpf::Event::Mempool(mempool) => {
+            ebpf::EbpfEvent::Mempool(mempool) => {
                 if log_all || args.mempool {
                     log::info!("mempool: {}", mempool);
                 }
             }
-            ebpf::Event::Validation(validation) => {
+            ebpf::EbpfEvent::Validation(validation) => {
                 if log_all || args.validation {
                     log::info!("validation: {}", validation);
                 }
             }
         },
-        Event::RpcExtractor(r) => {
+        PeerObserverEvent::RpcExtractor(r) => {
             if log_all || args.rpc {
-                log::info!("rpc: {}", r.event.unwrap());
+                log::info!("rpc: {}", r.rpc_event.unwrap());
             }
         }
-        Event::P2pExtractor(p) => {
+        PeerObserverEvent::P2pExtractor(p) => {
             if log_all || args.p2p_extractor {
-                log::info!("p2p event: {}", p.event.unwrap());
+                log::info!("p2p event: {}", p.p2p_event.unwrap());
             }
         }
-        Event::LogExtractor(l) => {
+        PeerObserverEvent::LogExtractor(l) => {
             if log_all || args.log_extractor {
                 log::info!(
                     "log event: {} [{}] {}",
@@ -204,7 +204,7 @@ fn log_event(event_msg: EventMsg, args: Args) {
                         .unwrap_or(LogDebugCategory::Unknown)
                         .as_str_name()
                         .to_lowercase(),
-                    l.event.unwrap()
+                    l.log_event.unwrap()
                 );
             }
         }

@@ -15,11 +15,11 @@ use shared::metricserver;
 use shared::prost::Message as ProstMessage;
 use shared::protobuf::bitcoin_primitives::address::Address as AddressType;
 use shared::protobuf::bitcoin_primitives::Address;
-use shared::protobuf::ebpf_extractor::ebpf::Event as EEvent;
+use shared::protobuf::ebpf_extractor::ebpf::EbpfEvent;
 use shared::protobuf::ebpf_extractor::net_msg::message::Msg;
 use shared::protobuf::ebpf_extractor::net_msg::Message as NetMessage;
 use shared::protobuf::event_msg;
-use shared::protobuf::event_msg::event_msg::Event;
+use shared::protobuf::event_msg::event_msg::PeerObserverEvent;
 use shared::simple_logger;
 use shared::util;
 use shared::{async_nats, clap, tokio};
@@ -212,10 +212,10 @@ fn worker(
     }
 }
 
-fn handle_event(event: Event, timestamp: u64, input_sender: Sender<Input>) {
+fn handle_event(event: PeerObserverEvent, timestamp: u64, input_sender: Sender<Input>) {
     match event {
-        Event::EbpfExtractor(event) => match event.event.unwrap() {
-            EEvent::Msg(msg) => {
+        PeerObserverEvent::EbpfExtractor(event) => match event.ebpf_event.unwrap() {
+            EbpfEvent::Msg(msg) => {
                 if msg.meta.inbound {
                     handle_inbound_message(msg, timestamp, input_sender);
                 }
@@ -343,7 +343,7 @@ async fn main() {
     tokio::spawn(async move {
         while let Some(msg) = sub.next().await {
             let wrapped = event_msg::EventMsg::decode(msg.payload).unwrap();
-            let unwrapped = wrapped.event;
+            let unwrapped = wrapped.peer_observer_event;
             if let Some(event) = unwrapped {
                 handle_event(event, wrapped.timestamp, input_sender.clone());
             }

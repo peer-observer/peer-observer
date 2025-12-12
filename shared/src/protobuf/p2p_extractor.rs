@@ -41,17 +41,17 @@ impl fmt::Display for InventoryAnnouncement {
     }
 }
 
-impl fmt::Display for p2p::Event {
+impl fmt::Display for p2p::P2pEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            p2p::Event::PingDuration(duration) => write!(f, "{}", duration),
-            p2p::Event::AddressAnnouncement(addresses) => {
+            p2p::P2pEvent::PingDuration(duration) => write!(f, "{}", duration),
+            p2p::P2pEvent::AddressAnnouncement(addresses) => {
                 write!(f, "{}", addresses)
             }
-            p2p::Event::InventoryAnnouncement(inventory) => {
+            p2p::P2pEvent::InventoryAnnouncement(inventory) => {
                 write!(f, "{}", inventory)
             }
-            p2p::Event::FeefilterAnnouncement(feefilter) => {
+            p2p::P2pEvent::FeefilterAnnouncement(feefilter) => {
                 write!(f, "FeefilterAnnouncement({})", feefilter)
             }
         }

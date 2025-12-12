@@ -6,7 +6,7 @@ import "bitcoin_primitives.proto";
 package p2p_extractor;
 
 message p2p {
-  oneof event {
+  oneof p2p_event {
     PingDuration ping_duration = 1;
     AddressAnnouncement address_announcement = 2;
     InventoryAnnouncement inventory_announcement = 3;

@@ -6,8 +6,8 @@ use shared::{
     futures::StreamExt,
     log::{self, info},
     prost::Message,
-    protobuf::event_msg::{EventMsg, event_msg::Event},
-    protobuf::rpc_extractor::rpc::Event::{MempoolInfo, NetTotals, PeerInfos, Uptime},
+    protobuf::event_msg::{EventMsg, event_msg::PeerObserverEvent},
+    protobuf::rpc_extractor::rpc::RpcEvent::{MempoolInfo, NetTotals, PeerInfos, Uptime},
     simple_logger::SimpleLogger,
     testing::nats_server::NatsServerForTesting,
     tokio::{self, sync::watch},
@@ -85,7 +85,7 @@ async fn check(
     disable_getmempoolinfo: bool,
     disable_uptime: bool,
     disable_getnettotals: bool,
-    check_expected: fn(Event) -> (),
+    check_expected: fn(PeerObserverEvent) -> (),
 ) {
     setup();
     let (node1, _node2) = setup_two_connected_nodes();
@@ -114,7 +114,7 @@ async fn check(
 
     while let Some(msg) = sub.next().await {
         let unwrapped = EventMsg::decode(msg.payload).unwrap();
-        if let Some(event) = unwrapped.event {
+        if let Some(event) = unwrapped.peer_observer_event {
             check_expected(event);
             break;
         }
@@ -130,8 +130,8 @@ async fn test_integration_rpc_getpeerinfo() {
 
     check(false, true, true, true, |event| {
         match event {
-            Event::RpcExtractor(r) => {
-                if let Some(ref e) = r.event {
+            PeerObserverEvent::RpcExtractor(r) => {
+                if let Some(ref e) = r.rpc_event {
                     match e {
                         PeerInfos(p) => {
                             // we expect 1 peer to be connected
@@ -141,7 +141,7 @@ async fn test_integration_rpc_getpeerinfo() {
 
                             return;
                         }
-                        _ => panic!("unexpected RPC data {:?}", r.event),
+                        _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }
                 }
             }
@@ -156,8 +156,8 @@ async fn test_integration_rpc_getmempoolinfo() {
     println!("test that we receive getmempoolinfo RPC events");
 
     check(true, false, true, true, |event| match event {
-        Event::RpcExtractor(r) => {
-            if let Some(ref e) = r.event {
+        PeerObserverEvent::RpcExtractor(r) => {
+            if let Some(ref e) = r.rpc_event {
                 match e {
                     MempoolInfo(info) => {
                         assert_eq!(info.loaded, true);
@@ -175,7 +175,7 @@ async fn test_integration_rpc_getmempoolinfo() {
                         assert_eq!(info.fullrbf, true);
                         return;
                     }
-                    _ => panic!("unexpected RPC data {:?}", r.event),
+                    _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                 }
             }
         }
@@ -189,15 +189,15 @@ async fn test_integration_rpc_uptime() {
     println!("test that we receive uptime RPC events");
 
     check(true, true, false, true, |event| match event {
-        Event::RpcExtractor(r) => {
-            if let Some(ref e) = r.event {
+        PeerObserverEvent::RpcExtractor(r) => {
+            if let Some(ref e) = r.rpc_event {
                 match e {
                     Uptime(uptime_seconds) => {
                         // Uptime should be a positive number
                         assert!(*uptime_seconds > 0);
                         return;
                     }
-                    _ => panic!("unexpected RPC data {:?}", r.event),
+                    _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                 }
             }
         }
@@ -211,8 +211,8 @@ async fn test_integration_rpc_getnettotals() {
     println!("test that we receive getnettotals RPC events");
 
     check(true, true, true, false, |event| match event {
-        Event::RpcExtractor(r) => {
-            if let Some(ref e) = r.event {
+        PeerObserverEvent::RpcExtractor(r) => {
+            if let Some(ref e) = r.rpc_event {
                 match e {
                     NetTotals(net_totals) => {
                         assert!(net_totals.time_millis > 0);
@@ -220,7 +220,7 @@ async fn test_integration_rpc_getnettotals() {
                         assert!(net_totals.total_bytes_sent > 0);
                         return;
                     }
-                    _ => panic!("unexpected RPC data {:?}", r.event),
+                    _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                 }
             }
         }

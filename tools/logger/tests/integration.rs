@@ -16,7 +16,7 @@ use shared::{
             validation::{self, BlockConnected},
             Ebpf,
         },
-        event_msg::{event_msg::Event, EventMsg},
+        event_msg::{event_msg::PeerObserverEvent, EventMsg},
         log_extractor::{self, LogDebugCategory},
         p2p_extractor,
         rpc_extractor::{self, PeerInfo, PeerInfos},
@@ -189,8 +189,8 @@ async fn test_integration_logger_p2p_messages() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::EbpfExtractor(Ebpf {
-                event: Some(ebpf::Event::Msg(net_msg::Message {
+            EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -203,8 +203,8 @@ async fn test_integration_logger_p2p_messages() {
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::EbpfExtractor(Ebpf {
-                event: Some(ebpf::Event::Msg(net_msg::Message {
+            EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -232,8 +232,8 @@ async fn test_integration_logger_connections() {
     println!("test that connections are logged");
 
     publish_and_check(
-        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
-            event: Some(ebpf::Event::Conn(net_conn::ConnectionEvent {
+        &[EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
                 event: Some(net_conn::connection_event::Event::Inbound(
                     InboundConnection {
                         conn: Connection {
@@ -261,8 +261,8 @@ async fn test_integration_logger_validation() {
     println!("test that validation events are logged");
 
     publish_and_check(
-        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
-            event: Some(ebpf::Event::Validation(validation::ValidationEvent {
+        &[EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            ebpf_event: Some(ebpf::EbpfEvent::Validation(validation::ValidationEvent {
                 event: Some(validation::validation_event::Event::BlockConnected(
                     BlockConnected {
                         hash: vec![0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31],
@@ -288,8 +288,8 @@ async fn test_integration_logger_mempool_added() {
     println!("test that mempool events are logged");
 
     publish_and_check(
-        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
-            event: Some(ebpf::Event::Mempool(mempool::MempoolEvent {
+        &[EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            ebpf_event: Some(ebpf::EbpfEvent::Mempool(mempool::MempoolEvent {
                 event: Some(mempool::mempool_event::Event::Added(Added {
                     fee: 123,
                     txid: vec![
@@ -314,138 +314,140 @@ async fn test_integration_logger_rpc_peerinfo() {
     println!("test that RPC events are logged");
 
     publish_and_check(
-        &[EventMsg::new(Event::RpcExtractor(rpc_extractor::Rpc {
-            event: Some(rpc_extractor::rpc::Event::PeerInfos(PeerInfos {
-                infos: vec![
-                    PeerInfo {
-                        addr_processed: 1234,
-                        addr_rate_limited: 1234,
-                        addr_relay_enabled: false,
-                        // a random IP belonging to a tor exit node.
-                        // This might not be a tor exit node IP in the future and the IP would need to updated.
-                        address: "179.43.182.232:1234".to_string(),
-                        address_bind: "1.2.3.4:8332".to_string(),
-                        address_local: "1.2.3.4:8332".to_string(),
-                        bip152_hb_from: true,
-                        bip152_hb_to: false,
-                        bytes_received: 1,
-                        bytes_received_per_message: HashMap::new(),
-                        bytes_sent_per_message: HashMap::new(),
-                        bytes_sent: 0,
-                        connection_time: 1,
-                        connection_type: "type0".to_string(),
-                        id: 1,
-                        inbound: true,
-                        inflight: vec![1337, 45324],
-                        last_block: 1337,
-                        last_received: 1234,
-                        last_send: 1234,
-                        last_transaction: 1234,
-                        mapped_as: 1234,
-                        minfeefilter: 1234.0,
-                        minimum_ping: 1234.0,
-                        network: "ipv4".to_string(),
-                        permissions: vec!["permission".to_string()],
-                        ping_time: 1234.0,
-                        ping_wait: 1234.0,
-                        relay_transactions: true,
-                        services: "service".to_string(),
-                        starting_height: 1337,
-                        subversion: "subversion".to_string(),
-                        synced_blocks: 4,
-                        synced_headers: 5,
-                        time_offset: 1234,
-                        transport_protocol_type: "v1".to_string(),
-                        version: 2841,
-                        cpu_load: 0.0,
-                        inv_to_send: 0,
-                    },
-                    PeerInfo {
-                        addr_processed: 342,
-                        addr_rate_limited: 0,
-                        addr_relay_enabled: true,
-                        address: "162.218.65.123:8332".to_string(), // LinkingLion IP
-                        address_bind: "1.2.3.4:8332".to_string(),
-                        address_local: "1.2.3.4:8332".to_string(),
-                        bip152_hb_from: false,
-                        bip152_hb_to: true,
-                        bytes_received: 2344,
-                        bytes_received_per_message: HashMap::new(),
-                        bytes_sent_per_message: HashMap::new(),
-                        bytes_sent: 3483,
-                        connection_time: 8432,
-                        connection_type: "type1".to_string(),
-                        id: 2,
-                        inbound: false,
-                        inflight: vec![],
-                        last_block: 1337,
-                        last_received: 1234,
-                        last_send: 1234,
-                        last_transaction: 1234,
-                        mapped_as: 0,
-                        minfeefilter: 2.0,
-                        minimum_ping: 13.0,
-                        network: "ipv6".to_string(),
-                        permissions: vec!["permission".to_string()],
-                        ping_time: 23.0,
-                        ping_wait: 53.0,
-                        relay_transactions: false,
-                        services: "service".to_string(),
-                        starting_height: 231,
-                        subversion: "subversion2".to_string(),
-                        synced_blocks: 4,
-                        synced_headers: 5,
-                        time_offset: -1239,
-                        transport_protocol_type: "v2".to_string(),
-                        version: 2342,
-                        cpu_load: 0.0,
-                        inv_to_send: 0,
-                    },
-                    PeerInfo {
-                        addr_processed: 342,
-                        addr_rate_limited: 434,
-                        addr_relay_enabled: true,
-                        address: "162.218.65.123:8332".to_string(), // LinkingLion IP
-                        address_bind: "1.2.3.4:8332".to_string(),
-                        address_local: "1.2.3.4:8332".to_string(),
-                        bip152_hb_from: false,
-                        bip152_hb_to: true,
-                        bytes_received: 2344,
-                        bytes_received_per_message: HashMap::new(),
-                        bytes_sent_per_message: HashMap::new(),
-                        bytes_sent: 3483,
-                        connection_time: 8432,
-                        connection_type: "type1".to_string(),
-                        id: 2,
-                        inbound: false,
-                        inflight: vec![],
-                        last_block: 1337,
-                        last_received: 1234,
-                        last_send: 1234,
-                        last_transaction: 1234,
-                        mapped_as: 1234,
-                        minfeefilter: 2.0,
-                        minimum_ping: 13.0,
-                        network: "ipv6".to_string(),
-                        permissions: vec!["permission".to_string()],
-                        ping_time: 23.0,
-                        ping_wait: 53.0,
-                        relay_transactions: false,
-                        services: "service".to_string(),
-                        starting_height: 231,
-                        subversion: "subversion2".to_string(),
-                        synced_blocks: 4,
-                        synced_headers: 5,
-                        time_offset: -1239,
-                        transport_protocol_type: "v2".to_string(),
-                        version: 2342,
-                        cpu_load: 0.0,
-                        inv_to_send: 0,
-                    },
-                ],
-            })),
-        }))
-        .unwrap()],
+        &[
+            EventMsg::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+                rpc_event: Some(rpc_extractor::rpc::RpcEvent::PeerInfos(PeerInfos {
+                    infos: vec![
+                        PeerInfo {
+                            addr_processed: 1234,
+                            addr_rate_limited: 1234,
+                            addr_relay_enabled: false,
+                            // a random IP belonging to a tor exit node.
+                            // This might not be a tor exit node IP in the future and the IP would need to updated.
+                            address: "179.43.182.232:1234".to_string(),
+                            address_bind: "1.2.3.4:8332".to_string(),
+                            address_local: "1.2.3.4:8332".to_string(),
+                            bip152_hb_from: true,
+                            bip152_hb_to: false,
+                            bytes_received: 1,
+                            bytes_received_per_message: HashMap::new(),
+                            bytes_sent_per_message: HashMap::new(),
+                            bytes_sent: 0,
+                            connection_time: 1,
+                            connection_type: "type0".to_string(),
+                            id: 1,
+                            inbound: true,
+                            inflight: vec![1337, 45324],
+                            last_block: 1337,
+                            last_received: 1234,
+                            last_send: 1234,
+                            last_transaction: 1234,
+                            mapped_as: 1234,
+                            minfeefilter: 1234.0,
+                            minimum_ping: 1234.0,
+                            network: "ipv4".to_string(),
+                            permissions: vec!["permission".to_string()],
+                            ping_time: 1234.0,
+                            ping_wait: 1234.0,
+                            relay_transactions: true,
+                            services: "service".to_string(),
+                            starting_height: 1337,
+                            subversion: "subversion".to_string(),
+                            synced_blocks: 4,
+                            synced_headers: 5,
+                            time_offset: 1234,
+                            transport_protocol_type: "v1".to_string(),
+                            version: 2841,
+                            cpu_load: 0.0,
+                            inv_to_send: 0,
+                        },
+                        PeerInfo {
+                            addr_processed: 342,
+                            addr_rate_limited: 0,
+                            addr_relay_enabled: true,
+                            address: "162.218.65.123:8332".to_string(), // LinkingLion IP
+                            address_bind: "1.2.3.4:8332".to_string(),
+                            address_local: "1.2.3.4:8332".to_string(),
+                            bip152_hb_from: false,
+                            bip152_hb_to: true,
+                            bytes_received: 2344,
+                            bytes_received_per_message: HashMap::new(),
+                            bytes_sent_per_message: HashMap::new(),
+                            bytes_sent: 3483,
+                            connection_time: 8432,
+                            connection_type: "type1".to_string(),
+                            id: 2,
+                            inbound: false,
+                            inflight: vec![],
+                            last_block: 1337,
+                            last_received: 1234,
+                            last_send: 1234,
+                            last_transaction: 1234,
+                            mapped_as: 0,
+                            minfeefilter: 2.0,
+                            minimum_ping: 13.0,
+                            network: "ipv6".to_string(),
+                            permissions: vec!["permission".to_string()],
+                            ping_time: 23.0,
+                            ping_wait: 53.0,
+                            relay_transactions: false,
+                            services: "service".to_string(),
+                            starting_height: 231,
+                            subversion: "subversion2".to_string(),
+                            synced_blocks: 4,
+                            synced_headers: 5,
+                            time_offset: -1239,
+                            transport_protocol_type: "v2".to_string(),
+                            version: 2342,
+                            cpu_load: 0.0,
+                            inv_to_send: 0,
+                        },
+                        PeerInfo {
+                            addr_processed: 342,
+                            addr_rate_limited: 434,
+                            addr_relay_enabled: true,
+                            address: "162.218.65.123:8332".to_string(), // LinkingLion IP
+                            address_bind: "1.2.3.4:8332".to_string(),
+                            address_local: "1.2.3.4:8332".to_string(),
+                            bip152_hb_from: false,
+                            bip152_hb_to: true,
+                            bytes_received: 2344,
+                            bytes_received_per_message: HashMap::new(),
+                            bytes_sent_per_message: HashMap::new(),
+                            bytes_sent: 3483,
+                            connection_time: 8432,
+                            connection_type: "type1".to_string(),
+                            id: 2,
+                            inbound: false,
+                            inflight: vec![],
+                            last_block: 1337,
+                            last_received: 1234,
+                            last_send: 1234,
+                            last_transaction: 1234,
+                            mapped_as: 1234,
+                            minfeefilter: 2.0,
+                            minimum_ping: 13.0,
+                            network: "ipv6".to_string(),
+                            permissions: vec!["permission".to_string()],
+                            ping_time: 23.0,
+                            ping_wait: 53.0,
+                            relay_transactions: false,
+                            services: "service".to_string(),
+                            starting_height: 231,
+                            subversion: "subversion2".to_string(),
+                            synced_blocks: 4,
+                            synced_headers: 5,
+                            time_offset: -1239,
+                            transport_protocol_type: "v2".to_string(),
+                            version: 2342,
+                            cpu_load: 0.0,
+                            inv_to_send: 0,
+                        },
+                    ],
+                })),
+            }))
+            .unwrap(),
+        ],
         Subject::Rpc,
         r#"
         rpc: PeerInfos([PeerInfo(id=1), PeerInfo(id=2), PeerInfo(id=2)])
@@ -459,8 +461,8 @@ async fn test_integration_logger_addrman() {
     println!("test that addrman events are logged");
 
     publish_and_check(
-        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
-            event: Some(ebpf::Event::Addrman(addrman::AddrmanEvent {
+        &[EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            ebpf_event: Some(ebpf::EbpfEvent::Addrman(addrman::AddrmanEvent {
                 event: Some(addrman::addrman_event::Event::New(InsertNew {
                     addr: "127.0.0.1:2340".to_string(),
                     addr_as: 2,
@@ -472,8 +474,8 @@ async fn test_integration_logger_addrman() {
                 })),
             })),
         })).unwrap(),
-        EventMsg::new(Event::EbpfExtractor(Ebpf {
-            event: Some(ebpf::Event::Addrman(addrman::AddrmanEvent {
+        EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            ebpf_event: Some(ebpf::EbpfEvent::Addrman(addrman::AddrmanEvent {
                 event: Some(addrman::addrman_event::Event::Tried(InsertTried {
                     addr: "127.0.0.1:2340".to_string(),
                     addr_as: 2,
@@ -499,12 +501,14 @@ async fn test_integration_logger_p2pextractor_ping_duration() {
     println!("test that p2p-extractor events are logged");
 
     publish_and_check(
-        &[EventMsg::new(Event::P2pExtractor(p2p_extractor::P2p {
-            event: Some(p2p_extractor::p2p::Event::PingDuration(
-                p2p_extractor::PingDuration { duration: 1234567 },
-            )),
-        }))
-        .unwrap()],
+        &[
+            EventMsg::new(PeerObserverEvent::P2pExtractor(p2p_extractor::P2p {
+                p2p_event: Some(p2p_extractor::p2p::P2pEvent::PingDuration(
+                    p2p_extractor::PingDuration { duration: 1234567 },
+                )),
+            }))
+            .unwrap(),
+        ],
         Subject::Validation,
         r#"
         p2p event: PingDuration(1234567ns)
@@ -518,16 +522,18 @@ async fn test_integration_logger_logextractor_unknown_log() {
     println!("test that log-extractor unknown events are logged");
 
     publish_and_check(
-        &[EventMsg::new(Event::LogExtractor(log_extractor::Log {
-            category: LogDebugCategory::Unknown.into(),
-            log_timestamp: 1234,
-            event: Some(log_extractor::log::Event::UnknownLogMessage(
-                log_extractor::UnknownLogMessage {
-                    raw_message: "test".to_string(),
-                },
-            )),
-        }))
-        .unwrap()],
+        &[
+            EventMsg::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
+                category: LogDebugCategory::Unknown.into(),
+                log_timestamp: 1234,
+                log_event: Some(log_extractor::log::LogEvent::UnknownLogMessage(
+                    log_extractor::UnknownLogMessage {
+                        raw_message: "test".to_string(),
+                    },
+                )),
+            }))
+            .unwrap(),
+        ],
         Subject::LogExtractor,
         r#"
         log event: 1234 [unknown] UnknownLogMessage(test)
@@ -542,10 +548,10 @@ async fn test_integration_logger_logextractor_blockconnected_log() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::LogExtractor(log_extractor::Log {
+            EventMsg::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
                 category: LogDebugCategory::Validation.into(),
                 log_timestamp: 345,
-                event: Some(log_extractor::log::Event::BlockConnectedLog(
+                log_event: Some(log_extractor::log::LogEvent::BlockConnectedLog(
                     log_extractor::BlockConnectedLog {
                         block_height: 1337,
                         block_hash:

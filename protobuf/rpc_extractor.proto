@@ -3,7 +3,7 @@ syntax = "proto2";
 package rpc_extractor;
 
 message rpc {
-  oneof event {
+  oneof rpc_event {
     PeerInfos peer_infos = 1;
     MempoolInfo mempool_info = 2;
     uint32 uptime = 3;

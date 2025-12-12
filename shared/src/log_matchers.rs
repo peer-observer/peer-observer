@@ -1,4 +1,4 @@
-use crate::protobuf::log_extractor::log::Event;
+use crate::protobuf::log_extractor::log::LogEvent;
 use crate::protobuf::log_extractor::{
     BlockCheckedLog, BlockConnectedLog, Log, LogDebugCategory, UnknownLogMessage,
 };
@@ -63,26 +63,26 @@ lazy_static! {
 }
 
 trait LogMatcher {
-    fn parse_event(line: &str) -> Option<Event>;
+    fn parse_event(line: &str) -> Option<LogEvent>;
 }
 
 impl LogMatcher for UnknownLogMessage {
-    fn parse_event(line: &str) -> Option<Event> {
-        Some(Event::UnknownLogMessage(UnknownLogMessage {
+    fn parse_event(line: &str) -> Option<LogEvent> {
+        Some(LogEvent::UnknownLogMessage(UnknownLogMessage {
             raw_message: line.to_string(),
         }))
     }
 }
 
 impl LogMatcher for BlockConnectedLog {
-    fn parse_event(line: &str) -> Option<Event> {
+    fn parse_event(line: &str) -> Option<LogEvent> {
         let Some(caps) = BLOCK_CONNECTED_REGEX.captures(&line) else {
             return None;
         };
 
         let block_hash = caps.get(1)?.as_str().to_string();
         let block_height = caps.get(2)?.as_str().parse::<u32>().ok()?;
-        Some(Event::BlockConnectedLog(BlockConnectedLog {
+        Some(LogEvent::BlockConnectedLog(BlockConnectedLog {
             block_hash,
             block_height,
         }))
@@ -90,7 +90,7 @@ impl LogMatcher for BlockConnectedLog {
 }
 
 impl LogMatcher for BlockCheckedLog {
-    fn parse_event(line: &str) -> Option<Event> {
+    fn parse_event(line: &str) -> Option<LogEvent> {
         let Some(caps) = BLOCK_CHECKED_REGEX.captures(&line) else {
             return None;
         };
@@ -100,7 +100,7 @@ impl LogMatcher for BlockCheckedLog {
         let debug_message = caps
             .get(3)
             .map_or_else(|| String::new(), |m| m.as_str().to_string());
-        Some(Event::BlockCheckedLog(BlockCheckedLog {
+        Some(LogEvent::BlockCheckedLog(BlockCheckedLog {
             block_hash,
             state,
             debug_message,
@@ -124,14 +124,14 @@ impl BlockCheckedLog {
 pub fn parse_log_event(line: &str) -> Log {
     let (timestamp_micro, category, message) = parse_common_log_data(line);
 
-    let matchers: Vec<fn(&str) -> Option<Event>> =
+    let matchers: Vec<fn(&str) -> Option<LogEvent>> =
         vec![BlockConnectedLog::parse_event, BlockCheckedLog::parse_event];
     for matcher in &matchers {
         if let Some(event) = matcher(&message) {
             return Log {
                 log_timestamp: timestamp_micro,
                 category: category.into(),
-                event: Some(event),
+                log_event: Some(event),
             };
         }
     }
@@ -140,7 +140,7 @@ pub fn parse_log_event(line: &str) -> Log {
     Log {
         log_timestamp: timestamp_micro,
         category: category.into(),
-        event: UnknownLogMessage::parse_event(&message),
+        log_event: UnknownLogMessage::parse_event(&message),
     }
 }
 
@@ -181,9 +181,9 @@ fn parse_common_log_data(line: &str) -> (u64, LogDebugCategory, String) {
 // TODO: connection_event::Event::Misbehaving
 // TODO: addrman_event::Event::New
 // TODO: addrman_event::Event::Tried
-// TODO: p2p::Event::PingDuration
-// TODO: log::Event::UnknownLogMessage
-// TODO: rpc::Event::PeerInfos
+// TODO: p2p::P2pEvent::PingDuration
+// TODO: log::LogEvent::UnknownLogMessage
+// TODO: rpc::RpcEvent::PeerInfos
 // TODO: net_msg::message::Msg::Addr
 // TODO: net_msg::message::Msg::Addrv2
 // TODO: net_msg::message::Msg::Emptyaddrv2
@@ -206,7 +206,7 @@ mod tests {
         assert_eq!(log_event.log_timestamp, 1759372274000000);
         assert_eq!(log_event.category, LogDebugCategory::Unknown as i32);
 
-        if let Some(Event::UnknownLogMessage(unknown_log)) = log_event.event {
+        if let Some(LogEvent::UnknownLogMessage(unknown_log)) = log_event.log_event {
             assert_eq!(unknown_log.raw_message, "Verification progress: 50%");
             return;
         }
@@ -222,7 +222,7 @@ mod tests {
         assert_eq!(log_event.log_timestamp, 1759372281000000);
         assert_eq!(log_event.category, LogDebugCategory::Net as i32);
 
-        if let Some(Event::UnknownLogMessage(unknown_log)) = log_event.event {
+        if let Some(LogEvent::UnknownLogMessage(unknown_log)) = log_event.log_event {
             assert_eq!(
                 unknown_log.raw_message,
                 "Flushed 0 addresses to peers.dat  2ms"
@@ -240,7 +240,7 @@ mod tests {
 
         assert_eq!(log_event.category, LogDebugCategory::Validation as i32);
 
-        if let Some(Event::BlockConnectedLog(event)) = log_event.event {
+        if let Some(LogEvent::BlockConnectedLog(event)) = log_event.log_event {
             assert_eq!(
                 event.block_hash,
                 "41109f31c8ca4d8683ab5571ba462292ddb8486dee6ecd2e62901accc7952f0b"
@@ -259,7 +259,7 @@ mod tests {
 
         assert_eq!(log_event.category, LogDebugCategory::Validation as i32);
 
-        if let Some(Event::BlockConnectedLog(event)) = log_event.event {
+        if let Some(LogEvent::BlockConnectedLog(event)) = log_event.log_event {
             assert_eq!(
                 event.block_hash,
                 "6022a9138d879a9d525dba16a0e7d85eda9874736c1aed5c8da0c23ee878db4f"
@@ -279,7 +279,7 @@ mod tests {
         assert_eq!(log_event.log_timestamp, 1760745121358911);
         assert_eq!(log_event.category, LogDebugCategory::Validation as i32);
 
-        if let Some(Event::UnknownLogMessage(unknown_log)) = log_event.event {
+        if let Some(LogEvent::UnknownLogMessage(unknown_log)) = log_event.log_event {
             assert_eq!(unknown_log.raw_message, "Random message");
             return;
         }
@@ -294,7 +294,7 @@ mod tests {
         assert_eq!(log_event.log_timestamp, 0);
         assert_eq!(log_event.category, LogDebugCategory::Unknown as i32);
 
-        if let Some(Event::UnknownLogMessage(unknown_log)) = log_event.event {
+        if let Some(LogEvent::UnknownLogMessage(unknown_log)) = log_event.log_event {
             assert_eq!(unknown_log.raw_message, "");
             return;
         }
@@ -309,7 +309,7 @@ mod tests {
         assert_eq!(log_event.log_timestamp, 0);
         assert_eq!(log_event.category, LogDebugCategory::Validation as i32);
 
-        if let Some(Event::UnknownLogMessage(unknown_log)) = log_event.event {
+        if let Some(LogEvent::UnknownLogMessage(unknown_log)) = log_event.log_event {
             assert_eq!(unknown_log.raw_message, "Random message");
             return;
         }
@@ -324,7 +324,7 @@ mod tests {
         assert_eq!(log_event.log_timestamp, 0);
         assert_eq!(log_event.category, LogDebugCategory::Unknown as i32);
 
-        if let Some(Event::UnknownLogMessage(unknown_log)) = log_event.event {
+        if let Some(LogEvent::UnknownLogMessage(unknown_log)) = log_event.log_event {
             assert_eq!(unknown_log.raw_message, "Random message");
             return;
         }
@@ -339,7 +339,7 @@ mod tests {
         assert_eq!(log_event.log_timestamp, 1761617917000000);
         assert_eq!(log_event.category, LogDebugCategory::Validation as i32);
 
-        if let Some(Event::BlockCheckedLog(event)) = log_event.event {
+        if let Some(LogEvent::BlockCheckedLog(event)) = log_event.log_event {
             assert_eq!(
                 event.block_hash,
                 "3909cd2a5ff36b9a40368609f92945e5b7111bca3cb4d04b72c39964aeb5d156"
@@ -359,7 +359,7 @@ mod tests {
         assert_eq!(log_event.log_timestamp, 1761617917000000);
         assert_eq!(log_event.category, LogDebugCategory::Validation as i32);
 
-        if let Some(Event::BlockCheckedLog(event)) = log_event.event {
+        if let Some(LogEvent::BlockCheckedLog(event)) = log_event.log_event {
             assert_eq!(
                 event.block_hash,
                 "3909cd2a5ff36b9a40368609f92945e5b7111bca3cb4d04b72c39964aeb5d156"

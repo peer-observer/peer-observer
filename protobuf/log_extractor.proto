@@ -5,7 +5,7 @@ package log_extractor;
 message log {
   required uint64 log_timestamp = 1; // unix timestamp in microseconds
   required LogDebugCategory category = 2;
-  oneof event {
+  oneof log_event {
     UnknownLogMessage unknown_log_message = 3;
     BlockConnectedLog block_connected_log = 4;
     BlockCheckedLog block_checked_log = 5;

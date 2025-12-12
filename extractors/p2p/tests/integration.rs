@@ -10,8 +10,8 @@ use shared::{
     prost::Message,
     protobuf::{
         bitcoin_primitives::inventory_item::Item,
-        event_msg::{EventMsg, event_msg::Event},
-        p2p_extractor::p2p::Event::{
+        event_msg::{EventMsg, event_msg::PeerObserverEvent},
+        p2p_extractor::p2p::P2pEvent::{
             AddressAnnouncement, FeefilterAnnouncement, InventoryAnnouncement, PingDuration,
         },
     },
@@ -124,7 +124,7 @@ async fn check(
     disable_invs: bool,
     disable_feefilter: bool,
     test_setup: fn(&corepc_node::Node),
-    check_expected: fn(Event) -> bool,
+    check_expected: fn(PeerObserverEvent) -> bool,
 ) {
     let p2p_extractor_port = setup();
     let nats_server = NatsServerForTesting::new().await;
@@ -181,7 +181,7 @@ async fn check(
 
     while let Some(msg) = sub.next().await {
         let unwrapped = EventMsg::decode(msg.payload).unwrap();
-        if let Some(event) = unwrapped.event {
+        if let Some(event) = unwrapped.peer_observer_event {
             if check_expected(event) {
                 break;
             }
@@ -204,8 +204,8 @@ async fn test_integration_p2pextractor_ping_measurements() {
         |_| (),
         |event| {
             match event {
-                Event::P2pExtractor(p) => {
-                    if let Some(ref e) = p.event {
+                PeerObserverEvent::P2pExtractor(p) => {
+                    if let Some(ref e) = p.p2p_event {
                         match e {
                             PingDuration(p) => {
                                 // we expect the duration to be >0ns
@@ -213,7 +213,7 @@ async fn test_integration_p2pextractor_ping_measurements() {
                                 return true;
                             }
                             _ => {
-                                log::info!("unexpected P2P extractor event {:?}", p.event);
+                                log::info!("unexpected P2P extractor event {:?}", p.p2p_event);
                                 return true;
                             }
                         }
@@ -268,8 +268,8 @@ async fn test_integration_p2pextractor_addr_annoucement() {
         },
         |event| {
             match event {
-                Event::P2pExtractor(p) => {
-                    if let Some(ref e) = p.event {
+                PeerObserverEvent::P2pExtractor(p) => {
+                    if let Some(ref e) = p.p2p_event {
                         match e {
                             AddressAnnouncement(a) => {
                                 assert!(a.addresses.len() > 0);
@@ -277,7 +277,7 @@ async fn test_integration_p2pextractor_addr_annoucement() {
                                 log::info!("{}", a);
                                 return true;
                             }
-                            _ => log::info!("unhandled P2P extractor event {:?}", p.event),
+                            _ => log::info!("unhandled P2P extractor event {:?}", p.p2p_event),
                         }
                     }
                 }
@@ -318,8 +318,8 @@ async fn test_integration_p2pextractor_inv_annoucement() {
         },
         |event| {
             match event {
-                Event::P2pExtractor(p) => {
-                    if let Some(ref e) = p.event {
+                PeerObserverEvent::P2pExtractor(p) => {
+                    if let Some(ref e) = p.p2p_event {
                         match e {
                             InventoryAnnouncement(i) => {
                                 log::info!("{}", i);
@@ -334,7 +334,7 @@ async fn test_integration_p2pextractor_inv_annoucement() {
                                     return true;
                                 }
                             }
-                            _ => log::info!("unhandled P2P extractor event {:?}", p.event),
+                            _ => log::info!("unhandled P2P extractor event {:?}", p.p2p_event),
                         }
                     }
                 }
@@ -361,14 +361,14 @@ async fn test_integration_p2pextractor_feefilter_annoucement() {
         },
         |event| {
             match event {
-                Event::P2pExtractor(p) => {
-                    if let Some(ref e) = p.event {
+                PeerObserverEvent::P2pExtractor(p) => {
+                    if let Some(ref e) = p.p2p_event {
                         match e {
                             FeefilterAnnouncement(feefilter) => {
                                 log::info!("{}", feefilter);
                                 return true;
                             }
-                            _ => log::info!("unhandled P2P extractor event {:?}", p.event),
+                            _ => log::info!("unhandled P2P extractor event {:?}", p.p2p_event),
                         }
                     }
                 }

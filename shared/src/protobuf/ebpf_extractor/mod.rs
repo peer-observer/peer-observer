@@ -17,14 +17,14 @@ use std::fmt;
 // Generated types for ebpf_extractor.proto (EBPFEvent).
 include!(concat!(env!("OUT_DIR"), "/ebpf_extractor.rs"));
 
-impl fmt::Display for ebpf::Event {
+impl fmt::Display for ebpf::EbpfEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ebpf::Event::Msg(msg) => write!(f, "{}", msg),
-            ebpf::Event::Conn(conn) => write!(f, "{}", conn),
-            ebpf::Event::Addrman(addrman) => write!(f, "{}", addrman),
-            ebpf::Event::Mempool(mempool) => write!(f, "{}", mempool),
-            ebpf::Event::Validation(validation) => write!(f, "{}", validation),
+            ebpf::EbpfEvent::Msg(msg) => write!(f, "{}", msg),
+            ebpf::EbpfEvent::Conn(conn) => write!(f, "{}", conn),
+            ebpf::EbpfEvent::Addrman(addrman) => write!(f, "{}", addrman),
+            ebpf::EbpfEvent::Mempool(mempool) => write!(f, "{}", mempool),
+            ebpf::EbpfEvent::Validation(validation) => write!(f, "{}", validation),
         }
     }
 }

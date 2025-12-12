@@ -11,7 +11,7 @@ use shared::{
         net_msg::{self, message::Msg, Metadata, Ping, Pong},
         Ebpf,
     },
-    protobuf::event_msg::{event_msg::Event, EventMsg},
+    protobuf::event_msg::{event_msg::PeerObserverEvent, EventMsg},
     rand::{self, Rng},
     simple_logger::SimpleLogger,
     testing::nats_publisher::NatsPublisherForTesting,
@@ -168,8 +168,8 @@ async fn publish_and_check(
 async fn test_integration_websocket_conn_inbound() {
     println!("test that inbound connections work");
 
-    publish_and_check(&[EventMsg::new(Event::EbpfExtractor(Ebpf {
-        event: Some(ebpf::Event::Conn(net_conn::ConnectionEvent {
+    publish_and_check(&[EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+        ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
             event: Some(net_conn::connection_event::Event::Inbound(
                 net_conn::InboundConnection {
                     conn: Connection {
@@ -184,7 +184,7 @@ async fn test_integration_websocket_conn_inbound() {
         }))
     }))
     .unwrap()], Subject::NetConn, &vec![
-        r#"{"EbpfExtractor":{"event":{"Conn":{"event":{"Inbound":{"conn":{"peer_id":7,"addr":"127.0.0.1:8333","conn_type":1,"network":2},"existing_connections":123}}}}}}"#,
+        r#"{"EbpfExtractor":{"ebpf_event":{"Conn":{"event":{"Inbound":{"conn":{"peer_id":7,"addr":"127.0.0.1:8333","conn_type":1,"network":2},"existing_connections":123}}}}}}"#,
     ],1, None).await;
 }
 
@@ -194,8 +194,8 @@ async fn test_integration_websocket_p2p_message_ping() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::EbpfExtractor(Ebpf {
-                event: Some(ebpf::Event::Msg(net_msg::Message {
+            EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -208,8 +208,8 @@ async fn test_integration_websocket_p2p_message_ping() {
                 }))
             }))
             .unwrap(),
-            EventMsg::new(Event::EbpfExtractor(Ebpf {
-                event: Some(ebpf::Event::Msg(net_msg::Message {
+            EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -225,8 +225,8 @@ async fn test_integration_websocket_p2p_message_ping() {
         ],
         Subject::NetMsg,
         &vec![
-            r#"{"EbpfExtractor":{"event":{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"ping","inbound":true,"size":8},"msg":{"Ping":{"value":1}}}}}}"#,
-            r#"{"EbpfExtractor":{"event":{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"pong","inbound":false,"size":8},"msg":{"Pong":{"value":1}}}}}}"#,
+            r#"{"EbpfExtractor":{"ebpf_event":{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"ping","inbound":true,"size":8},"msg":{"Ping":{"value":1}}}}}}"#,
+            r#"{"EbpfExtractor":{"ebpf_event":{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"pong","inbound":false,"size":8},"msg":{"Pong":{"value":1}}}}}}"#,
         ],
         1,
         None
@@ -240,8 +240,8 @@ async fn test_integration_websocket_multi_client() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::EbpfExtractor(Ebpf {
-                event: Some(ebpf::Event::Msg(net_msg::Message {
+            EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -254,8 +254,8 @@ async fn test_integration_websocket_multi_client() {
                 }))
             }))
             .unwrap(),
-            EventMsg::new(Event::EbpfExtractor(Ebpf {
-                event: Some(ebpf::Event::Msg(net_msg::Message {
+            EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -271,8 +271,8 @@ async fn test_integration_websocket_multi_client() {
         ],
         Subject::NetMsg,
         &vec![
-            r#"{"EbpfExtractor":{"event":{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"ping","inbound":true,"size":8},"msg":{"Ping":{"value":1}}}}}}"#,
-            r#"{"EbpfExtractor":{"event":{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"pong","inbound":false,"size":8},"msg":{"Pong":{"value":1}}}}}}"#,
+            r#"{"EbpfExtractor":{"ebpf_event":{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"ping","inbound":true,"size":8},"msg":{"Ping":{"value":1}}}}}}"#,
+            r#"{"EbpfExtractor":{"ebpf_event":{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"pong","inbound":false,"size":8},"msg":{"Pong":{"value":1}}}}}}"#,
         ],
         12,
         None
@@ -287,8 +287,8 @@ async fn test_integration_websocket_closed_client() {
     );
 
     publish_and_check(
-        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
-            event: Some(ebpf::Event::Conn(net_conn::ConnectionEvent {
+        &[EventMsg::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            ebpf_event: Some(ebpf::EbpfEvent::Conn(net_conn::ConnectionEvent {
                 event: Some(net_conn::connection_event::Event::Outbound(
                     net_conn::OutboundConnection {
                         conn: Connection {
@@ -305,7 +305,7 @@ async fn test_integration_websocket_closed_client() {
         .unwrap()],
         Subject::NetConn,
         &vec![
-            r#"{"EbpfExtractor":{"event":{"Conn":{"event":{"Outbound":{"conn":{"peer_id":11,"addr":"1.1.1.1:48333","conn_type":2,"network":3},"existing_connections":321}}}}}}"#,
+            r#"{"EbpfExtractor":{"ebpf_event":{"Conn":{"event":{"Outbound":{"conn":{"peer_id":11,"addr":"1.1.1.1:48333","conn_type":2,"network":3},"existing_connections":321}}}}}}"#,
         ],
         4,
         Some(2)

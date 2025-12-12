@@ -4,7 +4,7 @@ use shared::corepc_client::client_sync::v29::Client;
 use shared::log;
 use shared::nats_subjects::Subject;
 use shared::prost::Message;
-use shared::protobuf::event_msg::{EventMsg, event_msg::Event};
+use shared::protobuf::event_msg::{EventMsg, event_msg::PeerObserverEvent};
 use shared::protobuf::rpc_extractor;
 use shared::tokio::sync::watch;
 use shared::tokio::time::{self, Duration};
@@ -194,8 +194,8 @@ async fn getpeerinfo(
 ) -> Result<(), FetchOrPublishError> {
     let peer_info = rpc_client.get_peer_info()?;
 
-    let proto = EventMsg::new(Event::RpcExtractor(rpc_extractor::Rpc {
-        event: Some(rpc_extractor::rpc::Event::PeerInfos(peer_info.into())),
+    let proto = EventMsg::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+        rpc_event: Some(rpc_extractor::rpc::RpcEvent::PeerInfos(peer_info.into())),
     }))?;
 
     nats_client
@@ -210,8 +210,10 @@ async fn getmempoolinfo(
 ) -> Result<(), FetchOrPublishError> {
     let mempool_info = rpc_client.get_mempool_info()?;
 
-    let proto = EventMsg::new(Event::RpcExtractor(rpc_extractor::Rpc {
-        event: Some(rpc_extractor::rpc::Event::MempoolInfo(mempool_info.into())),
+    let proto = EventMsg::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+        rpc_event: Some(rpc_extractor::rpc::RpcEvent::MempoolInfo(
+            mempool_info.into(),
+        )),
     }))?;
 
     nats_client
@@ -226,8 +228,8 @@ async fn uptime(
 ) -> Result<(), FetchOrPublishError> {
     let uptime_seconds = rpc_client.uptime()?;
 
-    let proto = EventMsg::new(Event::RpcExtractor(rpc_extractor::Rpc {
-        event: Some(rpc_extractor::rpc::Event::Uptime(uptime_seconds)),
+    let proto = EventMsg::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+        rpc_event: Some(rpc_extractor::rpc::RpcEvent::Uptime(uptime_seconds)),
     }))?;
 
     nats_client
@@ -242,8 +244,8 @@ async fn getnettotals(
 ) -> Result<(), FetchOrPublishError> {
     let net_totals = rpc_client.get_net_totals()?;
 
-    let proto = EventMsg::new(Event::RpcExtractor(rpc_extractor::Rpc {
-        event: Some(rpc_extractor::rpc::Event::NetTotals(net_totals.into())),
+    let proto = EventMsg::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+        rpc_event: Some(rpc_extractor::rpc::RpcEvent::NetTotals(net_totals.into())),
     }))?;
 
     nats_client
