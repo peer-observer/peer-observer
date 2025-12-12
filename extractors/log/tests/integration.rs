@@ -7,11 +7,11 @@ use shared::{
     bitcoin::{self, Block, consensus::Decodable, hashes::Hash, hex::FromHex},
     corepc_node,
     futures::StreamExt,
-    log,
+    log::{Level, LevelFilter, info},
     prost::Message,
     protobuf::{
         event_msg::{EventMsg, event_msg::Event},
-        log_extractor::log_event,
+        log_extractor::log,
     },
     simple_logger::SimpleLogger,
     testing::nats_server::NatsServerForTesting,
@@ -29,7 +29,7 @@ static INIT: Once = Once::new();
 fn setup() -> () {
     INIT.call_once(|| {
         SimpleLogger::new()
-            .with_level(log::LevelFilter::Trace)
+            .with_level(LevelFilter::Trace)
             .init()
             .unwrap();
     });
@@ -41,10 +41,10 @@ fn spawn_pipe(log_path: String, pipe_path: String) -> () {
         .arg(&pipe_path)
         .status()
         .expect("Failed to create named pipe");
-    log::info!("Created named pipe at {}", &pipe_path);
+    info!("Created named pipe at {}", &pipe_path);
 
     // Start tail -f from debug.log to the pipe
-    log::info!("Running: bash -c 'tail -f {} > {}'", log_path, pipe_path);
+    info!("Running: bash -c 'tail -f {} > {}'", log_path, pipe_path);
     tokio::process::Command::new("bash")
         .arg("-c")
         .arg(format!("tail -f {} > {}", log_path, pipe_path))
@@ -56,20 +56,20 @@ fn make_test_args(nats_port: u16, bitcoind_pipe: String) -> Args {
     Args::new(
         format!("127.0.0.1:{}", nats_port),
         bitcoind_pipe,
-        log::Level::Trace,
+        Level::Trace,
     )
 }
 
 fn setup_node(conf: corepc_node::Conf) -> corepc_node::Node {
-    log::info!("env BITCOIND_EXE={:?}", std::env::var("BITCOIND_EXE"));
-    log::info!("exe_path={:?}", corepc_node::exe_path());
+    info!("env BITCOIND_EXE={:?}", std::env::var("BITCOIND_EXE"));
+    info!("exe_path={:?}", corepc_node::exe_path());
 
     if let Ok(exe_path) = corepc_node::exe_path() {
-        log::info!("Using bitcoind at '{}'", exe_path);
+        info!("Using bitcoind at '{}'", exe_path);
         return corepc_node::Node::with_conf(exe_path, &conf).unwrap();
     }
 
-    log::info!("Trying to download a bitcoind..");
+    info!("Trying to download a bitcoind..");
     return corepc_node::Node::from_downloaded_with_conf(&conf).unwrap();
 }
 
@@ -78,7 +78,7 @@ fn setup_two_connected_nodes(node1_args: Vec<&str>) -> (corepc_node::Node, corep
     let mut node1_conf = corepc_node::Conf::default();
     node1_conf.p2p = corepc_node::P2P::Yes;
     for arg in node1_args {
-        log::info!("Running node1 with arg: {}", arg);
+        info!("Running node1 with arg: {}", arg);
         node1_conf.args.push(arg);
     }
     let node1 = setup_node(node1_conf);
@@ -156,7 +156,7 @@ async fn test_integration_logextractor_log_events() {
         |_node1| (),
         |event| {
             match event {
-                Event::LogExtractorEvent(r) => {
+                Event::LogExtractor(r) => {
                     if let Some(ref e) = r.event {
                         match e {
                             _ => {
@@ -183,12 +183,12 @@ async fn test_integration_logextractor_unknown_log_events() {
         |_node1| (),
         |event| {
             match event {
-                Event::LogExtractorEvent(r) => {
+                Event::LogExtractor(r) => {
                     if let Some(ref e) = r.event {
                         match e {
-                            log_event::Event::UnknownLogMessage(unknown_log_message) => {
+                            log::Event::UnknownLogMessage(unknown_log_message) => {
                                 assert!(unknown_log_message.raw_message.len() > 0);
-                                log::info!("UnknownLogMessage {:?}", unknown_log_message);
+                                info!("UnknownLogMessage {:?}", unknown_log_message);
                                 return true;
                             }
                             _ => (),
@@ -219,12 +219,12 @@ async fn test_integration_logextractor_block_connected() {
         },
         |event| {
             match event {
-                Event::LogExtractorEvent(r) => {
+                Event::LogExtractor(r) => {
                     if let Some(ref e) = r.event {
                         match e {
-                            log_event::Event::BlockConnectedLog(block_connected) => {
+                            log::Event::BlockConnectedLog(block_connected) => {
                                 assert!(block_connected.block_height > 0);
-                                log::info!("BlockConnectedLog event {}", block_connected);
+                                info!("BlockConnectedLog event {}", block_connected);
                                 return true;
                             }
                             _ => {}
@@ -248,7 +248,7 @@ async fn test_integration_logextractor_logtimemicros() {
         |_node1| {},
         |event| {
             match event {
-                Event::LogExtractorEvent(r) => {
+                Event::LogExtractor(r) => {
                     // When using -logtimemicros=1, the timestamp % 1000 should
                     // (most of the time) be != 0 (or >0). 1 in 1000 cases, it will
                     // be 0, but we test multiple messages.
@@ -283,12 +283,12 @@ async fn test_integration_logextractor_extralogging() {
         },
         |event| {
             match event {
-                Event::LogExtractorEvent(r) => {
+                Event::LogExtractor(r) => {
                     if let Some(ref e) = r.event {
                         match e {
-                            log_event::Event::BlockConnectedLog(block_connected) => {
+                            log::Event::BlockConnectedLog(block_connected) => {
                                 assert!(block_connected.block_height > 0);
-                                log::info!("BlockConnectedLog event {}", block_connected);
+                                info!("BlockConnectedLog event {}", block_connected);
                                 return true;
                             }
                             _ => {}
@@ -319,13 +319,13 @@ async fn test_integration_logextractor_block_checked() {
         },
         |event| {
             match event {
-                Event::LogExtractorEvent(r) => {
+                Event::LogExtractor(r) => {
                     if let Some(ref e) = r.event {
                         match e {
-                            log_event::Event::BlockCheckedLog(block_checked) => {
+                            log::Event::BlockCheckedLog(block_checked) => {
                                 assert!(block_checked.block_hash.len() > 0);
                                 assert_eq!(block_checked.state, "Valid");
-                                log::info!("BlockCheckedLog event {}", block_checked);
+                                info!("BlockCheckedLog event {}", block_checked);
                                 return true;
                             }
                             _ => {}
@@ -373,16 +373,16 @@ async fn test_integration_logextractor_mutated_block_bad_witness_nonce_size() {
         },
         |event| {
             match event {
-                Event::LogExtractorEvent(r) => {
+                Event::LogExtractor(r) => {
                     if let Some(ref e) = r.event {
                         match e {
-                            log_event::Event::BlockCheckedLog(block_checked) => {
+                            log::Event::BlockCheckedLog(block_checked) => {
                                 assert_eq!(block_checked.state, "bad-witness-nonce-size");
                                 assert_eq!(
                                     block_checked.debug_message,
                                     "CheckWitnessMalleation : invalid witness reserved value size"
                                 );
-                                log::info!("BlockCheckedLog event {}", block_checked);
+                                info!("BlockCheckedLog event {}", block_checked);
                                 return true;
                             }
                             _ => {}
@@ -431,13 +431,13 @@ async fn test_integration_logextractor_mutated_block_bad_txnmrklroot() {
         },
         |event| {
             match event {
-                Event::LogExtractorEvent(r) => {
+                Event::LogExtractor(r) => {
                     if let Some(ref e) = r.event {
                         match e {
-                            log_event::Event::BlockCheckedLog(block_checked) => {
+                            log::Event::BlockCheckedLog(block_checked) => {
                                 assert_eq!(block_checked.state, "bad-txnmrklroot");
                                 assert_eq!(block_checked.debug_message, "hashMerkleRoot mismatch");
-                                log::info!("BlockCheckedLog event {}", block_checked);
+                                info!("BlockCheckedLog event {}", block_checked);
                                 return true;
                             }
                             _ => {}

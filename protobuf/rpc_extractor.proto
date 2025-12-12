@@ -2,7 +2,7 @@ syntax = "proto2";
 
 package rpc_extractor;
 
-message RPCEvent {
+message rpc {
   oneof event {
     PeerInfos peer_infos = 1;
     MempoolInfo mempool_info = 2;

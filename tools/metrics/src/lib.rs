@@ -4,13 +4,13 @@
 
 use shared::clap::Parser;
 use shared::futures::StreamExt;
-use shared::log::{self, warn};
+use shared::log::{debug, info, warn, Level};
 use shared::metricserver;
 use shared::prost::Message;
 use shared::protobuf::{
     ebpf_extractor::{
         addrman::addrman_event,
-        ebpf_event,
+        ebpf,
         mempool::mempool_event,
         net_conn::connection_event,
         net_msg,
@@ -18,9 +18,9 @@ use shared::protobuf::{
         validation::validation_event,
     },
     event_msg::{event_msg::Event, EventMsg},
-    log_extractor::{log_event, LogDebugCategory, LogEvent},
-    p2p_extractor::p2p_extractor_event,
-    rpc_extractor::rpc_event,
+    log_extractor::{log, Log, LogDebugCategory},
+    p2p_extractor::p2p,
+    rpc_extractor::rpc,
 };
 use shared::tokio::sync::watch;
 use shared::util::{self, is_on_linkinglion_banlist};
@@ -47,12 +47,12 @@ pub struct Args {
     metrics_address: String,
     /// The log level the tool should run with. Valid log levels
     /// are "trace", "debug", "info", "warn", "error". See https://docs.rs/log/latest/log/enum.Level.html
-    #[arg(short, long, default_value_t = log::Level::Debug)]
-    pub log_level: log::Level,
+    #[arg(short, long, default_value_t = Level::Debug)]
+    pub log_level: Level,
 }
 
 impl Args {
-    pub fn new(nats_address: String, metrics_address: String, log_level: log::Level) -> Self {
+    pub fn new(nats_address: String, metrics_address: String, log_level: Level) -> Self {
         Self {
             nats_address,
             metrics_address,
@@ -67,15 +67,15 @@ pub async fn run(
     args: Args,
     mut shutdown_rx: watch::Receiver<bool>,
 ) -> Result<(), error::RuntimeError> {
-    log::info!(target: LOG_TARGET, "Starting metrics-server...",);
+    info!(target: LOG_TARGET, "Starting metrics-server...",);
 
     let metrics = metrics::Metrics::new();
 
     metricserver::start(&args.metrics_address, Some(metrics.registry.clone()))?;
 
-    log::debug!("Connecting to NATS-server at {}", args.nats_address.clone());
+    debug!("Connecting to NATS-server at {}", args.nats_address.clone());
     let nc = async_nats::connect(args.nats_address.clone()).await?;
-    log::info!("Connected to NATS-server at {}", args.nats_address);
+    info!("Connected to NATS-server at {}", args.nats_address);
     let mut sub = nc.subscribe("*").await?;
 
     metrics
@@ -95,13 +95,13 @@ pub async fn run(
                 match res {
                     Ok(_) => {
                         if *shutdown_rx.borrow() {
-                            log::info!("metrics tool received shutdown signal.");
+                            info!("metrics tool received shutdown signal.");
                             break;
                         }
                     }
                     Err(_) => {
                         // all senders dropped -> treat as shutdown
-                        log::warn!("The shutdown notification sender was dropped. Shutting down.");
+                        warn!("The shutdown notification sender was dropped. Shutting down.");
                         break;
                     }
                 }
@@ -119,34 +119,34 @@ fn handle_event(
     let unwrapped = EventMsg::decode(msg.payload)?;
     if let Some(event) = unwrapped.event {
         match event {
-            Event::Ebpf(ebpf) => match ebpf.event.unwrap() {
-                ebpf_event::Event::Msg(msg) => {
+            Event::EbpfExtractor(ebpf) => match ebpf.event.unwrap() {
+                ebpf::Event::Msg(msg) => {
                     handle_p2p_message(&msg, unwrapped.timestamp, metrics);
                 }
-                ebpf_event::Event::Conn(conn) => {
+                ebpf::Event::Conn(conn) => {
                     handle_connection_event(&conn.event.unwrap(), unwrapped.timestamp, metrics);
                 }
-                ebpf_event::Event::Addrman(addrman) => {
+                ebpf::Event::Addrman(addrman) => {
                     handle_addrman_event(&addrman.event.unwrap(), metrics);
                 }
-                ebpf_event::Event::Mempool(mempool) => {
+                ebpf::Event::Mempool(mempool) => {
                     handle_mempool_event(&mempool.event.unwrap(), metrics);
                 }
-                ebpf_event::Event::Validation(validation) => {
+                ebpf::Event::Validation(validation) => {
                     handle_validation_event(&validation.event.unwrap(), metrics);
                 }
             },
-            Event::Rpc(r) => {
+            Event::RpcExtractor(r) => {
                 if let Some(e) = r.event {
                     handle_rpc_event(&e, metrics);
                 }
             }
-            Event::P2pExtractorEvent(p) => {
+            Event::P2pExtractor(p) => {
                 if let Some(e) = p.event {
                     handle_p2p_extractor_event(&e, metrics);
                 }
             }
-            Event::LogExtractorEvent(l) => {
+            Event::LogExtractor(l) => {
                 handle_log_event(&l, metrics);
             }
         }
@@ -155,12 +155,12 @@ fn handle_event(
     Ok(())
 }
 
-fn handle_rpc_event(e: &rpc_event::Event, metrics: metrics::Metrics) {
+fn handle_rpc_event(e: &rpc::Event, metrics: metrics::Metrics) {
     match e {
-        rpc_event::Event::Uptime(uptime_seconds) => {
+        rpc::Event::Uptime(uptime_seconds) => {
             metrics.rpc_uptime.set(*uptime_seconds as i64);
         }
-        rpc_event::Event::NetTotals(net_totals) => {
+        rpc::Event::NetTotals(net_totals) => {
             metrics
                 .rpc_nettotals_total_bytes_received
                 .set(net_totals.total_bytes_received as i64);
@@ -168,7 +168,7 @@ fn handle_rpc_event(e: &rpc_event::Event, metrics: metrics::Metrics) {
                 .rpc_nettotals_total_bytes_sent
                 .set(net_totals.total_bytes_sent as i64);
         }
-        rpc_event::Event::MempoolInfo(info) => {
+        rpc::Event::MempoolInfo(info) => {
             metrics
                 .rpc_mempoolinfo_mempool_loaded
                 .set(if info.loaded { 1 } else { 0 });
@@ -187,7 +187,7 @@ fn handle_rpc_event(e: &rpc_event::Event, metrics: metrics::Metrics) {
                 .rpc_mempoolinfo_incremental_relay_feerate
                 .set(info.incrementalrelayfee);
         }
-        rpc_event::Event::PeerInfos(info) => {
+        rpc::Event::PeerInfos(info) => {
             let mut on_gmax_banlist = 0;
             let mut on_monero_banlist = 0;
             let mut on_tor_exit_list = 0;
@@ -664,14 +664,14 @@ fn handle_connection_event(
     }
 }
 
-fn handle_p2p_extractor_event(p2p_event: &p2p_extractor_event::Event, metrics: metrics::Metrics) {
+fn handle_p2p_extractor_event(p2p_event: &p2p::Event, metrics: metrics::Metrics) {
     match p2p_event {
-        p2p_extractor_event::Event::PingDuration(ping_duration) => {
+        p2p::Event::PingDuration(ping_duration) => {
             metrics
                 .p2pextractor_ping_duration_nanoseconds
                 .set(ping_duration.duration as i64);
         }
-        p2p_extractor_event::Event::AddressAnnouncement(annoucement) => {
+        p2p::Event::AddressAnnouncement(annoucement) => {
             metrics.p2pextractor_addrv2relay_messages.inc();
             if annoucement.addresses.len() <= 10 {
                 metrics
@@ -697,7 +697,7 @@ fn handle_p2p_extractor_event(p2p_event: &p2p_extractor_event::Event, metrics: m
                     .inc_by(*v);
             }
         }
-        p2p_extractor_event::Event::InventoryAnnouncement(annoucement) => {
+        p2p::Event::InventoryAnnouncement(annoucement) => {
             metrics.p2pextractor_invs_messages.inc();
             metrics
                 .p2pextractor_invs_size
@@ -716,7 +716,7 @@ fn handle_p2p_extractor_event(p2p_event: &p2p_extractor_event::Event, metrics: m
                     .inc_by(*v);
             }
         }
-        p2p_extractor_event::Event::FeefilterAnnouncement(feefilter) => {
+        p2p::Event::FeefilterAnnouncement(feefilter) => {
             metrics.p2pextractor_feefilter_messages.inc();
             metrics.p2pextractor_feefilter_last.set(*feefilter);
         }
@@ -949,7 +949,7 @@ fn handle_p2p_message(msg: &net_msg::Message, timestamp_ms: u64, metrics: metric
     }
 }
 
-fn handle_log_event(log: &LogEvent, metrics: metrics::Metrics) {
+fn handle_log_event(log: &Log, metrics: metrics::Metrics) {
     let category = LogDebugCategory::try_from(log.category)
         .unwrap_or(LogDebugCategory::Unknown)
         .as_str_name()
@@ -959,11 +959,11 @@ fn handle_log_event(log: &LogEvent, metrics: metrics::Metrics) {
 
     let Some(e) = &log.event else { return };
     match e {
-        log_event::Event::UnknownLogMessage(_) => {}
-        log_event::Event::BlockConnectedLog(_) => {
+        log::Event::UnknownLogMessage(_) => {}
+        log::Event::BlockConnectedLog(_) => {
             metrics.log_block_connected_events.inc();
         }
-        log_event::Event::BlockCheckedLog(block) => {
+        log::Event::BlockCheckedLog(block) => {
             metrics.log_block_checked_events.inc();
 
             if block.is_mutated_block() {

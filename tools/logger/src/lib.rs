@@ -4,7 +4,7 @@ use shared::clap::Parser;
 use shared::futures::stream::StreamExt;
 use shared::log;
 use shared::prost::Message;
-use shared::protobuf::ebpf_extractor::ebpf_event;
+use shared::protobuf::ebpf_extractor::ebpf;
 use shared::protobuf::event_msg::event_msg::Event;
 use shared::protobuf::event_msg::{self, EventMsg};
 use shared::protobuf::log_extractor::LogDebugCategory;
@@ -158,44 +158,44 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
 fn log_event(event_msg: EventMsg, args: Args) {
     let log_all = args.show_all();
     match event_msg.event.unwrap() {
-        event_msg::event_msg::Event::Ebpf(ebpf) => match ebpf.event.unwrap() {
-            ebpf_event::Event::Msg(msg) => {
+        event_msg::event_msg::Event::EbpfExtractor(ebpf) => match ebpf.event.unwrap() {
+            ebpf::Event::Msg(msg) => {
                 if log_all || args.messages {
                     log::info!("message: {}", msg);
                 }
             }
-            ebpf_event::Event::Conn(conn) => {
+            ebpf::Event::Conn(conn) => {
                 if log_all || args.connections {
                     log::info!("connection: {}", conn);
                 }
             }
-            ebpf_event::Event::Addrman(addrman) => {
+            ebpf::Event::Addrman(addrman) => {
                 if log_all || args.addrman {
                     log::info!("addrman: {}", addrman);
                 }
             }
-            ebpf_event::Event::Mempool(mempool) => {
+            ebpf::Event::Mempool(mempool) => {
                 if log_all || args.mempool {
                     log::info!("mempool: {}", mempool);
                 }
             }
-            ebpf_event::Event::Validation(validation) => {
+            ebpf::Event::Validation(validation) => {
                 if log_all || args.validation {
                     log::info!("validation: {}", validation);
                 }
             }
         },
-        Event::Rpc(r) => {
+        Event::RpcExtractor(r) => {
             if log_all || args.rpc {
                 log::info!("rpc: {}", r.event.unwrap());
             }
         }
-        Event::P2pExtractorEvent(p) => {
+        Event::P2pExtractor(p) => {
             if log_all || args.p2p_extractor {
                 log::info!("p2p event: {}", p.event.unwrap());
             }
         }
-        Event::LogExtractorEvent(l) => {
+        Event::LogExtractor(l) => {
             if log_all || args.log_extractor {
                 log::info!(
                     "log event: {} [{}] {}",

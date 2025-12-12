@@ -13,7 +13,7 @@ use shared::protobuf::ebpf_extractor::ctypes::{
     P2PMessage, ValidationBlockConnected,
 };
 use shared::protobuf::ebpf_extractor::{
-    addrman, ebpf_event, mempool, net_conn, net_msg, validation, EbpfEvent,
+    addrman, ebpf, mempool, net_conn, net_msg, validation, Ebpf,
 };
 use shared::protobuf::event_msg::event_msg::Event;
 use shared::protobuf::event_msg::EventMsg;
@@ -425,8 +425,8 @@ async fn run() -> Result<(), RuntimeError> {
 
 fn handle_net_conn_closed(data: &[u8], nc: &async_nats::Client) -> i32 {
     let closed = ClosedConnection::from_bytes(data);
-    let proto = match EventMsg::new(Event::Ebpf(EbpfEvent {
-        event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+    let proto = match EventMsg::new(Event::EbpfExtractor(Ebpf {
+        event: Some(ebpf::Event::Conn(net_conn::ConnectionEvent {
             event: Some(net_conn::connection_event::Event::Closed(closed.into())),
         })),
     })) {
@@ -456,8 +456,8 @@ fn handle_net_conn_closed(data: &[u8], nc: &async_nats::Client) -> i32 {
 
 fn handle_net_conn_outbound(data: &[u8], nc: &async_nats::Client) -> i32 {
     let outbound = OutboundConnection::from_bytes(data);
-    let proto = match EventMsg::new(Event::Ebpf(EbpfEvent {
-        event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+    let proto = match EventMsg::new(Event::EbpfExtractor(Ebpf {
+        event: Some(ebpf::Event::Conn(net_conn::ConnectionEvent {
             event: Some(net_conn::connection_event::Event::Outbound(outbound.into())),
         })),
     })) {
@@ -487,8 +487,8 @@ fn handle_net_conn_outbound(data: &[u8], nc: &async_nats::Client) -> i32 {
 
 fn handle_net_conn_inbound(data: &[u8], nc: &async_nats::Client) -> i32 {
     let inbound = InboundConnection::from_bytes(data);
-    let proto = match EventMsg::new(Event::Ebpf(EbpfEvent {
-        event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+    let proto = match EventMsg::new(Event::EbpfExtractor(Ebpf {
+        event: Some(ebpf::Event::Conn(net_conn::ConnectionEvent {
             event: Some(net_conn::connection_event::Event::Inbound(inbound.into())),
         })),
     })) {
@@ -519,8 +519,8 @@ fn handle_net_conn_inbound(data: &[u8], nc: &async_nats::Client) -> i32 {
 
 fn handle_net_conn_inbound_evicted(data: &[u8], nc: &async_nats::Client) -> i32 {
     let evicted = ClosedConnection::from_bytes(data);
-    let proto = match EventMsg::new(Event::Ebpf(EbpfEvent {
-        event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+    let proto = match EventMsg::new(Event::EbpfExtractor(Ebpf {
+        event: Some(ebpf::Event::Conn(net_conn::ConnectionEvent {
             event: Some(net_conn::connection_event::Event::InboundEvicted(
                 evicted.into(),
             )),
@@ -553,8 +553,8 @@ fn handle_net_conn_inbound_evicted(data: &[u8], nc: &async_nats::Client) -> i32 
 
 fn handle_net_conn_misbehaving(data: &[u8], nc: &async_nats::Client) -> i32 {
     let misbehaving = MisbehavingConnection::from_bytes(data);
-    let proto = match EventMsg::new(Event::Ebpf(EbpfEvent {
-        event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+    let proto = match EventMsg::new(Event::EbpfExtractor(Ebpf {
+        event: Some(ebpf::Event::Conn(net_conn::ConnectionEvent {
             event: Some(net_conn::connection_event::Event::Misbehaving(
                 misbehaving.into(),
             )),
@@ -594,8 +594,8 @@ fn handle_net_message(data: &[u8], nc: &async_nats::Client) -> i32 {
             return RINGBUFF_CALLBACK_UNABLE_TO_PARSE_P2P_MSG;
         }
     };
-    let proto = match EventMsg::new(Event::Ebpf(EbpfEvent {
-        event: Some(ebpf_event::Event::Msg(net_msg::Message {
+    let proto = match EventMsg::new(Event::EbpfExtractor(Ebpf {
+        event: Some(ebpf::Event::Msg(net_msg::Message {
             meta: message.meta.create_protobuf_metadata(),
             msg: Some(protobuf_message),
         })),
@@ -623,8 +623,8 @@ fn handle_net_message(data: &[u8], nc: &async_nats::Client) -> i32 {
 
 fn handle_addrman_new(data: &[u8], nc: &async_nats::Client) -> i32 {
     let new = AddrmanInsertNew::from_bytes(data);
-    let proto = match EventMsg::new(Event::Ebpf(EbpfEvent {
-        event: Some(ebpf_event::Event::Addrman(addrman::AddrmanEvent {
+    let proto = match EventMsg::new(Event::EbpfExtractor(Ebpf {
+        event: Some(ebpf::Event::Addrman(addrman::AddrmanEvent {
             event: Some(addrman::addrman_event::Event::New(new.into())),
         })),
     })) {
@@ -651,8 +651,8 @@ fn handle_addrman_new(data: &[u8], nc: &async_nats::Client) -> i32 {
 
 fn handle_addrman_tried(data: &[u8], nc: &async_nats::Client) -> i32 {
     let tried = AddrmanInsertTried::from_bytes(data);
-    let proto = match EventMsg::new(Event::Ebpf(EbpfEvent {
-        event: Some(ebpf_event::Event::Addrman(addrman::AddrmanEvent {
+    let proto = match EventMsg::new(Event::EbpfExtractor(Ebpf {
+        event: Some(ebpf::Event::Addrman(addrman::AddrmanEvent {
             event: Some(addrman::addrman_event::Event::Tried(tried.into())),
         })),
     })) {
@@ -679,8 +679,8 @@ fn handle_addrman_tried(data: &[u8], nc: &async_nats::Client) -> i32 {
 
 fn handle_mempool_added(data: &[u8], nc: &async_nats::Client) -> i32 {
     let added = MempoolAdded::from_bytes(data);
-    let proto = match EventMsg::new(Event::Ebpf(EbpfEvent {
-        event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+    let proto = match EventMsg::new(Event::EbpfExtractor(Ebpf {
+        event: Some(ebpf::Event::Mempool(mempool::MempoolEvent {
             event: Some(mempool::mempool_event::Event::Added(added.into())),
         })),
     })) {
@@ -707,8 +707,8 @@ fn handle_mempool_added(data: &[u8], nc: &async_nats::Client) -> i32 {
 
 fn handle_mempool_removed(data: &[u8], nc: &async_nats::Client) -> i32 {
     let removed = MempoolRemoved::from_bytes(data);
-    let proto = match EventMsg::new(Event::Ebpf(EbpfEvent {
-        event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+    let proto = match EventMsg::new(Event::EbpfExtractor(Ebpf {
+        event: Some(ebpf::Event::Mempool(mempool::MempoolEvent {
             event: Some(mempool::mempool_event::Event::Removed(removed.into())),
         })),
     })) {
@@ -738,8 +738,8 @@ fn handle_mempool_removed(data: &[u8], nc: &async_nats::Client) -> i32 {
 
 fn handle_mempool_replaced(data: &[u8], nc: &async_nats::Client) -> i32 {
     let replaced = MempoolReplaced::from_bytes(data);
-    let proto = match EventMsg::new(Event::Ebpf(EbpfEvent {
-        event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+    let proto = match EventMsg::new(Event::EbpfExtractor(Ebpf {
+        event: Some(ebpf::Event::Mempool(mempool::MempoolEvent {
             event: Some(mempool::mempool_event::Event::Replaced(replaced.into())),
         })),
     })) {
@@ -769,8 +769,8 @@ fn handle_mempool_replaced(data: &[u8], nc: &async_nats::Client) -> i32 {
 
 fn handle_mempool_rejected(data: &[u8], nc: &async_nats::Client) -> i32 {
     let rejected = MempoolRejected::from_bytes(data);
-    let proto = match EventMsg::new(Event::Ebpf(EbpfEvent {
-        event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+    let proto = match EventMsg::new(Event::EbpfExtractor(Ebpf {
+        event: Some(ebpf::Event::Mempool(mempool::MempoolEvent {
             event: Some(mempool::mempool_event::Event::Rejected(rejected.into())),
         })),
     })) {
@@ -800,8 +800,8 @@ fn handle_mempool_rejected(data: &[u8], nc: &async_nats::Client) -> i32 {
 
 fn handle_validation_block_connected(data: &[u8], nc: &async_nats::Client) -> i32 {
     let connected = ValidationBlockConnected::from_bytes(data);
-    let proto = match EventMsg::new(Event::Ebpf(EbpfEvent {
-        event: Some(ebpf_event::Event::Validation(validation::ValidationEvent {
+    let proto = match EventMsg::new(Event::EbpfExtractor(Ebpf {
+        event: Some(ebpf::Event::Validation(validation::ValidationEvent {
             event: Some(validation::validation_event::Event::BlockConnected(
                 connected.into(),
             )),

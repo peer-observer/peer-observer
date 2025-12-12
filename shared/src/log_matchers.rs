@@ -1,6 +1,6 @@
-use crate::protobuf::log_extractor::log_event::Event;
+use crate::protobuf::log_extractor::log::Event;
 use crate::protobuf::log_extractor::{
-    BlockCheckedLog, BlockConnectedLog, LogDebugCategory, LogEvent, UnknownLogMessage,
+    BlockCheckedLog, BlockConnectedLog, Log, LogDebugCategory, UnknownLogMessage,
 };
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -121,14 +121,14 @@ impl BlockCheckedLog {
     }
 }
 
-pub fn parse_log_event(line: &str) -> LogEvent {
+pub fn parse_log_event(line: &str) -> Log {
     let (timestamp_micro, category, message) = parse_common_log_data(line);
 
     let matchers: Vec<fn(&str) -> Option<Event>> =
         vec![BlockConnectedLog::parse_event, BlockCheckedLog::parse_event];
     for matcher in &matchers {
         if let Some(event) = matcher(&message) {
-            return LogEvent {
+            return Log {
                 log_timestamp: timestamp_micro,
                 category: category.into(),
                 event: Some(event),
@@ -137,7 +137,7 @@ pub fn parse_log_event(line: &str) -> LogEvent {
     }
 
     // if no matcher succeeds, return unknown
-    LogEvent {
+    Log {
         log_timestamp: timestamp_micro,
         category: category.into(),
         event: UnknownLogMessage::parse_event(&message),
@@ -181,9 +181,9 @@ fn parse_common_log_data(line: &str) -> (u64, LogDebugCategory, String) {
 // TODO: connection_event::Event::Misbehaving
 // TODO: addrman_event::Event::New
 // TODO: addrman_event::Event::Tried
-// TODO: p2p_extractor_event::Event::PingDuration
-// TODO: log_event::Event::UnknownLogMessage
-// TODO: rpc_event::Event::PeerInfos
+// TODO: p2p::Event::PingDuration
+// TODO: log::Event::UnknownLogMessage
+// TODO: rpc::Event::PeerInfos
 // TODO: net_msg::message::Msg::Addr
 // TODO: net_msg::message::Msg::Addrv2
 // TODO: net_msg::message::Msg::Emptyaddrv2

@@ -333,12 +333,10 @@ async fn publish_addr_announcement_event(
     addresses: Vec<bitcoin_primitives::Address>,
     nats_client: &async_nats::Client,
 ) {
-    let proto_result = EventMsg::new(Event::P2pExtractorEvent(p2p_extractor::P2pExtractorEvent {
-        event: Some(
-            p2p_extractor::p2p_extractor_event::Event::AddressAnnouncement(
-                p2p_extractor::AddressAnnouncement { addresses },
-            ),
-        ),
+    let proto_result = EventMsg::new(Event::P2pExtractor(p2p_extractor::P2p {
+        event: Some(p2p_extractor::p2p::Event::AddressAnnouncement(
+            p2p_extractor::AddressAnnouncement { addresses },
+        )),
     }));
 
     match proto_result {
@@ -365,12 +363,10 @@ async fn publish_inventory_announcement_event(
     inventory: Vec<bitcoin_primitives::InventoryItem>,
     nats_client: &async_nats::Client,
 ) {
-    let proto_result = EventMsg::new(Event::P2pExtractorEvent(p2p_extractor::P2pExtractorEvent {
-        event: Some(
-            p2p_extractor::p2p_extractor_event::Event::InventoryAnnouncement(
-                p2p_extractor::InventoryAnnouncement { inventory },
-            ),
-        ),
+    let proto_result = EventMsg::new(Event::P2pExtractor(p2p_extractor::P2p {
+        event: Some(p2p_extractor::p2p::Event::InventoryAnnouncement(
+            p2p_extractor::InventoryAnnouncement { inventory },
+        )),
     }));
 
     match proto_result {
@@ -394,8 +390,8 @@ async fn publish_inventory_announcement_event(
 }
 
 async fn publish_feefilter_announcement_event(feefilter: i64, nats_client: &async_nats::Client) {
-    let proto_result = EventMsg::new(Event::P2pExtractorEvent(p2p_extractor::P2pExtractorEvent {
-        event: Some(p2p_extractor::p2p_extractor_event::Event::FeefilterAnnouncement(feefilter)),
+    let proto_result = EventMsg::new(Event::P2pExtractor(p2p_extractor::P2p {
+        event: Some(p2p_extractor::p2p::Event::FeefilterAnnouncement(feefilter)),
     }));
 
     match proto_result {
@@ -419,8 +415,8 @@ async fn publish_feefilter_announcement_event(feefilter: i64, nats_client: &asyn
 }
 
 async fn publish_ping_measurement_event(duration: u64, nats_client: &async_nats::Client) {
-    let proto_result = EventMsg::new(Event::P2pExtractorEvent(p2p_extractor::P2pExtractorEvent {
-        event: Some(p2p_extractor::p2p_extractor_event::Event::PingDuration(
+    let proto_result = EventMsg::new(Event::P2pExtractor(p2p_extractor::P2p {
+        event: Some(p2p_extractor::p2p::Event::PingDuration(
             p2p_extractor::PingDuration { duration },
         )),
     }));

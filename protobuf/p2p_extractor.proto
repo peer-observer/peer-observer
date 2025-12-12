@@ -5,7 +5,7 @@ import "bitcoin_primitives.proto";
 // This file is only for Events of the p2p-extractor.
 package p2p_extractor;
 
-message P2PExtractorEvent {
+message p2p {
   oneof event {
     PingDuration ping_duration = 1;
     AddressAnnouncement address_announcement = 2;

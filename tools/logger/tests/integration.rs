@@ -9,12 +9,12 @@ use shared::{
     protobuf::{
         ebpf_extractor::{
             addrman::{self, InsertNew, InsertTried},
-            ebpf_event,
+            ebpf,
             mempool::{self, Added},
             net_conn::{self, Connection, InboundConnection},
             net_msg::{self, message::Msg, Metadata, Ping, Pong},
             validation::{self, BlockConnected},
-            EbpfEvent,
+            Ebpf,
         },
         event_msg::{event_msg::Event, EventMsg},
         log_extractor::{self, LogDebugCategory},
@@ -189,8 +189,8 @@ async fn test_integration_logger_p2p_messages() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -203,8 +203,8 @@ async fn test_integration_logger_p2p_messages() {
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -232,8 +232,8 @@ async fn test_integration_logger_connections() {
     println!("test that connections are logged");
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Conn(net_conn::ConnectionEvent {
                 event: Some(net_conn::connection_event::Event::Inbound(
                     InboundConnection {
                         conn: Connection {
@@ -261,8 +261,8 @@ async fn test_integration_logger_validation() {
     println!("test that validation events are logged");
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Validation(validation::ValidationEvent {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Validation(validation::ValidationEvent {
                 event: Some(validation::validation_event::Event::BlockConnected(
                     BlockConnected {
                         hash: vec![0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31],
@@ -288,8 +288,8 @@ async fn test_integration_logger_mempool_added() {
     println!("test that mempool events are logged");
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Mempool(mempool::MempoolEvent {
                 event: Some(mempool::mempool_event::Event::Added(Added {
                     fee: 123,
                     txid: vec![
@@ -314,8 +314,8 @@ async fn test_integration_logger_rpc_peerinfo() {
     println!("test that RPC events are logged");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
-            event: Some(rpc_extractor::rpc_event::Event::PeerInfos(PeerInfos {
+        &[EventMsg::new(Event::RpcExtractor(rpc_extractor::Rpc {
+            event: Some(rpc_extractor::rpc::Event::PeerInfos(PeerInfos {
                 infos: vec![
                     PeerInfo {
                         addr_processed: 1234,
@@ -459,8 +459,8 @@ async fn test_integration_logger_addrman() {
     println!("test that addrman events are logged");
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Addrman(addrman::AddrmanEvent {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Addrman(addrman::AddrmanEvent {
                 event: Some(addrman::addrman_event::Event::New(InsertNew {
                     addr: "127.0.0.1:2340".to_string(),
                     addr_as: 2,
@@ -472,8 +472,8 @@ async fn test_integration_logger_addrman() {
                 })),
             })),
         })).unwrap(),
-        EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Addrman(addrman::AddrmanEvent {
+        EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Addrman(addrman::AddrmanEvent {
                 event: Some(addrman::addrman_event::Event::Tried(InsertTried {
                     addr: "127.0.0.1:2340".to_string(),
                     addr_as: 2,
@@ -499,14 +499,12 @@ async fn test_integration_logger_p2pextractor_ping_duration() {
     println!("test that p2p-extractor events are logged");
 
     publish_and_check(
-        &[
-            EventMsg::new(Event::P2pExtractorEvent(p2p_extractor::P2pExtractorEvent {
-                event: Some(p2p_extractor::p2p_extractor_event::Event::PingDuration(
-                    p2p_extractor::PingDuration { duration: 1234567 },
-                )),
-            }))
-            .unwrap(),
-        ],
+        &[EventMsg::new(Event::P2pExtractor(p2p_extractor::P2p {
+            event: Some(p2p_extractor::p2p::Event::PingDuration(
+                p2p_extractor::PingDuration { duration: 1234567 },
+            )),
+        }))
+        .unwrap()],
         Subject::Validation,
         r#"
         p2p event: PingDuration(1234567ns)
@@ -520,18 +518,16 @@ async fn test_integration_logger_logextractor_unknown_log() {
     println!("test that log-extractor unknown events are logged");
 
     publish_and_check(
-        &[
-            EventMsg::new(Event::LogExtractorEvent(log_extractor::LogEvent {
-                category: LogDebugCategory::Unknown.into(),
-                log_timestamp: 1234,
-                event: Some(log_extractor::log_event::Event::UnknownLogMessage(
-                    log_extractor::UnknownLogMessage {
-                        raw_message: "test".to_string(),
-                    },
-                )),
-            }))
-            .unwrap(),
-        ],
+        &[EventMsg::new(Event::LogExtractor(log_extractor::Log {
+            category: LogDebugCategory::Unknown.into(),
+            log_timestamp: 1234,
+            event: Some(log_extractor::log::Event::UnknownLogMessage(
+                log_extractor::UnknownLogMessage {
+                    raw_message: "test".to_string(),
+                },
+            )),
+        }))
+        .unwrap()],
         Subject::LogExtractor,
         r#"
         log event: 1234 [unknown] UnknownLogMessage(test)
@@ -546,10 +542,10 @@ async fn test_integration_logger_logextractor_blockconnected_log() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::LogExtractorEvent(log_extractor::LogEvent {
+            EventMsg::new(Event::LogExtractor(log_extractor::Log {
                 category: LogDebugCategory::Validation.into(),
                 log_timestamp: 345,
-                event: Some(log_extractor::log_event::Event::BlockConnectedLog(
+                event: Some(log_extractor::log::Event::BlockConnectedLog(
                     log_extractor::BlockConnectedLog {
                         block_height: 1337,
                         block_hash:

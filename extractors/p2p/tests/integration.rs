@@ -11,7 +11,7 @@ use shared::{
     protobuf::{
         bitcoin_primitives::inventory_item::Item,
         event_msg::{EventMsg, event_msg::Event},
-        p2p_extractor::p2p_extractor_event::Event::{
+        p2p_extractor::p2p::Event::{
             AddressAnnouncement, FeefilterAnnouncement, InventoryAnnouncement, PingDuration,
         },
     },
@@ -204,7 +204,7 @@ async fn test_integration_p2pextractor_ping_measurements() {
         |_| (),
         |event| {
             match event {
-                Event::P2pExtractorEvent(p) => {
+                Event::P2pExtractor(p) => {
                     if let Some(ref e) = p.event {
                         match e {
                             PingDuration(p) => {
@@ -268,7 +268,7 @@ async fn test_integration_p2pextractor_addr_annoucement() {
         },
         |event| {
             match event {
-                Event::P2pExtractorEvent(p) => {
+                Event::P2pExtractor(p) => {
                     if let Some(ref e) = p.event {
                         match e {
                             AddressAnnouncement(a) => {
@@ -318,7 +318,7 @@ async fn test_integration_p2pextractor_inv_annoucement() {
         },
         |event| {
             match event {
-                Event::P2pExtractorEvent(p) => {
+                Event::P2pExtractor(p) => {
                     if let Some(ref e) = p.event {
                         match e {
                             InventoryAnnouncement(i) => {
@@ -361,7 +361,7 @@ async fn test_integration_p2pextractor_feefilter_annoucement() {
         },
         |event| {
             match event {
-                Event::P2pExtractorEvent(p) => {
+                Event::P2pExtractor(p) => {
                     if let Some(ref e) = p.event {
                         match e {
                             FeefilterAnnouncement(feefilter) => {

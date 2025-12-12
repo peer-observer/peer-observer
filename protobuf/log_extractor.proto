@@ -2,7 +2,7 @@ syntax = "proto2";
 
 package log_extractor;
 
-message LogEvent {
+message log {
   required uint64 log_timestamp = 1; // unix timestamp in microseconds
   required LogDebugCategory category = 2;
   oneof event {

@@ -4,14 +4,14 @@ use metrics::error::RuntimeError;
 use metrics::Args;
 
 use shared::{
-    log::{self, warn},
+    log::{debug, warn, Level, LevelFilter},
     nats_subjects::Subject,
     prost::Message,
     protobuf::{
         bitcoin_primitives::{self, inventory_item::Item, Address, InventoryItem},
         ebpf_extractor::{
             addrman::{self, InsertNew, InsertTried},
-            ebpf_event,
+            ebpf,
             mempool::{self, Added, Rejected, Removed, Replaced},
             net_conn::{
                 self, ClosedConnection, Connection, EvictedInboundConnection, InboundConnection,
@@ -22,7 +22,7 @@ use shared::{
                 Version,
             },
             validation::{self, BlockConnected},
-            EbpfEvent,
+            Ebpf,
         },
         event_msg::{event_msg::Event, EventMsg},
         log_extractor::{self, LogDebugCategory},
@@ -58,7 +58,7 @@ static NEXT_METRICS_PORT: OnceLock<AtomicU16> = OnceLock::new();
 fn setup() -> u16 {
     INIT.call_once(|| {
         SimpleLogger::new()
-            .with_level(log::LevelFilter::Trace)
+            .with_level(LevelFilter::Trace)
             .init()
             .unwrap();
 
@@ -83,13 +83,13 @@ fn make_test_args(nats_port: u16, metrics_port: u16) -> Args {
     Args::new(
         format!("127.0.0.1:{}", nats_port),
         format!("127.0.0.1:{}", metrics_port),
-        log::Level::Trace,
+        Level::Trace,
     )
 }
 
 fn fetch_metrics(port: u16) -> Result<String, std::io::Error> {
     let addr = format!("127.0.0.1:{}", port);
-    log::debug!("fetching metrics from {}", addr);
+    debug!("fetching metrics from {}", addr);
     let mut stream = TcpStream::connect(addr.clone())?;
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
     stream.set_write_timeout(Some(Duration::from_secs(5)))?;
@@ -183,7 +183,7 @@ async fn publish_and_check(events: &[EventMsg], subject: Subject, expected: &str
     sleep(Duration::from_secs(1)).await;
 
     for event in events {
-        log::debug!("publishing: {:?}", event);
+        debug!("publishing: {:?}", event);
         nats_publisher
             .publish(subject.to_string(), event.encode_to_vec())
             .await;
@@ -237,8 +237,8 @@ async fn test_integration_metrics_p2p_message_count() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -251,8 +251,8 @@ async fn test_integration_metrics_p2p_message_count() {
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -283,8 +283,8 @@ async fn test_integration_metrics_p2p_traffic_linkinglion() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "162.218.65.123".to_string(), // an IP belonging to LinkingLion
@@ -297,8 +297,8 @@ async fn test_integration_metrics_p2p_traffic_linkinglion() {
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "91.198.115.23:8333".to_string(), // another IP belonging to LinkingLion
@@ -334,8 +334,8 @@ async fn test_integration_metrics_p2p_addr() {
     let timestamp_now = current_timestamp() as u32;
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Msg(net_msg::Message {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Msg(net_msg::Message {
                 meta: Metadata {
                     peer_id: 4,
                     addr: "127.0.0.1:1234".to_string(),
@@ -548,8 +548,8 @@ async fn test_integration_metrics_p2p_addrv2() {
     let timestamp_now = current_timestamp() as u32;
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Msg(net_msg::Message {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Msg(net_msg::Message {
                 meta: Metadata {
                     peer_id: 8,
                     addr: "127.0.0.1:1111".to_string(),
@@ -755,8 +755,8 @@ async fn test_integration_metrics_p2p_version() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 6,
                         addr: "127.0.0.1:9999".to_string(),
@@ -793,8 +793,8 @@ async fn test_integration_metrics_p2p_version() {
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 2,
                         addr: "162.218.65.123:1234".to_string(),
@@ -852,8 +852,8 @@ async fn test_integration_metrics_p2p_feefilter() {
     println!("test that the P2P feefilter metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Msg(net_msg::Message {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Msg(net_msg::Message {
                 meta: Metadata {
                     peer_id: 6,
                     addr: "127.0.0.1:2134".to_string(),
@@ -883,8 +883,8 @@ async fn test_integration_metrics_p2p_rejected() {
     println!("test that the P2P rejected metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Msg(net_msg::Message {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Msg(net_msg::Message {
                 meta: Metadata {
                     peer_id: 6,
                     addr: "127.0.0.1:2134".to_string(),
@@ -902,8 +902,8 @@ async fn test_integration_metrics_p2p_rejected() {
             }))
         }))
         .unwrap(),
-        EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Msg(net_msg::Message {
+        EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Msg(net_msg::Message {
                 meta: Metadata {
                     peer_id: 6,
                     addr: "127.0.0.1:2134".to_string(),
@@ -938,8 +938,8 @@ async fn test_integration_metrics_p2p_inv() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 1,
                         addr: "127.0.0.1:2134".to_string(),
@@ -963,8 +963,8 @@ async fn test_integration_metrics_p2p_inv() {
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 1,
                         addr: "127.0.0.1:2134".to_string(),
@@ -1069,8 +1069,8 @@ async fn test_integration_metrics_p2p_inv_large_outbound() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 1,
                         addr: "127.0.0.1:2134".to_string(),
@@ -1085,8 +1085,8 @@ async fn test_integration_metrics_p2p_inv_large_outbound() {
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 2,
                         addr: "127.0.0.1:2134".to_string(),
@@ -1101,8 +1101,8 @@ async fn test_integration_metrics_p2p_inv_large_outbound() {
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 3,
                         addr: "127.0.0.1:2134".to_string(),
@@ -1139,8 +1139,8 @@ async fn test_integration_metrics_p2p_oldping() {
     println!("test that the P2P oldping metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Msg(net_msg::Message {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Msg(net_msg::Message {
                 meta: Metadata {
                     peer_id: 6,
                     addr: "127.0.0.1:2134".to_string(),
@@ -1186,8 +1186,8 @@ async fn test_integration_metrics_p2p_ping_value() {
     let events: Vec<EventMsg> = values
         .iter()
         .map(|v| {
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Msg(net_msg::Message {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Msg(net_msg::Message {
                     meta: Metadata {
                         peer_id: 6,
                         addr: "127.0.0.1:2134".to_string(),
@@ -1222,8 +1222,8 @@ async fn test_integration_metrics_p2p_empty_addrv2() {
     println!("test that the P2P emptyaddrv2 metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Msg(net_msg::Message {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Msg(net_msg::Message {
                 meta: Metadata {
                     peer_id: 6,
                     addr: "127.0.0.1:2134".to_string(),
@@ -1251,8 +1251,8 @@ async fn test_integration_metrics_conn_inbound() {
     println!("test that the inbound connection metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Conn(net_conn::ConnectionEvent {
                 event: Some(net_conn::connection_event::Event::Inbound(
                     InboundConnection {
                         conn: Connection {
@@ -1282,8 +1282,8 @@ async fn test_integration_metrics_conn_outbound() {
     println!("test that the outbound connection metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Conn(net_conn::ConnectionEvent {
                 event: Some(net_conn::connection_event::Event::Outbound(
                     net_conn::OutboundConnection {
                         conn: Connection {
@@ -1316,8 +1316,8 @@ async fn test_integration_metrics_conn_closed() {
     let timestamp_now = current_timestamp();
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Conn(net_conn::ConnectionEvent {
                 event: Some(net_conn::connection_event::Event::Closed(
                     ClosedConnection {
                         conn: Connection {
@@ -1349,8 +1349,8 @@ async fn test_integration_metrics_conn_inbound_evicted() {
     let timestamp_now = current_timestamp();
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Conn(net_conn::ConnectionEvent {
                 event: Some(net_conn::connection_event::Event::InboundEvicted(
                     EvictedInboundConnection {
                         conn: Connection {
@@ -1378,8 +1378,8 @@ async fn test_integration_metrics_conn_misbehaving() {
     println!("test that the misbehaving connection metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Conn(net_conn::ConnectionEvent {
                 event: Some(net_conn::connection_event::Event::Misbehaving(
                     MisbehavingConnection {
                         id: 2,
@@ -1404,8 +1404,8 @@ async fn test_integration_metrics_conn_special_ip() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Conn(net_conn::ConnectionEvent {
                     event: Some(net_conn::connection_event::Event::Inbound(
                         InboundConnection {
                             conn: Connection {
@@ -1420,8 +1420,8 @@ async fn test_integration_metrics_conn_special_ip() {
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Conn(net_conn::ConnectionEvent {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Conn(net_conn::ConnectionEvent {
                     event: Some(net_conn::connection_event::Event::Inbound(
                         InboundConnection {
                             conn: Connection {
@@ -1458,8 +1458,8 @@ async fn test_integration_metrics_validation() {
     println!("test that validation metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Validation(validation::ValidationEvent {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Validation(validation::ValidationEvent {
                 event: Some(validation::validation_event::Event::BlockConnected(
                     BlockConnected {
                         hash: vec![0],
@@ -1491,8 +1491,8 @@ async fn test_integration_metrics_mempool_added() {
     println!("test that the mempool added metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Mempool(mempool::MempoolEvent {
                 event: Some(mempool::mempool_event::Event::Added(Added {
                     fee: 0,       // not covered by test
                     txid: vec![], // not covered by test
@@ -1516,8 +1516,8 @@ async fn test_integration_metrics_mempool_added_mass() {
 
     let events: Vec<EventMsg> = (0..54321)
         .map(|_| {
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Mempool(mempool::MempoolEvent {
                     event: Some(mempool::mempool_event::Event::Added(Added {
                         fee: 0,       // not covered by test
                         txid: vec![], // not covered by test
@@ -1545,8 +1545,8 @@ async fn test_integration_metrics_mempool_replaced() {
     println!("test that the mempool replaced metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Ebpf(EbpfEvent {
-            event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+        &[EventMsg::new(Event::EbpfExtractor(Ebpf {
+            event: Some(ebpf::Event::Mempool(mempool::MempoolEvent {
                 event: Some(mempool::mempool_event::Event::Replaced(Replaced {
                     replaced_fee: 0, // not covered by test
                     replaced_vsize: 17,
@@ -1575,8 +1575,8 @@ async fn test_integration_metrics_mempool_rejected() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Mempool(mempool::MempoolEvent {
                     event: Some(mempool::mempool_event::Event::Rejected(Rejected {
                         reason: "ABC".to_string(),
                         txid: vec![], // not covered by test
@@ -1584,8 +1584,8 @@ async fn test_integration_metrics_mempool_rejected() {
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Mempool(mempool::MempoolEvent {
                     event: Some(mempool::mempool_event::Event::Rejected(Rejected {
                         reason: "DEF".to_string(),
                         txid: vec![], // not covered by test
@@ -1608,8 +1608,8 @@ async fn test_integration_metrics_mempool_removed() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Mempool(mempool::MempoolEvent {
                     event: Some(mempool::mempool_event::Event::Removed(Removed {
                         entry_time: 0, // not covered by test
                         fee: 0,        // not covered by test
@@ -1620,8 +1620,8 @@ async fn test_integration_metrics_mempool_removed() {
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Mempool(mempool::MempoolEvent {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Mempool(mempool::MempoolEvent {
                     event: Some(mempool::mempool_event::Event::Removed(Removed {
                         entry_time: 0, // not covered by test
                         fee: 0,        // not covered by test
@@ -1647,8 +1647,8 @@ async fn test_integration_metrics_rpc_peerinfo() {
     println!("test that the RPC peer-info metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
-            event: Some(rpc_extractor::rpc_event::Event::PeerInfos(PeerInfos {
+        &[EventMsg::new(Event::RpcExtractor(rpc_extractor::Rpc {
+            event: Some(rpc_extractor::rpc::Event::PeerInfos(PeerInfos {
                 infos: vec![
                     PeerInfo {
                         addr_processed: 1234,
@@ -1821,8 +1821,8 @@ async fn test_integration_metrics_addrman() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Addrman(addrman::AddrmanEvent {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Addrman(addrman::AddrmanEvent {
                     event: Some(addrman::addrman_event::Event::New(InsertNew {
                         addr: "127.0.0.1:2340".to_string(),
                         addr_as: 2,
@@ -1835,8 +1835,8 @@ async fn test_integration_metrics_addrman() {
                 })),
             }))
             .unwrap(),
-            EventMsg::new(Event::Ebpf(EbpfEvent {
-                event: Some(ebpf_event::Event::Addrman(addrman::AddrmanEvent {
+            EventMsg::new(Event::EbpfExtractor(Ebpf {
+                event: Some(ebpf::Event::Addrman(addrman::AddrmanEvent {
                     event: Some(addrman::addrman_event::Event::Tried(InsertTried {
                         addr: "127.0.0.1:2340".to_string(),
                         addr_as: 2,
@@ -1866,8 +1866,8 @@ async fn test_integration_metrics_rpc_peerinfo_sub1satvbyte() {
     bytes_received_per_message.insert("tx".to_string(), 1234);
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
-            event: Some(rpc_extractor::rpc_event::Event::PeerInfos(PeerInfos {
+        &[EventMsg::new(Event::RpcExtractor(rpc_extractor::Rpc {
+            event: Some(rpc_extractor::rpc::Event::PeerInfos(PeerInfos {
                 infos: vec![
                     // This peer is a sub-1 sat/vbyte peer as the minfeefilter is 0.1 sat/vbyte
                     // and it has received txns (bytes_received_per_message).
@@ -2016,8 +2016,8 @@ async fn test_integration_metrics_rpc_peerinfo_invtosend() {
     println!("test that the invtosend metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
-            event: Some(rpc_extractor::rpc_event::Event::PeerInfos(PeerInfos {
+        &[EventMsg::new(Event::RpcExtractor(rpc_extractor::Rpc {
+            event: Some(rpc_extractor::rpc::Event::PeerInfos(PeerInfos {
                 infos: vec![
                     // This peer has an inv-to-send queue of 77.
                     PeerInfo {
@@ -2168,8 +2168,8 @@ async fn test_integration_metrics_rpc_peerinfo_cpuload() {
     println!("test that the cpuload metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
-            event: Some(rpc_extractor::rpc_event::Event::PeerInfos(PeerInfos {
+        &[EventMsg::new(Event::RpcExtractor(rpc_extractor::Rpc {
+            event: Some(rpc_extractor::rpc::Event::PeerInfos(PeerInfos {
                 infos: vec![
                     // This peer has a cpu_load 5.0
                     PeerInfo {
@@ -2320,8 +2320,8 @@ async fn test_integration_metrics_rpc_peerinfo_ipv4_inbound_diversity() {
     println!("test that the ipv4 inbound diversity metric works");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
-            event: Some(rpc_extractor::rpc_event::Event::PeerInfos(PeerInfos {
+        &[EventMsg::new(Event::RpcExtractor(rpc_extractor::Rpc {
+            event: Some(rpc_extractor::rpc::Event::PeerInfos(PeerInfos {
                 infos: vec![
                     // The first two peers are from the same /16 (123.123.*) and
                     // the third peer is from a distict (234.234.*) subnet. This results
@@ -2466,8 +2466,8 @@ async fn test_integration_metrics_rpc_peerinfo_peer_list_bitprojects() {
     println!("test that the bitprojects in/outbound peers metric works");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
-            event: Some(rpc_extractor::rpc_event::Event::PeerInfos(PeerInfos {
+        &[EventMsg::new(Event::RpcExtractor(rpc_extractor::Rpc {
+            event: Some(rpc_extractor::rpc::Event::PeerInfos(PeerInfos {
                 infos: vec![
                     // A bitprojects inbound peer.
                     PeerInfo {
@@ -2613,8 +2613,8 @@ async fn test_integration_metrics_rpc_uptime() {
     println!("test that the uptime metric works");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
-            event: Some(rpc_extractor::rpc_event::Event::Uptime(1234)),
+        &[EventMsg::new(Event::RpcExtractor(rpc_extractor::Rpc {
+            event: Some(rpc_extractor::rpc::Event::Uptime(1234)),
         }))
         .unwrap()],
         Subject::Rpc,
@@ -2630,8 +2630,8 @@ async fn test_integration_metrics_rpc_getnettotals() {
     println!("test that the getnettotal metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
-            event: Some(rpc_extractor::rpc_event::Event::NetTotals(NetTotals {
+        &[EventMsg::new(Event::RpcExtractor(rpc_extractor::Rpc {
+            event: Some(rpc_extractor::rpc::Event::NetTotals(NetTotals {
                 total_bytes_received: 2222,
                 total_bytes_sent: 3333,
                 // not covered
@@ -2661,8 +2661,8 @@ async fn test_integration_metrics_rpc_mempoolinfo() {
     println!("test that the mempoolinfo metrics work");
 
     publish_and_check(
-        &[EventMsg::new(Event::Rpc(rpc_extractor::RpcEvent {
-            event: Some(rpc_extractor::rpc_event::Event::MempoolInfo(MempoolInfo {
+        &[EventMsg::new(Event::RpcExtractor(rpc_extractor::Rpc {
+            event: Some(rpc_extractor::rpc::Event::MempoolInfo(MempoolInfo {
                 loaded: true,
                 size: 1000,
                 bytes: 2000,
@@ -2698,14 +2698,12 @@ async fn test_integration_metrics_p2pextractor_ping_duration() {
     println!("test that p2p-extractor ping duration metrics work");
 
     publish_and_check(
-        &[
-            EventMsg::new(Event::P2pExtractorEvent(p2p_extractor::P2pExtractorEvent {
-                event: Some(p2p_extractor::p2p_extractor_event::Event::PingDuration(
-                    p2p_extractor::PingDuration { duration: 1234567 },
-                )),
-            }))
-            .unwrap(),
-        ],
+        &[EventMsg::new(Event::P2pExtractor(p2p_extractor::P2p {
+            event: Some(p2p_extractor::p2p::Event::PingDuration(
+                p2p_extractor::PingDuration { duration: 1234567 },
+            )),
+        }))
+        .unwrap()],
         Subject::Validation,
         r#"
         peerobserver_p2pextractor_ping_duration_nanoseconds 1234567
@@ -2719,35 +2717,31 @@ async fn test_integration_metrics_p2pextractor_address_annoucement() {
     println!("test that p2p-extractor address annoucement metrics work");
 
     publish_and_check(
-        &[
-            EventMsg::new(Event::P2pExtractorEvent(p2p_extractor::P2pExtractorEvent {
-                event: Some(
-                    p2p_extractor::p2p_extractor_event::Event::AddressAnnouncement(
-                        p2p_extractor::AddressAnnouncement {
-                            addresses: vec![
-                                Address {
-                                    timestamp: 0,
-                                    port: 1,
-                                    services: 1,
-                                    address: Some(bitcoin_primitives::address::Address::Ipv4(
-                                        "1.2.3.4".to_string(),
-                                    )),
-                                },
-                                Address {
-                                    timestamp: 2,
-                                    port: 3,
-                                    services: 4,
-                                    address: Some(bitcoin_primitives::address::Address::Ipv6(
-                                        "b10c::1".to_string(),
-                                    )),
-                                },
-                            ],
+        &[EventMsg::new(Event::P2pExtractor(p2p_extractor::P2p {
+            event: Some(p2p_extractor::p2p::Event::AddressAnnouncement(
+                p2p_extractor::AddressAnnouncement {
+                    addresses: vec![
+                        Address {
+                            timestamp: 0,
+                            port: 1,
+                            services: 1,
+                            address: Some(bitcoin_primitives::address::Address::Ipv4(
+                                "1.2.3.4".to_string(),
+                            )),
                         },
-                    ),
-                ),
-            }))
-            .unwrap(),
-        ],
+                        Address {
+                            timestamp: 2,
+                            port: 3,
+                            services: 4,
+                            address: Some(bitcoin_primitives::address::Address::Ipv6(
+                                "b10c::1".to_string(),
+                            )),
+                        },
+                    ],
+                },
+            )),
+        }))
+        .unwrap()],
         Subject::Validation,
         r#"
         peerobserver_p2pextractor_addrv2relay_addresses{network="IPv4"} 1
@@ -2765,25 +2759,21 @@ async fn test_integration_metrics_p2pextractor_inv_annoucement() {
     println!("test that p2p-extractor inventory annoucement metrics work");
 
     publish_and_check(
-        &[
-            EventMsg::new(Event::P2pExtractorEvent(p2p_extractor::P2pExtractorEvent {
-                event: Some(
-                    p2p_extractor::p2p_extractor_event::Event::InventoryAnnouncement(
-                        p2p_extractor::InventoryAnnouncement {
-                            inventory: vec![
-                                InventoryItem {
-                                    item: Some(Item::Transaction(vec![])),
-                                },
-                                InventoryItem {
-                                    item: Some(Item::Wtx(vec![])),
-                                },
-                            ],
+        &[EventMsg::new(Event::P2pExtractor(p2p_extractor::P2p {
+            event: Some(p2p_extractor::p2p::Event::InventoryAnnouncement(
+                p2p_extractor::InventoryAnnouncement {
+                    inventory: vec![
+                        InventoryItem {
+                            item: Some(Item::Transaction(vec![])),
                         },
-                    ),
-                ),
-            }))
-            .unwrap(),
-        ],
+                        InventoryItem {
+                            item: Some(Item::Wtx(vec![])),
+                        },
+                    ],
+                },
+            )),
+        }))
+        .unwrap()],
         Subject::Validation,
         r#"
         peerobserver_p2pextractor_invs_items{inv_type="Tx"} 1
@@ -2801,12 +2791,12 @@ async fn test_integration_metrics_p2pextractor_feefilter_annoucement() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::P2pExtractorEvent(p2p_extractor::P2pExtractorEvent {
-                event: Some(p2p_extractor::p2p_extractor_event::Event::FeefilterAnnouncement(1234)),
+            EventMsg::new(Event::P2pExtractor(p2p_extractor::P2p {
+                event: Some(p2p_extractor::p2p::Event::FeefilterAnnouncement(1234)),
             }))
             .unwrap(),
-            EventMsg::new(Event::P2pExtractorEvent(p2p_extractor::P2pExtractorEvent {
-                event: Some(p2p_extractor::p2p_extractor_event::Event::FeefilterAnnouncement(2345)),
+            EventMsg::new(Event::P2pExtractor(p2p_extractor::P2p {
+                event: Some(p2p_extractor::p2p::Event::FeefilterAnnouncement(2345)),
             }))
             .unwrap(),
         ],
@@ -2825,20 +2815,20 @@ async fn test_integration_metrics_logextractor_logevents() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::LogExtractorEvent(log_extractor::LogEvent {
+            EventMsg::new(Event::LogExtractor(log_extractor::Log {
                 category: LogDebugCategory::Unknown.into(),
                 log_timestamp: 1234,
-                event: Some(log_extractor::log_event::Event::UnknownLogMessage(
+                event: Some(log_extractor::log::Event::UnknownLogMessage(
                     log_extractor::UnknownLogMessage {
                         raw_message: "test1".to_string(),
                     },
                 )),
             }))
             .unwrap(),
-            EventMsg::new(Event::LogExtractorEvent(log_extractor::LogEvent {
+            EventMsg::new(Event::LogExtractor(log_extractor::Log {
                 category: LogDebugCategory::Unknown.into(),
                 log_timestamp: 1234,
-                event: Some(log_extractor::log_event::Event::UnknownLogMessage(
+                event: Some(log_extractor::log::Event::UnknownLogMessage(
                     log_extractor::UnknownLogMessage {
                         raw_message: "test2".to_string(),
                     },
@@ -2860,10 +2850,10 @@ async fn test_integration_metrics_logextractor_blockconnected_events() {
 
     publish_and_check(
         &[
-            EventMsg::new(Event::LogExtractorEvent(log_extractor::LogEvent {
+            EventMsg::new(Event::LogExtractor(log_extractor::Log {
                 category: LogDebugCategory::Validation.into(),
                 log_timestamp: 345,
-                event: Some(log_extractor::log_event::Event::BlockConnectedLog(
+                event: Some(log_extractor::log::Event::BlockConnectedLog(
                     log_extractor::BlockConnectedLog {
                         block_height: 1234,
                         block_hash:
@@ -2873,10 +2863,10 @@ async fn test_integration_metrics_logextractor_blockconnected_events() {
                 )),
             }))
             .unwrap(),
-            EventMsg::new(Event::LogExtractorEvent(log_extractor::LogEvent {
+            EventMsg::new(Event::LogExtractor(log_extractor::Log {
                 category: LogDebugCategory::Validation.into(),
                 log_timestamp: 3452,
-                event: Some(log_extractor::log_event::Event::BlockConnectedLog(
+                event: Some(log_extractor::log::Event::BlockConnectedLog(
                     log_extractor::BlockConnectedLog {
                         block_height: 2222,
                         block_hash:
@@ -2886,10 +2876,10 @@ async fn test_integration_metrics_logextractor_blockconnected_events() {
                 )),
             }))
             .unwrap(),
-            EventMsg::new(Event::LogExtractorEvent(log_extractor::LogEvent {
+            EventMsg::new(Event::LogExtractor(log_extractor::Log {
                 category: LogDebugCategory::Unknown.into(),
                 log_timestamp: 1234,
-                event: Some(log_extractor::log_event::Event::UnknownLogMessage(
+                event: Some(log_extractor::log::Event::UnknownLogMessage(
                     log_extractor::UnknownLogMessage {
                         raw_message: "test2".to_string(),
                     },
@@ -2912,22 +2902,19 @@ async fn test_integration_metrics_logextractor_blockchecked_events() {
     println!("test that log-extractor block checked log events metric work");
 
     publish_and_check(
-        &[
-            EventMsg::new(Event::LogExtractorEvent(log_extractor::LogEvent {
-                category: LogDebugCategory::Validation.into(),
-                log_timestamp: 345,
-                event: Some(log_extractor::log_event::Event::BlockCheckedLog(
-                    log_extractor::BlockCheckedLog {
-                        debug_message: "".to_string(),
-                        state: "Valid".to_string(),
-                        block_hash:
-                            "309665469cc06cecdd0be45f3070aa446b4871bb5d1b0bc97965895d1d35f541"
-                                .to_string(),
-                    },
-                )),
-            }))
-            .unwrap(),
-        ],
+        &[EventMsg::new(Event::LogExtractor(log_extractor::Log {
+            category: LogDebugCategory::Validation.into(),
+            log_timestamp: 345,
+            event: Some(log_extractor::log::Event::BlockCheckedLog(
+                log_extractor::BlockCheckedLog {
+                    debug_message: "".to_string(),
+                    state: "Valid".to_string(),
+                    block_hash: "309665469cc06cecdd0be45f3070aa446b4871bb5d1b0bc97965895d1d35f541"
+                        .to_string(),
+                },
+            )),
+        }))
+        .unwrap()],
         Subject::LogExtractor,
         r#"
         peerobserver_log_block_checked_events 1
@@ -2942,22 +2929,19 @@ async fn test_integration_metrics_logextractor_blockchecked_mutated_events() {
     println!("test that log-extractor block checked mutated block events metric work");
 
     publish_and_check(
-        &[
-            EventMsg::new(Event::LogExtractorEvent(log_extractor::LogEvent {
-                category: LogDebugCategory::Validation.into(),
-                log_timestamp: 345,
-                event: Some(log_extractor::log_event::Event::BlockCheckedLog(
-                    log_extractor::BlockCheckedLog {
-                        debug_message: "duplicate transaction".to_string(),
-                        state: "bad-txns-duplicate".to_string(),
-                        block_hash:
-                            "2eb63cc71bccef4f3d5da560d810513e2e1155ff7be04d5502ad3e038f956e92"
-                                .to_string(),
-                    },
-                )),
-            }))
-            .unwrap(),
-        ],
+        &[EventMsg::new(Event::LogExtractor(log_extractor::Log {
+            category: LogDebugCategory::Validation.into(),
+            log_timestamp: 345,
+            event: Some(log_extractor::log::Event::BlockCheckedLog(
+                log_extractor::BlockCheckedLog {
+                    debug_message: "duplicate transaction".to_string(),
+                    state: "bad-txns-duplicate".to_string(),
+                    block_hash: "2eb63cc71bccef4f3d5da560d810513e2e1155ff7be04d5502ad3e038f956e92"
+                        .to_string(),
+                },
+            )),
+        }))
+        .unwrap()],
         Subject::LogExtractor,
         r#"
         peerobserver_log_block_checked_events 1

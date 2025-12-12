@@ -15,7 +15,7 @@ use shared::metricserver;
 use shared::prost::Message as ProstMessage;
 use shared::protobuf::bitcoin_primitives::address::Address as AddressType;
 use shared::protobuf::bitcoin_primitives::Address;
-use shared::protobuf::ebpf_extractor::ebpf_event::Event as EEvent;
+use shared::protobuf::ebpf_extractor::ebpf::Event as EEvent;
 use shared::protobuf::ebpf_extractor::net_msg::message::Msg;
 use shared::protobuf::ebpf_extractor::net_msg::Message as NetMessage;
 use shared::protobuf::event_msg;
@@ -214,7 +214,7 @@ fn worker(
 
 fn handle_event(event: Event, timestamp: u64, input_sender: Sender<Input>) {
     match event {
-        Event::Ebpf(event) => match event.event.unwrap() {
+        Event::EbpfExtractor(event) => match event.event.unwrap() {
             EEvent::Msg(msg) => {
                 if msg.meta.inbound {
                     handle_inbound_message(msg, timestamp, input_sender);

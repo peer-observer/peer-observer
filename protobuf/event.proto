@@ -10,9 +10,9 @@ import "log_extractor.proto";
 message EventMsg {
   required uint64  timestamp = 10;  // Timestamp (milliseconds since UNIX epoch) when the event was constructed.
   oneof event {
-    ebpf_extractor.EBPFEvent ebpf = 1;
-    rpc_extractor.RPCEvent rpc = 2;
-    p2p_extractor.P2PExtractorEvent P2PExtractorEvent = 3;
-    log_extractor.LogEvent logExtractorEvent = 4;
+    ebpf_extractor.ebpf         ebpf_extractor  = 1;
+    rpc_extractor.rpc           rpc_extractor   = 2;
+    p2p_extractor.p2p           p2p_extractor   = 3;
+    log_extractor.log           log_extractor   = 4;
   }
 }

@@ -29,13 +29,13 @@ impl fmt::Display for PeerInfo {
     }
 }
 
-impl fmt::Display for rpc_event::Event {
+impl fmt::Display for rpc::Event {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            rpc_event::Event::PeerInfos(infos) => write!(f, "{}", infos),
-            rpc_event::Event::MempoolInfo(info) => write!(f, "{}", info),
-            rpc_event::Event::Uptime(seconds) => write!(f, "Uptime({}s)", seconds),
-            rpc_event::Event::NetTotals(totals) => write!(f, "{}", totals),
+            rpc::Event::PeerInfos(infos) => write!(f, "{}", infos),
+            rpc::Event::MempoolInfo(info) => write!(f, "{}", info),
+            rpc::Event::Uptime(seconds) => write!(f, "Uptime({}s)", seconds),
+            rpc::Event::NetTotals(totals) => write!(f, "{}", totals),
         }
     }
 }

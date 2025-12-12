@@ -7,7 +7,7 @@ use shared::{
     log::{self, info},
     prost::Message,
     protobuf::event_msg::{EventMsg, event_msg::Event},
-    protobuf::rpc_extractor::rpc_event::Event::{MempoolInfo, NetTotals, PeerInfos, Uptime},
+    protobuf::rpc_extractor::rpc::Event::{MempoolInfo, NetTotals, PeerInfos, Uptime},
     simple_logger::SimpleLogger,
     testing::nats_server::NatsServerForTesting,
     tokio::{self, sync::watch},
@@ -130,7 +130,7 @@ async fn test_integration_rpc_getpeerinfo() {
 
     check(false, true, true, true, |event| {
         match event {
-            Event::Rpc(r) => {
+            Event::RpcExtractor(r) => {
                 if let Some(ref e) = r.event {
                     match e {
                         PeerInfos(p) => {
@@ -156,7 +156,7 @@ async fn test_integration_rpc_getmempoolinfo() {
     println!("test that we receive getmempoolinfo RPC events");
 
     check(true, false, true, true, |event| match event {
-        Event::Rpc(r) => {
+        Event::RpcExtractor(r) => {
             if let Some(ref e) = r.event {
                 match e {
                     MempoolInfo(info) => {
@@ -189,7 +189,7 @@ async fn test_integration_rpc_uptime() {
     println!("test that we receive uptime RPC events");
 
     check(true, true, false, true, |event| match event {
-        Event::Rpc(r) => {
+        Event::RpcExtractor(r) => {
             if let Some(ref e) = r.event {
                 match e {
                     Uptime(uptime_seconds) => {
@@ -211,7 +211,7 @@ async fn test_integration_rpc_getnettotals() {
     println!("test that we receive getnettotals RPC events");
 
     check(true, true, true, false, |event| match event {
-        Event::Rpc(r) => {
+        Event::RpcExtractor(r) => {
             if let Some(ref e) = r.event {
                 match e {
                     NetTotals(net_totals) => {
