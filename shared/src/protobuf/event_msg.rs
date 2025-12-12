@@ -8,12 +8,11 @@ include!(concat!(env!("OUT_DIR"), "/event.rs"));
 impl EventMsg {
     pub fn new(event: event_msg::Event) -> Result<EventMsg, SystemTimeError> {
         let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?;
-        let timestamp = now.as_secs();
-        let timestamp_subsec_micros = now.subsec_micros();
         trace!("creating new EventMsg with event: {:?}", event);
         Ok(EventMsg {
-            timestamp,
-            timestamp_subsec_micros,
+            // We can store a UNIX epoch timestamp in millisecond precision
+            // for more than the next 500.000 years..
+            timestamp: now.as_millis() as u64,
             event: Some(event),
         })
     }

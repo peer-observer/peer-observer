@@ -601,7 +601,7 @@ fn handle_validation_event(e: &validation_event::Event, metrics: metrics::Metric
 
 fn handle_connection_event(
     cevent: &connection_event::Event,
-    timestamp: u64,
+    timestamp_ms: u64,
     metrics: metrics::Metrics,
 ) {
     match cevent {
@@ -642,7 +642,7 @@ fn handle_connection_event(
             metrics.conn_closed.inc();
             metrics
                 .conn_closed_age
-                .inc_by(timestamp - c.time_established);
+                .inc_by(timestamp_ms / 1000 - c.time_established);
             metrics
                 .conn_closed_network
                 .with_label_values(&[&c.conn.network.to_string()])
@@ -737,7 +737,7 @@ fn handle_addrman_event(aevent: &addrman_event::Event, metrics: metrics::Metrics
     }
 }
 
-fn handle_p2p_message(msg: &net_msg::Message, timestamp: u64, metrics: metrics::Metrics) {
+fn handle_p2p_message(msg: &net_msg::Message, timestamp_ms: u64, metrics: metrics::Metrics) {
     let conn_type = msg.meta.conn_type.to_string();
     let direction = if msg.meta.inbound {
         "inbound".to_string()
@@ -786,7 +786,7 @@ fn handle_p2p_message(msg: &net_msg::Message, timestamp: u64, metrics: metrics::
                     // message. If the remaining offset is larger than or equal to zero, the address
                     // timestamp lies in the past. If the offset is smaller than zero, the address
                     // timestamp lies in the future.
-                    let offset = timestamp as i64 - address.timestamp as i64;
+                    let offset = (timestamp_ms / 1000) as i64 - address.timestamp as i64;
                     if offset >= 0 {
                         past_offset.observe(offset as f64);
                     } else {
@@ -822,7 +822,7 @@ fn handle_p2p_message(msg: &net_msg::Message, timestamp: u64, metrics: metrics::
                     // message. If the remaining offset is larger than or equal to zero, the address
                     // timestamp lies in the past. If the offset is smaller than zero, the address
                     // timestamp lies in the future.
-                    let offset = timestamp as i64 - address.timestamp as i64;
+                    let offset = (timestamp_ms / 1000) as i64 - address.timestamp as i64;
                     if offset >= 0 {
                         past_offset.observe(offset as f64);
                     } else {

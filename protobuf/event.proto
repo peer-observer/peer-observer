@@ -8,8 +8,7 @@ import "p2p_extractor.proto";
 import "log_extractor.proto";
 
 message EventMsg {
-  required uint64  timestamp = 10;  // Timestamp (seconds since UNIX epoch) when the message was received.
-  required uint32  timestamp_subsec_micros = 11;  // The fractional part of the timestamp, in whole milliseconds. Always represents a fractional portion of a second (i.e., it is less than one million).
+  required uint64  timestamp = 10;  // Timestamp (milliseconds since UNIX epoch) when the event was constructed.
   oneof event {
     ebpf_extractor.EBPFEvent ebpf = 1;
     rpc_extractor.RPCEvent rpc = 2;
