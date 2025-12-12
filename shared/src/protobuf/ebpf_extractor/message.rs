@@ -8,7 +8,7 @@ use std::fmt;
 use crate::protobuf::bitcoin_primitives::{Address, BlockHeader, PrefilledTransaction};
 
 // structs are generated via the p2p.proto file
-include!(concat!(env!("OUT_DIR"), "/ebpf_extractor.net_msg.rs"));
+include!(concat!(env!("OUT_DIR"), "/ebpf_extractor.message.rs"));
 
 impl From<bip152::HeaderAndShortIds> for CompactBlock {
     fn from(cmpct_block: bip152::HeaderAndShortIds) -> Self {
@@ -602,53 +602,53 @@ impl fmt::Display for MerkleBlock {
     }
 }
 
-impl fmt::Display for message::Msg {
+impl fmt::Display for message_event::Msg {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            message::Msg::Ping(ping) => write!(f, "{}", ping),
-            message::Msg::Pong(pong) => write!(f, "{}", pong),
-            message::Msg::Inv(inv) => write!(f, "{}", inv),
-            message::Msg::Getdata(getdata) => write!(f, "{}", getdata),
-            message::Msg::Tx(tx) => write!(f, "{}", tx),
-            message::Msg::Headers(headers) => write!(f, "{}", headers),
-            message::Msg::Addr(addr) => write!(f, "{}", addr),
-            message::Msg::Addrv2(addr) => write!(f, "{}", addr),
-            message::Msg::Feefilter(feefilter) => write!(f, "{}", feefilter),
-            message::Msg::Getheaders(getheaders) => write!(f, "{}", getheaders),
-            message::Msg::Getblocks(getblocks) => write!(f, "{}", getblocks),
-            message::Msg::Version(version) => write!(f, "{}", version),
-            message::Msg::Notfound(notfound) => write!(f, "{}", notfound),
-            message::Msg::Reject(reject) => write!(f, "{}", reject),
-            message::Msg::Compactblock(compactblock) => write!(f, "{}", compactblock),
-            message::Msg::Sendcompact(sendcompact) => write!(f, "{}", sendcompact),
-            message::Msg::Block(block) => write!(f, "{}", block),
-            message::Msg::Getblocktxn(getblocktxn) => write!(f, "{}", getblocktxn),
-            message::Msg::Blocktxn(blocktxn) => write!(f, "{}", blocktxn),
-            message::Msg::Alert(blocktxn) => write!(f, "{}", blocktxn),
-            message::Msg::Filteradd(filteradd) => write!(f, "{}", filteradd),
-            message::Msg::Filterload(filterload) => write!(f, "{}", filterload),
-            message::Msg::Getcfcheckpt(getcfcheckpt) => write!(f, "{}", getcfcheckpt),
-            message::Msg::Cfcheckpt(cfcheckpt) => write!(f, "{}", cfcheckpt),
-            message::Msg::Cfheaders(cfheaders) => write!(f, "{}", cfheaders),
-            message::Msg::Getcfheaders(getcfheaders) => write!(f, "{}", getcfheaders),
-            message::Msg::Getcfilter(getcfilter) => write!(f, "{}", getcfilter),
-            message::Msg::Cfilter(cfilter) => write!(f, "{}", cfilter),
-            message::Msg::Merkleblock(merkleblock) => write!(f, "{}", merkleblock),
-            message::Msg::Unknown(unknown) => write!(f, "{}", unknown),
-            message::Msg::Filterclear(_) => write!(f, "filterclear"),
-            message::Msg::Verack(_) => write!(f, "verack"),
-            message::Msg::Sendheaders(_) => write!(f, "sendHeaders"),
-            message::Msg::Getaddr(_) => write!(f, "getaddr"),
-            message::Msg::Mempool(_) => write!(f, "mempool"),
-            message::Msg::Wtxidrelay(_) => write!(f, "wtxidrelay"),
-            message::Msg::Sendaddrv2(_) => write!(f, "sendaddrv2"),
-            message::Msg::Emptyaddrv2(_) => write!(f, "empty_addrv2"),
-            message::Msg::Oldping(_) => write!(f, "old_ping"),
+            message_event::Msg::Ping(ping) => write!(f, "{}", ping),
+            message_event::Msg::Pong(pong) => write!(f, "{}", pong),
+            message_event::Msg::Inv(inv) => write!(f, "{}", inv),
+            message_event::Msg::Getdata(getdata) => write!(f, "{}", getdata),
+            message_event::Msg::Tx(tx) => write!(f, "{}", tx),
+            message_event::Msg::Headers(headers) => write!(f, "{}", headers),
+            message_event::Msg::Addr(addr) => write!(f, "{}", addr),
+            message_event::Msg::Addrv2(addr) => write!(f, "{}", addr),
+            message_event::Msg::Feefilter(feefilter) => write!(f, "{}", feefilter),
+            message_event::Msg::Getheaders(getheaders) => write!(f, "{}", getheaders),
+            message_event::Msg::Getblocks(getblocks) => write!(f, "{}", getblocks),
+            message_event::Msg::Version(version) => write!(f, "{}", version),
+            message_event::Msg::Notfound(notfound) => write!(f, "{}", notfound),
+            message_event::Msg::Reject(reject) => write!(f, "{}", reject),
+            message_event::Msg::Compactblock(compactblock) => write!(f, "{}", compactblock),
+            message_event::Msg::Sendcompact(sendcompact) => write!(f, "{}", sendcompact),
+            message_event::Msg::Block(block) => write!(f, "{}", block),
+            message_event::Msg::Getblocktxn(getblocktxn) => write!(f, "{}", getblocktxn),
+            message_event::Msg::Blocktxn(blocktxn) => write!(f, "{}", blocktxn),
+            message_event::Msg::Alert(blocktxn) => write!(f, "{}", blocktxn),
+            message_event::Msg::Filteradd(filteradd) => write!(f, "{}", filteradd),
+            message_event::Msg::Filterload(filterload) => write!(f, "{}", filterload),
+            message_event::Msg::Getcfcheckpt(getcfcheckpt) => write!(f, "{}", getcfcheckpt),
+            message_event::Msg::Cfcheckpt(cfcheckpt) => write!(f, "{}", cfcheckpt),
+            message_event::Msg::Cfheaders(cfheaders) => write!(f, "{}", cfheaders),
+            message_event::Msg::Getcfheaders(getcfheaders) => write!(f, "{}", getcfheaders),
+            message_event::Msg::Getcfilter(getcfilter) => write!(f, "{}", getcfilter),
+            message_event::Msg::Cfilter(cfilter) => write!(f, "{}", cfilter),
+            message_event::Msg::Merkleblock(merkleblock) => write!(f, "{}", merkleblock),
+            message_event::Msg::Unknown(unknown) => write!(f, "{}", unknown),
+            message_event::Msg::Filterclear(_) => write!(f, "filterclear"),
+            message_event::Msg::Verack(_) => write!(f, "verack"),
+            message_event::Msg::Sendheaders(_) => write!(f, "sendHeaders"),
+            message_event::Msg::Getaddr(_) => write!(f, "getaddr"),
+            message_event::Msg::Mempool(_) => write!(f, "mempool"),
+            message_event::Msg::Wtxidrelay(_) => write!(f, "wtxidrelay"),
+            message_event::Msg::Sendaddrv2(_) => write!(f, "sendaddrv2"),
+            message_event::Msg::Emptyaddrv2(_) => write!(f, "empty_addrv2"),
+            message_event::Msg::Oldping(_) => write!(f, "old_ping"),
         }
     }
 }
 
-impl fmt::Display for Message {
+impl fmt::Display for MessageEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.msg {
             Some(msg) => write!(
@@ -668,10 +668,10 @@ impl fmt::Display for Message {
     }
 }
 
-impl From<&p2p::message::NetworkMessage> for message::Msg {
+impl From<&p2p::message::NetworkMessage> for message_event::Msg {
     fn from(msg: &p2p::message::NetworkMessage) -> Self {
         use bitcoin::p2p::message::NetworkMessage;
-        use message::Msg;
+        use message_event::Msg;
 
         match msg {
             NetworkMessage::Ping(x) => Msg::Ping(Ping { value: *x }),

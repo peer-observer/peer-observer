@@ -2,7 +2,7 @@ syntax = "proto2";
 
 import "bitcoin_primitives.proto";
 
-package ebpf_extractor.net_msg;
+package ebpf_extractor.message;
 
 // Metadata for a P2P message.
 message Metadata {
@@ -14,8 +14,8 @@ message Metadata {
   required uint64  size                    = 6;  // Serialized message size
 }
 
-// A P2P message.
-message Message {
+// A P2P message event.
+message MessageEvent {
   required Metadata meta = 1;
   oneof msg {
     Ping ping = 2;

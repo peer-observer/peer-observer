@@ -6,7 +6,7 @@ use bitcoin::hex::*;
 use bitcoin::p2p::message::{NetworkMessage, RawNetworkMessage};
 
 use crate::protobuf::bitcoin_primitives::ConnType;
-use crate::protobuf::ebpf_extractor::net_msg;
+use crate::protobuf::ebpf_extractor::message;
 
 // Tor v3 addresses are 62 chars + 6 chars for the port (':12345').
 const MAX_PEER_ADDR_LENGTH: usize = 62 + 6;
@@ -56,10 +56,10 @@ impl P2PMessageMetadata {
         unsafe { ptr::read_unaligned(x.as_ptr() as *const Self) }
     }
 
-    pub fn create_protobuf_metadata(&self) -> net_msg::Metadata {
+    pub fn create_protobuf_metadata(&self) -> message::Metadata {
         let conn_type: ConnType = self.peer_conn_type().into();
 
-        net_msg::Metadata {
+        message::Metadata {
             peer_id: self.peer_id,
             addr: self.peer_addr(),
             conn_type: conn_type as i32,
@@ -102,7 +102,7 @@ impl P2PMessage {
 
     pub fn decode_to_protobuf_network_message(
         &self,
-    ) -> Result<net_msg::message::Msg, P2PMessageDecodeError> {
+    ) -> Result<message::message_event::Msg, P2PMessageDecodeError> {
         decode_network_message(&self.meta, &self.payload)
     }
 }
@@ -427,7 +427,7 @@ impl ValidationBlockConnected {
 fn decode_network_message(
     meta: &P2PMessageMetadata,
     payload: &[u8],
-) -> Result<net_msg::message::Msg, P2PMessageDecodeError> {
+) -> Result<message::message_event::Msg, P2PMessageDecodeError> {
     // We first try to decode the network message with rust-bitcoin.
     // If that fails, we try to handle a few known, weird messages.
     match decode_rust_bitcoin_network_message(meta, payload) {
@@ -470,20 +470,20 @@ fn decode_rust_bitcoin_network_message(
 fn decode_weird_network_message(
     meta: &P2PMessageMetadata,
     payload: &[u8],
-) -> Option<net_msg::message::Msg> {
+) -> Option<message::message_event::Msg> {
     match meta.msg_type().as_str() {
         "addrv2" => {
             if meta.msg_size == 0 {
                 // case: empty addrv2 message.
                 log::debug!("emtpy addrv2: {}", meta);
-                return Some(net_msg::message::Msg::Emptyaddrv2(true));
+                return Some(message::message_event::Msg::Emptyaddrv2(true));
             }
         }
         "ping" => {
             if meta.msg_size == 0 {
                 // case: old ping message with no nonce.
                 log::debug!("no-value ping: {}", meta);
-                return Some(net_msg::message::Msg::Oldping(true));
+                return Some(message::message_event::Msg::Oldping(true));
             }
         }
         "tx" => {

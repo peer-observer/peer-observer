@@ -315,7 +315,7 @@
       } else {
         console.log(m.Conn);
       }
-    } else if (m.hasOwnProperty("Msg")) {
+    } else if (m.hasOwnProperty("Message")) {
       // Handle P2P msg events
       let meta = m.Msg.meta;
       if (!g_nodes.has(meta.peer_id)) {

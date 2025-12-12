@@ -304,8 +304,8 @@
 
   function handleWebsocketMessage(e) {
     let event = JSON.parse(e.data)
-    if ("Msg" in event) {
-      let meta = event["Msg"]["meta"]
+    if ("Message" in event) {
+      let meta = event["Message"]["meta"]
       if (!(meta.peer_id in peers)) {
         peers[meta.peer_id] = {
           id: meta.peer_id,
@@ -337,7 +337,7 @@
       let details = "";
       if (meta.command == "inv") {
         let invTypeCount = {}
-        let inv = event["Msg"].msg.Inv.items
+        let inv = event["Message"].msg.Inv.items
         inv.forEach(i => {
           let invType = Object.keys(i.item)[0]
           if (!(invType in invTypeCount)) {
@@ -349,7 +349,7 @@
         details = Object.entries(invTypeCount).map(([k, v]) => v + "x " + k).join(", ")
       } else if (meta.command == "getdata") {
         let getdataTypeCount = {}
-        let getdata = event["Msg"].msg.Getdata.items
+        let getdata = event["Message"].msg.Getdata.items
         getdata.forEach(i => {
           let getdataType = Object.keys(i.item)[0]
           if (!(getdataType in getdataTypeCount)) {
@@ -360,28 +360,28 @@
 
         details = Object.entries(getdataTypeCount).map(([k, v]) => v + "x " + k).join(", ")
       } else if (meta.command == "addrv2") {
-        if (event["Msg"].msg.Emptyaddrv2) {
+        if (event["Message"].msg.Emptyaddrv2) {
           details = "empty!"
           peers[meta.peer_id].weird = true;
         } else {
-          details = event["Msg"].msg.Addrv2.addresses.length + "x "
+          details = event["Message"].msg.Addrv2.addresses.length + "x "
         }
       } else if (meta.command == "addr") {
-        console.log("addr", event["Msg"].msg)
-        details = event["Msg"].msg.Addr.addresses.length + "x "
+        console.log("addr", event["Message"].msg)
+        details = event["Message"].msg.Addr.addresses.length + "x "
       } else if (meta.command == "ping") {
-        if (event["Msg"].msg.Oldping) {
+        if (event["Message"].msg.Oldping) {
           details = "no-value"
           peers[meta.peer_id].weird = true;
         } else {
           // JS MAX_SAFE_INTEGER is smaller than this 64 bit ping-"value". The
           // value is not accurate anymore.
-          details = event["Msg"].msg.Ping.value.toString(16).substring(0, 8) + "…"
+          details = event["Message"].msg.Ping.value.toString(16).substring(0, 8) + "…"
         }
       } else if (meta.command == "pong") {
-        details = event["Msg"].msg.Pong.value.toString(16).substring(0, 8) + "…"
+        details = event["Message"].msg.Pong.value.toString(16).substring(0, 8) + "…"
       } else if (meta.command == "tx") {
-        let txid = new Uint8Array(event["Msg"].msg.Tx.tx.txid)
+        let txid = new Uint8Array(event["Message"].msg.Tx.tx.txid)
         txid.reverse();
         details = uint8ArrayToHexString(txid).substr(0, 8) + "…"
       }

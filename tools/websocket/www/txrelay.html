@@ -200,8 +200,8 @@
 
   function handleWebsocketMessage(e) {
     let event = JSON.parse(e.data)
-    if ("Msg" in event) {
-      let meta = event["Msg"]["meta"]
+    if ("Message" in event) {
+      let meta = event["Message"]["meta"]
       if (!(meta.peer_id in peers)) {
         peers[meta.peer_id] = {
           id: meta.peer_id,
@@ -231,7 +231,7 @@
 
       let direction = meta.inbound ? "inbound" : "outbound"
       if (meta.command == "inv") {
-        let inv = event["Msg"].msg.Inv.items
+        let inv = event["Message"].msg.Inv.items
         inv.forEach(entry => {
           if (entry.item.Wtx || entry.item.Transaction) {
             peers[meta.peer_id][direction].inv += 1
@@ -245,7 +245,7 @@
           }
         })
       } else if (meta.command == "getdata") {
-        let getdata = event["Msg"].msg.Getdata.items
+        let getdata = event["Message"].msg.Getdata.items
         getdata.forEach(entry => {
           if (entry.item.Wtx || entry.item.WitnessTransaction) {
             peers[meta.peer_id][direction].getdata += 1
@@ -269,7 +269,7 @@
       } else if (meta.command == "tx") {
         peers[meta.peer_id][direction].tx += 1
         if (meta.inbound) {
-          let tx = event["Msg"].msg.Tx.tx;
+          let tx = event["Message"].msg.Tx.tx;
           let txid = uint8ArrayToHexString(new Uint8Array(tx.txid))
           let wtxid = uint8ArrayToHexString(new Uint8Array(tx.wtxid))
           if (!(peers[meta.peer_id].transactionsWeRequested.includes(txid) || peers[meta.peer_id].transactionsWeRequested.includes(wtxid))) {
@@ -279,7 +279,7 @@
         }
       } else if (meta.command == "version") {
         if (meta.inbound) {
-          peers[meta.peer_id].version = event["Msg"].msg.Version.user_agent
+          peers[meta.peer_id].version = event["Message"].msg.Version.user_agent
         }
       }
 

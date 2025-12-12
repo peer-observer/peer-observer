@@ -6,9 +6,9 @@ use shared::{
     nats_subjects::Subject,
     prost::Message,
     protobuf::ebpf_extractor::{
-        ebpf,
         connection::{self, Connection},
-        net_msg::{self, message::Msg, Metadata, Ping, Pong},
+        ebpf,
+        message::{self, message_event::Msg, Metadata, Ping, Pong},
         Ebpf,
     },
     protobuf::event::{event::PeerObserverEvent, Event},
@@ -195,7 +195,7 @@ async fn test_integration_websocket_p2p_message_ping() {
     publish_and_check(
         &[
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent  {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -209,7 +209,7 @@ async fn test_integration_websocket_p2p_message_ping() {
             }))
             .unwrap(),
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent  {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -225,8 +225,8 @@ async fn test_integration_websocket_p2p_message_ping() {
         ],
         Subject::NetMsg,
         &vec![
-            r#"{"EbpfExtractor":{"ebpf_event":{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"ping","inbound":true,"size":8},"msg":{"Ping":{"value":1}}}}}}"#,
-            r#"{"EbpfExtractor":{"ebpf_event":{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"pong","inbound":false,"size":8},"msg":{"Pong":{"value":1}}}}}}"#,
+            r#"{"EbpfExtractor":{"ebpf_event":{"Message":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"ping","inbound":true,"size":8},"msg":{"Ping":{"value":1}}}}}}"#,
+            r#"{"EbpfExtractor":{"ebpf_event":{"Message":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"pong","inbound":false,"size":8},"msg":{"Pong":{"value":1}}}}}}"#,
         ],
         1,
         None
@@ -241,7 +241,7 @@ async fn test_integration_websocket_multi_client() {
     publish_and_check(
         &[
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent  {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -255,7 +255,7 @@ async fn test_integration_websocket_multi_client() {
             }))
             .unwrap(),
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent  {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -271,8 +271,8 @@ async fn test_integration_websocket_multi_client() {
         ],
         Subject::NetMsg,
         &vec![
-            r#"{"EbpfExtractor":{"ebpf_event":{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"ping","inbound":true,"size":8},"msg":{"Ping":{"value":1}}}}}}"#,
-            r#"{"EbpfExtractor":{"ebpf_event":{"Msg":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"pong","inbound":false,"size":8},"msg":{"Pong":{"value":1}}}}}}"#,
+            r#"{"EbpfExtractor":{"ebpf_event":{"Message":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"ping","inbound":true,"size":8},"msg":{"Ping":{"value":1}}}}}}"#,
+            r#"{"EbpfExtractor":{"ebpf_event":{"Message":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"pong","inbound":false,"size":8},"msg":{"Pong":{"value":1}}}}}}"#,
         ],
         12,
         None

@@ -248,8 +248,8 @@
 
   function handleWebsocketMessage(e) {
     let event = JSON.parse(e.data)
-    if ("Msg" in event) {
-      let meta = event["Msg"]["meta"]
+    if ("Message" in event) {
+      let meta = event["Message"]["meta"]
       if (!(meta.peer_id in peers)) {
         peers[meta.peer_id] = {
           id: meta.peer_id,
@@ -269,7 +269,7 @@
 
       let direction = meta.inbound ? "inbound" : "outbound"
       if (meta.command == "addr") {
-        let addresses = event["Msg"].msg.Addr.addresses
+        let addresses = event["Message"].msg.Addr.addresses
         for (a of addresses) {
           if ("Ipv4" in a.address) {
             peers[meta.peer_id][direction].addr.ipv4 += 1
@@ -284,7 +284,7 @@
           }
         }
       } else if (meta.command == "addrv2") {
-        let addresses = event["Msg"].msg.Addrv2.addresses
+        let addresses = event["Message"].msg.Addrv2.addresses
         for (a of addresses) {
           if ("Ipv4" in a.address) {
             peers[meta.peer_id][direction].addrv2.ipv4 += 1
@@ -302,7 +302,7 @@
         peers[meta.peer_id][direction].getaddr += 1
       } else if (meta.command == "version") {
         if (meta.inbound) {
-          peers[meta.peer_id].version = event["Msg"].msg.Version.user_agent
+          peers[meta.peer_id].version = event["Message"].msg.Version.user_agent
         }
       }
 

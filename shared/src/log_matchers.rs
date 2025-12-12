@@ -184,15 +184,15 @@ fn parse_common_log_data(line: &str) -> (u64, LogDebugCategory, String) {
 // TODO: p2p::P2pEvent::PingDuration
 // TODO: log::LogEvent::UnknownLogMessage
 // TODO: rpc::RpcEvent::PeerInfos
-// TODO: net_msg::message::Msg::Addr
-// TODO: net_msg::message::Msg::Addrv2
-// TODO: net_msg::message::Msg::Emptyaddrv2
-// TODO: net_msg::message::Msg::Inv
-// TODO: net_msg::message::Msg::Ping
-// TODO: net_msg::message::Msg::Oldping
-// TODO: net_msg::message::Msg::Version
-// TODO: net_msg::message::Msg::Feefilter
-// TODO: net_msg::message::Msg::Reject
+// TODO: message::message_event::Msg::Addr
+// TODO: message::message_event::Msg::Addrv2
+// TODO: message::message_event::Msg::Emptyaddrv2
+// TODO: message::message_event::Msg::Inv
+// TODO: message::message_event::Msg::Ping
+// TODO: message::message_event::Msg::Oldping
+// TODO: message::message_event::Msg::Version
+// TODO: message::message_event::Msg::Feefilter
+// TODO: message::message_event::Msg::Reject
 
 #[cfg(test)]
 mod tests {

@@ -11,15 +11,15 @@ use shared::{
         bitcoin_primitives::{self, inventory_item::Item, Address, InventoryItem},
         ebpf_extractor::{
             addrman::{self, InsertNew, InsertTried},
-            ebpf,
-            mempool::{self, Added, Rejected, Removed, Replaced},
             connection::{
                 self, ClosedConnection, Connection, EvictedInboundConnection, InboundConnection,
                 MisbehavingConnection,
             },
-            net_msg::{
-                self, message::Msg, Addr, AddrV2, FeeFilter, Inv, Metadata, Ping, Pong, Reject,
-                Version,
+            ebpf,
+            mempool::{self, Added, Rejected, Removed, Replaced},
+            message::{
+                self, message_event::Msg, Addr, AddrV2, FeeFilter, Inv, Metadata, Ping, Pong,
+                Reject, Version,
             },
             validation::{self, BlockConnected},
             Ebpf,
@@ -238,7 +238,7 @@ async fn test_integration_metrics_p2p_message_count() {
     publish_and_check(
         &[
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -252,7 +252,7 @@ async fn test_integration_metrics_p2p_message_count() {
             }))
             .unwrap(),
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -284,7 +284,7 @@ async fn test_integration_metrics_p2p_traffic_linkinglion() {
     publish_and_check(
         &[
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "162.218.65.123".to_string(), // an IP belonging to LinkingLion
@@ -298,7 +298,7 @@ async fn test_integration_metrics_p2p_traffic_linkinglion() {
             }))
             .unwrap(),
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "91.198.115.23:8333".to_string(), // another IP belonging to LinkingLion
@@ -335,7 +335,7 @@ async fn test_integration_metrics_p2p_addr() {
 
     publish_and_check(
         &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-            ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+            ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent  {
                 meta: Metadata {
                     peer_id: 4,
                     addr: "127.0.0.1:1234".to_string(),
@@ -549,7 +549,7 @@ async fn test_integration_metrics_p2p_addrv2() {
 
     publish_and_check(
         &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-            ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+            ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent  {
                 meta: Metadata {
                     peer_id: 8,
                     addr: "127.0.0.1:1111".to_string(),
@@ -756,7 +756,7 @@ async fn test_integration_metrics_p2p_version() {
     publish_and_check(
         &[
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
                     meta: Metadata {
                         peer_id: 6,
                         addr: "127.0.0.1:9999".to_string(),
@@ -794,7 +794,7 @@ async fn test_integration_metrics_p2p_version() {
             }))
             .unwrap(),
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
                     meta: Metadata {
                         peer_id: 2,
                         addr: "162.218.65.123:1234".to_string(),
@@ -853,7 +853,7 @@ async fn test_integration_metrics_p2p_feefilter() {
 
     publish_and_check(
         &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-            ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+            ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent  {
                 meta: Metadata {
                     peer_id: 6,
                     addr: "127.0.0.1:2134".to_string(),
@@ -884,7 +884,7 @@ async fn test_integration_metrics_p2p_rejected() {
 
     publish_and_check(
         &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-            ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+            ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent  {
                 meta: Metadata {
                     peer_id: 6,
                     addr: "127.0.0.1:2134".to_string(),
@@ -903,7 +903,7 @@ async fn test_integration_metrics_p2p_rejected() {
         }))
         .unwrap(),
         Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-            ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+            ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent  {
                 meta: Metadata {
                     peer_id: 6,
                     addr: "127.0.0.1:2134".to_string(),
@@ -939,7 +939,7 @@ async fn test_integration_metrics_p2p_inv() {
     publish_and_check(
         &[
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
                     meta: Metadata {
                         peer_id: 1,
                         addr: "127.0.0.1:2134".to_string(),
@@ -964,7 +964,7 @@ async fn test_integration_metrics_p2p_inv() {
             }))
             .unwrap(),
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
                     meta: Metadata {
                         peer_id: 1,
                         addr: "127.0.0.1:2134".to_string(),
@@ -1070,7 +1070,7 @@ async fn test_integration_metrics_p2p_inv_large_outbound() {
     publish_and_check(
         &[
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
                     meta: Metadata {
                         peer_id: 1,
                         addr: "127.0.0.1:2134".to_string(),
@@ -1086,7 +1086,7 @@ async fn test_integration_metrics_p2p_inv_large_outbound() {
             }))
             .unwrap(),
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
                     meta: Metadata {
                         peer_id: 2,
                         addr: "127.0.0.1:2134".to_string(),
@@ -1102,7 +1102,7 @@ async fn test_integration_metrics_p2p_inv_large_outbound() {
             }))
             .unwrap(),
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
                     meta: Metadata {
                         peer_id: 3,
                         addr: "127.0.0.1:2134".to_string(),
@@ -1140,7 +1140,7 @@ async fn test_integration_metrics_p2p_oldping() {
 
     publish_and_check(
         &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-            ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+            ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
                 meta: Metadata {
                     peer_id: 6,
                     addr: "127.0.0.1:2134".to_string(),
@@ -1187,7 +1187,7 @@ async fn test_integration_metrics_p2p_ping_value() {
         .iter()
         .map(|v| {
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
                     meta: Metadata {
                         peer_id: 6,
                         addr: "127.0.0.1:2134".to_string(),
@@ -1223,7 +1223,7 @@ async fn test_integration_metrics_p2p_empty_addrv2() {
 
     publish_and_check(
         &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-            ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+            ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
                 meta: Metadata {
                     peer_id: 6,
                     addr: "127.0.0.1:2134".to_string(),

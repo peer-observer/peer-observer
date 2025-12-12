@@ -9,10 +9,10 @@ use shared::{
     protobuf::{
         ebpf_extractor::{
             addrman::{self, InsertNew, InsertTried},
+            connection::{self, Connection, InboundConnection},
             ebpf,
             mempool::{self, Added},
-            connection::{self, Connection, InboundConnection},
-            net_msg::{self, message::Msg, Metadata, Ping, Pong},
+            message::{self, message_event::Msg, Metadata, Ping, Pong},
             validation::{self, BlockConnected},
             Ebpf,
         },
@@ -190,7 +190,7 @@ async fn test_integration_logger_p2p_messages() {
     publish_and_check(
         &[
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),
@@ -204,7 +204,7 @@ async fn test_integration_logger_p2p_messages() {
             }))
             .unwrap(),
             Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-                ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
                     meta: Metadata {
                         peer_id: 0,
                         addr: "127.0.0.1:8333".to_string(),

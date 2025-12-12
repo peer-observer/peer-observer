@@ -10,11 +10,11 @@ use shared::prost::Message;
 use shared::protobuf::{
     ebpf_extractor::{
         addrman::addrman_event,
+        connection::connection_event,
         ebpf,
         mempool::mempool_event,
-        connection::connection_event,
-        net_msg,
-        net_msg::{message::Msg, reject::RejectReason},
+        message,
+        message::{message_event::Msg, reject::RejectReason},
         validation::validation_event,
     },
     event::{event::PeerObserverEvent, Event},
@@ -120,7 +120,7 @@ fn handle_event(
     if let Some(event) = unwrapped.peer_observer_event {
         match event {
             PeerObserverEvent::EbpfExtractor(ebpf) => match ebpf.ebpf_event.unwrap() {
-                ebpf::EbpfEvent::Msg(msg) => {
+                ebpf::EbpfEvent::Message(msg) => {
                     handle_p2p_message(&msg, unwrapped.timestamp, metrics);
                 }
                 ebpf::EbpfEvent::Connection(conn) => {
@@ -737,7 +737,7 @@ fn handle_addrman_event(aevent: &addrman_event::Event, metrics: metrics::Metrics
     }
 }
 
-fn handle_p2p_message(msg: &net_msg::Message, timestamp_ms: u64, metrics: metrics::Metrics) {
+fn handle_p2p_message(msg: &message::MessageEvent, timestamp_ms: u64, metrics: metrics::Metrics) {
     let conn_type = msg.meta.conn_type.to_string();
     let direction = if msg.meta.inbound {
         "inbound".to_string()

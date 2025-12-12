@@ -159,7 +159,7 @@ fn log_event(event: Event, args: Args) {
     let log_all = args.show_all();
     match event.peer_observer_event.unwrap() {
         PeerObserverEvent::EbpfExtractor(ebpf) => match ebpf.ebpf_event.unwrap() {
-            ebpf::EbpfEvent::Msg(msg) => {
+            ebpf::EbpfEvent::Message(msg) => {
                 if log_all || args.messages {
                     log::info!("message: {}", msg);
                 }

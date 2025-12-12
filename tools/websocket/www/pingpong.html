@@ -177,8 +177,8 @@
 
   function handleWebsocketMessage(e) {
     let event = JSON.parse(e.data)
-    if ("Msg" in event) {
-      let meta = event["Msg"]["meta"]
+    if ("Message" in event) {
+      let meta = event["Message"]["meta"]
       if (!(meta.peer_id in peers)) {
         peers[meta.peer_id] = {
           id: meta.peer_id,
@@ -203,7 +203,7 @@
         peers[meta.peer_id][direction].pong += 1
       } else if (meta.command == "version") {
         if (meta.inbound) {
-          peers[meta.peer_id].version = event["Msg"].msg.Version.user_agent
+          peers[meta.peer_id].version = event["Message"].msg.Version.user_agent
         }
       }
 

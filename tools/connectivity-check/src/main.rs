@@ -16,8 +16,8 @@ use shared::prost::Message as ProstMessage;
 use shared::protobuf::bitcoin_primitives::address::Address as AddressType;
 use shared::protobuf::bitcoin_primitives::Address;
 use shared::protobuf::ebpf_extractor::ebpf::EbpfEvent;
-use shared::protobuf::ebpf_extractor::net_msg::message::Msg;
-use shared::protobuf::ebpf_extractor::net_msg::Message as NetMessage;
+use shared::protobuf::ebpf_extractor::message::message_event::Msg;
+use shared::protobuf::ebpf_extractor::message::MessageEvent as NetMessage;
 use shared::protobuf::event;
 use shared::protobuf::event::event::PeerObserverEvent;
 use shared::simple_logger;
@@ -215,7 +215,7 @@ fn worker(
 fn handle_event(event: PeerObserverEvent, timestamp: u64, input_sender: Sender<Input>) {
     match event {
         PeerObserverEvent::EbpfExtractor(event) => match event.ebpf_event.unwrap() {
-            EbpfEvent::Msg(msg) => {
+            EbpfEvent::Message(msg) => {
                 if msg.meta.inbound {
                     handle_inbound_message(msg, timestamp, input_sender);
                 }

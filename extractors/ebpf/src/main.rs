@@ -13,7 +13,7 @@ use shared::protobuf::ebpf_extractor::ctypes::{
     P2PMessage, ValidationBlockConnected,
 };
 use shared::protobuf::ebpf_extractor::{
-    addrman, ebpf, mempool, connection, net_msg, validation, Ebpf,
+    addrman, connection, ebpf, mempool, message, validation, Ebpf,
 };
 use shared::protobuf::event::event::PeerObserverEvent;
 use shared::protobuf::event::Event;
@@ -455,7 +455,9 @@ fn handle_net_conn_outbound(data: &[u8], nc: &async_nats::Client) -> i32 {
     let outbound = OutboundConnection::from_bytes(data);
     let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
         ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
-            event: Some(connection::connection_event::Event::Outbound(outbound.into())),
+            event: Some(connection::connection_event::Event::Outbound(
+                outbound.into(),
+            )),
         })),
     })) {
         Ok(p) => p,
@@ -580,7 +582,7 @@ fn handle_net_message(data: &[u8], nc: &async_nats::Client) -> i32 {
         }
     };
     let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Msg(net_msg::Message {
+        ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
             meta: message.meta.create_protobuf_metadata(),
             msg: Some(protobuf_message),
         })),
