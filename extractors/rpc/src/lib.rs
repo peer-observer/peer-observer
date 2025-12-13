@@ -78,6 +78,10 @@ pub struct Args {
     /// Disable quering and publishing of `getaddrmaninfo` data.
     #[arg(long, default_value_t = false)]
     pub disable_getaddrmaninfo: bool,
+
+    /// Disable quering and publishing of `getchaintxstats` data.
+    #[arg(long, default_value_t = false)]
+    pub disable_getchaintxstats: bool,
 }
 
 impl Args {
@@ -94,6 +98,7 @@ impl Args {
         disable_getnettotals: bool,
         disable_getmemoryinfo: bool,
         disable_getaddrmaninfo: bool,
+        disable_getchaintxstats: bool,
     ) -> Args {
         Self {
             nats_address,
@@ -109,6 +114,7 @@ impl Args {
             disable_getnettotals,
             disable_getmemoryinfo,
             disable_getaddrmaninfo,
+            disable_getchaintxstats,
             // when adding more disable_* args, make sure to update the disable_all below
         }
     }
@@ -156,13 +162,18 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         "Querying getaddrmaninfo enabled: {}",
         !args.disable_getaddrmaninfo
     );
+    log::info!(
+        "Querying getchaintxstats enabled: {}",
+        !args.disable_getchaintxstats
+    );
     // check if we have at least one RPC to query
     let disable_all = args.disable_getpeerinfo
         && args.disable_getmempoolinfo
         && args.disable_uptime
         && args.disable_getnettotals
         && args.disable_getmemoryinfo
-        && args.disable_getaddrmaninfo;
+        && args.disable_getaddrmaninfo
+        && args.disable_getchaintxstats;
     if disable_all {
         log::warn!("No RPC configured to be queried!");
     }
@@ -193,6 +204,10 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
                 if !args.disable_getaddrmaninfo
                     && let Err(e) = getaddrmaninfo(&rpc_client, &nats_client).await {
                         log::error!("Could not fetch and publish 'getaddrmaninfo': {}", e)
+                    }
+                if !args.disable_getchaintxstats
+                    && let Err(e) = getchaintxstats(&rpc_client, &nats_client).await {
+                        log::error!("Could not fetch and publish 'getchaintxstats': {}", e)
                     }
             }
             res = shutdown_rx.changed() => {
@@ -306,6 +321,24 @@ async fn getaddrmaninfo(
     let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
         rpc_event: Some(rpc_extractor::rpc::RpcEvent::AddrmanInfo(
             addrman_info.into(),
+        )),
+    }))?;
+
+    nats_client
+        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
+        .await?;
+    Ok(())
+}
+
+async fn getchaintxstats(
+    rpc_client: &Client,
+    nats_client: &async_nats::Client,
+) -> Result<(), FetchOrPublishError> {
+    let chain_tx_stats = rpc_client.get_chain_tx_stats()?;
+
+    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+        rpc_event: Some(rpc_extractor::rpc::RpcEvent::ChainTxStats(
+            chain_tx_stats.into(),
         )),
     }))?;
 
