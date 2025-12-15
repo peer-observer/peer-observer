@@ -55,31 +55,31 @@ pub struct Args {
     #[arg(long, default_value_t = 10)]
     pub query_interval: u64,
 
-    /// Disable quering and publishing of `getpeerinfo` data.
+    /// Disable querying and publishing of `getpeerinfo` data.
     #[arg(long, default_value_t = false)]
     pub disable_getpeerinfo: bool,
 
-    /// Disable quering and publishing of `getmempoolinfo` data.
+    /// Disable querying and publishing of `getmempoolinfo` data.
     #[arg(long, default_value_t = false)]
     pub disable_getmempoolinfo: bool,
 
-    /// Disable quering and publishing of `uptime` data.
+    /// Disable querying and publishing of `uptime` data.
     #[arg(long, default_value_t = false)]
     pub disable_uptime: bool,
 
-    /// Disable quering and publishing of `getnettotals` data.
+    /// Disable querying and publishing of `getnettotals` data.
     #[arg(long, default_value_t = false)]
     pub disable_getnettotals: bool,
 
-    /// Disable quering and publishing of `getmemoryinfo` data.
+    /// Disable querying and publishing of `getmemoryinfo` data.
     #[arg(long, default_value_t = false)]
     pub disable_getmemoryinfo: bool,
 
-    /// Disable quering and publishing of `getaddrmaninfo` data.
+    /// Disable querying and publishing of `getaddrmaninfo` data.
     #[arg(long, default_value_t = false)]
     pub disable_getaddrmaninfo: bool,
 
-    /// Disable quering and publishing of `getchaintxstats` data.
+    /// Disable querying and publishing of `getchaintxstats` data.
     #[arg(long, default_value_t = false)]
     pub disable_getchaintxstats: bool,
 }
