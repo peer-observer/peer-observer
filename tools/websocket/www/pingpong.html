@@ -28,7 +28,7 @@
 
         <th scope="col" class="inbound-msg">ping</th>
         <th scope="col" class="inbound-msg">pong</th>
-        
+
         <th scope="col" class="outbound-msg">ping</th>
         <th scope="col" class="outbound-msg">pong</th>
 
@@ -50,7 +50,7 @@
 
     <td id="in-ping" class="inbound-msg"></td>
     <td id="out-pong" class="inbound-msg"></td>
-    
+
     <td id="out-ping" class="outbound-msg"></td>
     <td id="in-pong" class="outbound-msg"></td>
 
@@ -175,55 +175,52 @@
     }
   }
 
-  function handleWebsocketMessage(e) {
-    let event = JSON.parse(e.data)
-    if ("Message" in event) {
-      let meta = event["Message"]["meta"]
-      if (!(meta.peer_id in peers)) {
-        peers[meta.peer_id] = {
-          id: meta.peer_id,
-          addr: meta.addr,
-          conn: connTypeToString(meta.conn_type),
-          closed: false,
-          evicted: false,
-          version: "unknown",
-          // TODO empty addrv2
-          // TODO service bits
-          inbound: { ping: 0, pong: 0 },
-          outbound: { ping: 0, pong: 0 },
-          scheduledForRemoval: false,
-        }
-        addPeer(peers[meta.peer_id])
+  function handle_ebpf_extractor_message(message) {
+    let meta = message.meta;
+    if (!(meta.peer_id in peers)) {
+      peers[meta.peer_id] = {
+        id: meta.peer_id,
+        addr: meta.addr,
+        conn: connTypeToString(meta.conn_type),
+        closed: false,
+        evicted: false,
+        version: "unknown",
+        inbound: { ping: 0, pong: 0 },
+        outbound: { ping: 0, pong: 0 },
+        scheduledForRemoval: false,
       }
+      addPeer(peers[meta.peer_id])
+    }
 
-      let direction = meta.inbound ? "inbound" : "outbound"
-      if (meta.command == "ping") {
-        peers[meta.peer_id][direction].ping += 1
-      } else if (meta.command == "pong") {
-        peers[meta.peer_id][direction].pong += 1
-      } else if (meta.command == "version") {
-        if (meta.inbound) {
-          peers[meta.peer_id].version = event["Message"].msg.Version.user_agent
-        }
-      }
-
-      redrawPeer(meta.peer_id)
-    } if ("Connection" in event) {
-      if ("Closed" in event.Conn.event) {
-        closeEvent = event.Conn.event.Closed
-        if (closeEvent.conn.peer_id in peers) {
-          peers[closeEvent.conn.peer_id].closed = true;
-          redrawPeer(closeEvent.conn.peer_id)
-        }
-      } else if ("InboundEvicted" in event.Conn.event) {
-        inboundEvictionEvent = event.Conn.event.InboundEvicted
-        if (inboundEvictionEvent.conn.peer_id in peers) {
-          peers[inboundEvictionEvent.conn.peer_id].evicted = true;
-          redrawPeer(inboundEvictionEvent.conn.peer_id)
-        }
+    let direction = meta.inbound ? "inbound" : "outbound"
+    if (meta.command == "ping") {
+      peers[meta.peer_id][direction].ping += 1
+    } else if (meta.command == "pong") {
+      peers[meta.peer_id][direction].pong += 1
+    } else if (meta.command == "version") {
+      if (meta.inbound) {
+        peers[meta.peer_id].version = message.msg.Version.user_agent
       }
     }
-  };
+
+    redrawPeer(meta.peer_id)
+  }
+
+  function handle_ebpf_extractor_connection(connection) {
+    if ("Closed" in connection) {
+      closeEvent = connection.Closed
+      if (closeEvent.conn.peer_id in peers) {
+        peers[closeEvent.conn.peer_id].closed = true;
+        redrawPeer(closeEvent.conn.peer_id)
+      }
+    } else if ("InboundEvicted" in connection) {
+      inboundEvictionEvent = connection.InboundEvicted
+      if (inboundEvictionEvent.conn.peer_id in peers) {
+        peers[inboundEvictionEvent.conn.peer_id].evicted = true;
+        redrawPeer(inboundEvictionEvent.conn.peer_id)
+      }
+    }
+  }
 
   function handleWebsocketReset() {
     peers = new Object()
@@ -233,7 +230,7 @@
   window.onload = (event) => {
     cleanUpClosedPeers()
     runUnitTests()
-    initWebsocketPicker("websockets.json", "websocket-picker", handleWebsocketMessage, handleWebsocketReset)
+    initWebsocketPicker("websockets.json", "websocket-picker", processWebsocketMessage, handleWebsocketReset)
   };
 
 </script>

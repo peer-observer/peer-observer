@@ -125,7 +125,7 @@
     if (isLikelySpy(peer.addr)) {
       clone.querySelector("#peer-addr").style.background = "pink";
     }
-    clone.querySelector("#peer-addr").href = "https://utrace.me/?query=" + removePortFromIPPort(peer.addr).replace("[", "").replace("]", "")
+    clone.querySelector("#peer-addr").href = "https://ipinfo.io/" + removePortFromIPPort(peer.addr).replace("[", "").replace("]", "")
     clone.querySelector("#conn").textContent = peer.conn
     clone.querySelector("#conn").classList.add(peer.conn)
 
@@ -198,115 +198,114 @@
     }
   }
 
-  function handleWebsocketMessage(e) {
-    let event = JSON.parse(e.data)
-    if ("Message" in event) {
-      let meta = event["Message"]["meta"]
-      if (!(meta.peer_id in peers)) {
-        peers[meta.peer_id] = {
-          id: meta.peer_id,
-          addr: meta.addr,
-          conn: connTypeToString(meta.conn_type),
-          closed: false,
-          evicted: false,
-          weird: false,
-          version: "unknown",
-          inbound: { inv: 0, getdata: 0, tx: 0 },
-          outbound: { inv: 0, getdata: 0, tx: 0 },
-          // store transactions we announced to a peer
-          // to see if the peer requests transactions that we
-          // didn't announce
-          transactionsWeAnnounced: [],
-          // store transactions we requested from a peer
-          // to see if the peer sends transactions that we
-          // didn't request
-          transactionsWeRequested: [],
-          requestedUnannounced: 0,
-          // unsolicited transaction
-          sentUnrequested: 0,
-          scheduledForRemoval: false,
-        }
-        addPeer(peers[meta.peer_id])
+  function handle_ebpf_extractor_message(message) {
+    let meta = message.meta;
+    if (!(meta.peer_id in peers)) {
+      peers[meta.peer_id] = {
+        id: meta.peer_id,
+        addr: meta.addr,
+        conn: connTypeToString(meta.conn_type),
+        closed: false,
+        evicted: false,
+        weird: false,
+        version: "unknown",
+        inbound: { inv: 0, getdata: 0, tx: 0 },
+        outbound: { inv: 0, getdata: 0, tx: 0 },
+        // store transactions we announced to a peer
+        // to see if the peer requests transactions that we
+        // didn't announce
+        transactionsWeAnnounced: [],
+        // store transactions we requested from a peer
+        // to see if the peer sends transactions that we
+        // didn't request
+        transactionsWeRequested: [],
+        requestedUnannounced: 0,
+        // unsolicited transaction
+        sentUnrequested: 0,
+        scheduledForRemoval: false,
       }
+      addPeer(peers[meta.peer_id])
+    }
 
-      let direction = meta.inbound ? "inbound" : "outbound"
-      if (meta.command == "inv") {
-        let inv = event["Message"].msg.Inv.items
-        inv.forEach(entry => {
-          if (entry.item.Wtx || entry.item.Transaction) {
-            peers[meta.peer_id][direction].inv += 1
-            if (!meta.inbound && entry.item.Wtx) {
-              let id = uint8ArrayToHexString(new Uint8Array(entry.item.Wtx))
-              peers[meta.peer_id].transactionsWeAnnounced.push(id)
-            } else if (!meta.inbound && entry.item.Transaction) {
-              let id = uint8ArrayToHexString(new Uint8Array(entry.item.Transaction))
-              peers[meta.peer_id].transactionsWeAnnounced.push(id)
-            }
-          }
-        })
-      } else if (meta.command == "getdata") {
-        let getdata = event["Message"].msg.Getdata.items
-        getdata.forEach(entry => {
-          if (entry.item.Wtx || entry.item.WitnessTransaction) {
-            peers[meta.peer_id][direction].getdata += 1
-            id = ""
-            if (entry.item.Wtx) {
-              id = uint8ArrayToHexString(new Uint8Array(entry.item.Wtx))
-            } else if (!meta.inbound && entry.item.Transaction) {
-              id = uint8ArrayToHexString(new Uint8Array(entry.item.Transaction))
-            }
-
-            if (meta.inbound) {
-              if (!peers[meta.peer_id].transactionsWeAnnounced.includes(id)) {
-                peers[meta.peer_id].requestedUnannounced += 1
-                console.log(meta.peer_id, "requested a transaction that we didn't announce")
-              }
-            } else {
-              peers[meta.peer_id].transactionsWeRequested.push(id)
-            }
-          }
-        })
-      } else if (meta.command == "tx") {
-        peers[meta.peer_id][direction].tx += 1
-        if (meta.inbound) {
-          let tx = event["Message"].msg.Tx.tx;
-          let txid = uint8ArrayToHexString(new Uint8Array(tx.txid))
-          let wtxid = uint8ArrayToHexString(new Uint8Array(tx.wtxid))
-          if (!(peers[meta.peer_id].transactionsWeRequested.includes(txid) || peers[meta.peer_id].transactionsWeRequested.includes(wtxid))) {
-            console.log(meta.peer_id, "sent a transaction that we didn't request")
-            peers[meta.peer_id].sentUnrequested += 1
+    let direction = meta.inbound ? "inbound" : "outbound"
+    if (meta.command == "inv") {
+      let inv = message.msg.Inv.items
+      inv.forEach(entry => {
+        if (entry.item.Wtx || entry.item.Transaction) {
+          peers[meta.peer_id][direction].inv += 1
+          if (!meta.inbound && entry.item.Wtx) {
+            let id = uint8ArrayToHexString(new Uint8Array(entry.item.Wtx))
+            peers[meta.peer_id].transactionsWeAnnounced.push(id)
+          } else if (!meta.inbound && entry.item.Transaction) {
+            let id = uint8ArrayToHexString(new Uint8Array(entry.item.Transaction))
+            peers[meta.peer_id].transactionsWeAnnounced.push(id)
           }
         }
-      } else if (meta.command == "version") {
-        if (meta.inbound) {
-          peers[meta.peer_id].version = event["Message"].msg.Version.user_agent
-        }
-      }
+      })
+    } else if (meta.command == "getdata") {
+      let getdata = message.msg.Getdata.items
+      getdata.forEach(entry => {
+        if (entry.item.Wtx || entry.item.WitnessTransaction) {
+          peers[meta.peer_id][direction].getdata += 1
+          id = ""
+          if (entry.item.Wtx) {
+            id = uint8ArrayToHexString(new Uint8Array(entry.item.Wtx))
+          } else if (!meta.inbound && entry.item.Transaction) {
+            id = uint8ArrayToHexString(new Uint8Array(entry.item.Transaction))
+          }
 
-      if (peers[meta.peer_id].transactionsWeAnnounced.length > MAX_ANN_REQ_TX_PER_PEER) {
-        peers[meta.peer_id].transactionsWeAnnounced.slice(peers[meta.peer_id].transactionsWeAnnounced.length - MAX_ANN_REQ_TX_PER_PEER)
-      }
-      if (peers[meta.peer_id].transactionsWeRequested.length > MAX_ANN_REQ_TX_PER_PEER) {
-        peers[meta.peer_id].transactionsWeRequested.slice(peers[meta.peer_id].transactionsWeRequested.length - MAX_ANN_REQ_TX_PER_PEER)
-      }
-
-      redrawPeer(meta.peer_id)
-    } if ("Connection" in event) {
-      if ("Closed" in event.Conn.event) {
-        closeEvent = event.Conn.event.Closed
-        if (closeEvent.conn.peer_id in peers) {
-          peers[closeEvent.conn.peer_id].closed = true;
-          redrawPeer(closeEvent.conn.peer_id)
+          if (meta.inbound) {
+            if (!peers[meta.peer_id].transactionsWeAnnounced.includes(id)) {
+              peers[meta.peer_id].requestedUnannounced += 1
+              console.log(meta.peer_id, "requested a transaction that we didn't announce")
+            }
+          } else {
+            peers[meta.peer_id].transactionsWeRequested.push(id)
+          }
         }
-      } else if ("InboundEvicted" in event.Conn.event) {
-        inboundEvictionEvent = event.Conn.event.InboundEvicted
-        if (inboundEvictionEvent.conn.peer_id in peers) {
-          peers[inboundEvictionEvent.conn.peer_id].evicted = true;
-          redrawPeer(inboundEvictionEvent.conn.peer_id)
+      })
+    } else if (meta.command == "tx") {
+      peers[meta.peer_id][direction].tx += 1
+      if (meta.inbound) {
+        let tx = message.msg.Tx.tx;
+        let txid = uint8ArrayToHexString(new Uint8Array(tx.txid))
+        let wtxid = uint8ArrayToHexString(new Uint8Array(tx.wtxid))
+        if (!(peers[meta.peer_id].transactionsWeRequested.includes(txid) || peers[meta.peer_id].transactionsWeRequested.includes(wtxid))) {
+          console.log(meta.peer_id, "sent a transaction that we didn't request")
+          peers[meta.peer_id].sentUnrequested += 1
         }
+      }
+    } else if (meta.command == "version") {
+      if (meta.inbound) {
+        peers[meta.peer_id].version = message.msg.Version.user_agent
       }
     }
-  };
+
+    if (peers[meta.peer_id].transactionsWeAnnounced.length > MAX_ANN_REQ_TX_PER_PEER) {
+      peers[meta.peer_id].transactionsWeAnnounced.slice(peers[meta.peer_id].transactionsWeAnnounced.length - MAX_ANN_REQ_TX_PER_PEER)
+    }
+    if (peers[meta.peer_id].transactionsWeRequested.length > MAX_ANN_REQ_TX_PER_PEER) {
+      peers[meta.peer_id].transactionsWeRequested.slice(peers[meta.peer_id].transactionsWeRequested.length - MAX_ANN_REQ_TX_PER_PEER)
+    }
+
+    redrawPeer(meta.peer_id)
+  }
+
+  function handle_ebpf_extractor_connection(connection) {
+    if (connection.hasOwnProperty("Closed")) {
+      closeEvent = connection.Closed
+      if (closeEvent.conn.peer_id in peers) {
+        peers[closeEvent.conn.peer_id].closed = true;
+        redrawPeer(closeEvent.conn.peer_id)
+      }
+    } else if (connection.hasOwnProperty("InboundEvicted")) {
+      inboundEvictionEvent = connection.InboundEvicted
+      if (inboundEvictionEvent.conn.peer_id in peers) {
+        peers[inboundEvictionEvent.conn.peer_id].evicted = true;
+        redrawPeer(inboundEvictionEvent.conn.peer_id)
+      }
+    }
+  }
 
   function handleWebsocketReset() {
     peers = new Object()
@@ -316,7 +315,7 @@
   window.onload = (event) => {
     cleanUpClosedPeers()
     runUnitTests()
-    initWebsocketPicker("websockets.json", "websocket-picker", handleWebsocketMessage, handleWebsocketReset)
+    initWebsocketPicker("websockets.json", "websocket-picker", processWebsocketMessage, handleWebsocketReset)
   };
 
 </script>

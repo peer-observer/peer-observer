@@ -44,13 +44,15 @@
 <script src="js/d3@7.js"></script>
 <script src="js/plot@0.6.js"></script>
 <script src="js/websocket-picker.js"></script>
-<script type="module">
+<script src="js/lib.js"></script>
+
+<script>
   const width = 1000;
   const height = 900;
   const MSG_SHOW_DURATION_MS = 400;
   const CLOSED_PEER_CONN_SHOW_DURATION_MSG = 2000;
-  const LEFT_ARROW = "🠰 ";
-  const RIGHT_ARROW = " 🠲";
+  const LEFT_ARROW = "<- ";
+  const RIGHT_ARROW = " ->";
 
   const connTypeToColor = {
     "inbound": "#008F95",
@@ -287,53 +289,50 @@
     simulation.alpha(0.1);
   }
 
-  function handleWebsocketMessage(event) {
-    const m = JSON.parse(event.data);
-
-    if (m.hasOwnProperty("Connection")) {
-      // Handle connection events
-      if (m.Conn.event.hasOwnProperty("Closed")) {
-        let id = m.Conn.event.Closed.conn.peer_id;
-        if (g_nodes.has(id)) {
-          let node = g_nodes.get(id);
-          node.color = "gray";
-          node.closeTime = Date.now();
-          g_nodes.set(id, node);
-        }
-        g_links = g_links.map((l) => {
-          if (l.peer_id === id) {
-            l.closeTime = Date.now();
-          }
-          return l;
-        });
-      } else if (m.Conn.event.hasOwnProperty("InboundEvicted")) {
-        // skip, already handled in "Closed"
-        return;
-      } else if (m.Conn.event.hasOwnProperty("Inbound")) {
-        let event = m.Conn.event.Inbound.conn;
-        addNodeAndLink(event.peer_id, event.addr, event.inbound, event.conn_type,);
-      } else {
-        console.log(m.Conn);
+  function handle_ebpf_extractor_connection(connection) {
+    if (connection.hasOwnProperty("Closed")) {
+      let id = connection.Closed.conn.peer_id;
+      console.log("closed", id);
+      if (g_nodes.has(id)) {
+        let node = g_nodes.get(id);
+        node.color = "gray";
+        node.closeTime = Date.now();
+        g_nodes.set(id, node);
       }
-    } else if (m.hasOwnProperty("Message")) {
-      // Handle P2P msg events
-      let meta = m.Msg.meta;
-      if (!g_nodes.has(meta.peer_id)) {
-        addNodeAndLink(meta.peer_id, meta.addr, meta.inbound, meta.conn_type);
-      }
-      g_links.map((l) => {
-        if (l.peer_id === meta.peer_id) {
-          if (meta.inbound) {
-            l.inbound_msg = meta.command;
-            l.inbound_msg_time = new Date();
-          } else {
-            l.outbound_msg = meta.command;
-            l.outbound_msg_time = new Date();
-          }
+      g_links = g_links.map((l) => {
+        if (l.peer_id === id) {
+          l.closeTime = Date.now();
         }
-        return l
-      })
+        return l;
+      });
+    } else if (connection.hasOwnProperty("InboundEvicted")) {
+      // skip, already handled in "Closed"
+      return;
+    } else if (connection.hasOwnProperty("Inbound")) {
+      let event = connection.Inbound.conn;
+      addNodeAndLink(event.peer_id, event.addr, event.inbound, event.conn_type,);
+    } else {
+      console.log(connection);
     }
+  }
+
+  function handle_ebpf_extractor_message(message) {
+    let meta = message.meta;
+    if (!g_nodes.has(meta.peer_id)) {
+      addNodeAndLink(meta.peer_id, meta.addr, meta.inbound, meta.conn_type);
+    }
+    g_links.map((l) => {
+      if (l.peer_id === meta.peer_id) {
+        if (meta.inbound) {
+          l.inbound_msg = meta.command;
+          l.inbound_msg_time = new Date();
+        } else {
+          l.outbound_msg = meta.command;
+          l.outbound_msg_time = new Date();
+        }
+      }
+      return l
+    })
   }
 
   const div = document.querySelector("#plot");
@@ -351,10 +350,9 @@
 
   window.onload = (event) => {
     runUnitTests()
-    initWebsocketPicker("websockets.json", "websocket-picker", handleWebsocketMessage, handleWebsocketReset)
+    initWebsocketPicker("websockets.json", "websocket-picker", processWebsocketMessage, handleWebsocketReset)
   };
 
 </script>
-<script src="js/lib.js"></script>
 
 </html>

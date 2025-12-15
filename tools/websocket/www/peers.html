@@ -205,7 +205,7 @@
     clone.querySelector(".peer").classList.add(peer.conn)
     clone.querySelector("#peer-id").textContent = "#" + peer.id + ": " + peer.conn
     clone.querySelector("#peer-addr").textContent = removePortFromIPPort(peer.addr)
-    clone.querySelector("#peer-addr").href = "https://utrace.me/?query=" + removePortFromIPPort(peer.addr).replace("[", "").replace("]", "")
+    clone.querySelector("#peer-addr").href = "https://ipinfo.io/" + removePortFromIPPort(peer.addr).replace("[", "").replace("]", "")
     clone.querySelector(".peer").id = "peer-" + peer.id
     clone.querySelector(".peer").style.order = peer.id;
 
@@ -302,118 +302,115 @@
     }
   }
 
-  function handleWebsocketMessage(e) {
-    let event = JSON.parse(e.data)
-    if ("Message" in event) {
-      let meta = event["Message"]["meta"]
-      if (!(meta.peer_id in peers)) {
-        peers[meta.peer_id] = {
-          id: meta.peer_id,
-          addr: meta.addr,
-          conn: connTypeToString(meta.conn_type),
-          closed: false,
-          evicted: false,
-          weird: false,
-          msgs: [],
-          msg_count: { inbound: { total: 0, }, outbound: { total: 0 } },
-          msg_size: { inbound: { total: 0, }, outbound: { total: 0 } },
-        }
-        addPeer(peers[meta.peer_id])
+  function handle_ebpf_extractor_message(message) {
+    let meta = message.meta;
+    if (!(meta.peer_id in peers)) {
+      peers[meta.peer_id] = {
+        id: meta.peer_id,
+        addr: meta.addr,
+        conn: connTypeToString(meta.conn_type),
+        closed: false,
+        evicted: false,
+        weird: false,
+        msgs: [],
+        msg_count: { inbound: { total: 0, }, outbound: { total: 0 } },
+        msg_size: { inbound: { total: 0, }, outbound: { total: 0 } },
       }
-
-      let direction = meta.inbound ? "inbound" : "outbound"
-      if (!(meta.command in peers[meta.peer_id].msg_count[direction])) {
-        peers[meta.peer_id].msg_count[direction][meta.command] = 0
-        peers[meta.peer_id].msg_size[direction][meta.command] = 0
-      }
-      peers[meta.peer_id].msg_count[direction].total += 1
-      peers[meta.peer_id].msg_count[direction][meta.command] += 1
-      peers[meta.peer_id].msg_size[direction].total += meta.size
-      peers[meta.peer_id].msg_size[direction][meta.command] += meta.size
-
-      if (peers[meta.peer_id].msgs.length > MAX_MESSAGES_IN_LIST) {
-        peers[meta.peer_id].msgs.splice(0, peers[meta.peer_id].msgs.length - MAX_MESSAGES_IN_LIST)
-      }
-      let details = "";
-      if (meta.command == "inv") {
-        let invTypeCount = {}
-        let inv = event["Message"].msg.Inv.items
-        inv.forEach(i => {
-          let invType = Object.keys(i.item)[0]
-          if (!(invType in invTypeCount)) {
-            invTypeCount[invType] = 0
-          }
-          invTypeCount[invType] += 1
-        })
-
-        details = Object.entries(invTypeCount).map(([k, v]) => v + "x " + k).join(", ")
-      } else if (meta.command == "getdata") {
-        let getdataTypeCount = {}
-        let getdata = event["Message"].msg.Getdata.items
-        getdata.forEach(i => {
-          let getdataType = Object.keys(i.item)[0]
-          if (!(getdataType in getdataTypeCount)) {
-            getdataTypeCount[getdataType] = 0
-          }
-          getdataTypeCount[getdataType] += 1
-        })
-
-        details = Object.entries(getdataTypeCount).map(([k, v]) => v + "x " + k).join(", ")
-      } else if (meta.command == "addrv2") {
-        if (event["Message"].msg.Emptyaddrv2) {
-          details = "empty!"
-          peers[meta.peer_id].weird = true;
-        } else {
-          details = event["Message"].msg.Addrv2.addresses.length + "x "
-        }
-      } else if (meta.command == "addr") {
-        console.log("addr", event["Message"].msg)
-        details = event["Message"].msg.Addr.addresses.length + "x "
-      } else if (meta.command == "ping") {
-        if (event["Message"].msg.Oldping) {
-          details = "no-value"
-          peers[meta.peer_id].weird = true;
-        } else {
-          // JS MAX_SAFE_INTEGER is smaller than this 64 bit ping-"value". The
-          // value is not accurate anymore.
-          details = event["Message"].msg.Ping.value.toString(16).substring(0, 8) + "…"
-        }
-      } else if (meta.command == "pong") {
-        details = event["Message"].msg.Pong.value.toString(16).substring(0, 8) + "…"
-      } else if (meta.command == "tx") {
-        let txid = new Uint8Array(event["Message"].msg.Tx.tx.txid)
-        txid.reverse();
-        details = uint8ArrayToHexString(txid).substr(0, 8) + "…"
-      }
-
-      let msg = { dir: direction, msg: meta.command, details: details }
-      peers[meta.peer_id].msgs.push(msg)
-      if (meta.peer_id == modalPeerId) {
-        addMessageToModal(msg)
-      }
-
-      redrawPeer(meta.peer_id)
-    } if ("Connection" in event) {
-      if ("Closed" in event.Conn.event) {
-        closeEvent = event.Conn.event.Closed
-        if (closeEvent.conn.peer_id in peers) {
-          peers[closeEvent.conn.peer_id].closed = true;
-          redrawPeer(closeEvent.conn.peer_id)
-        }
-      } else if ("Inbound" in event.Conn.event) {
-
-      } else if ("InboundEvicted" in event.Conn.event) {
-        inboundEvictionEvent = event.Conn.event.InboundEvicted
-        if (inboundEvictionEvent.conn.peer_id in peers) {
-          peers[inboundEvictionEvent.conn.peer_id].evicted = true;
-          redrawPeer(inboundEvictionEvent.conn.peer_id)
-        }
-      } else {
-        console.log(event.Conn.event)
-      }
+      addPeer(peers[meta.peer_id])
     }
 
-  };
+    let direction = meta.inbound ? "inbound" : "outbound"
+    if (!(meta.command in peers[meta.peer_id].msg_count[direction])) {
+      peers[meta.peer_id].msg_count[direction][meta.command] = 0
+      peers[meta.peer_id].msg_size[direction][meta.command] = 0
+    }
+    peers[meta.peer_id].msg_count[direction].total += 1
+    peers[meta.peer_id].msg_count[direction][meta.command] += 1
+    peers[meta.peer_id].msg_size[direction].total += meta.size
+    peers[meta.peer_id].msg_size[direction][meta.command] += meta.size
+
+    if (peers[meta.peer_id].msgs.length > MAX_MESSAGES_IN_LIST) {
+      peers[meta.peer_id].msgs.splice(0, peers[meta.peer_id].msgs.length - MAX_MESSAGES_IN_LIST)
+    }
+    let details = "";
+    if (meta.command == "inv") {
+      let invTypeCount = {}
+      let inv = message.msg.Inv.items
+      inv.forEach(i => {
+        let invType = Object.keys(i.item)[0]
+        if (!(invType in invTypeCount)) {
+          invTypeCount[invType] = 0
+        }
+        invTypeCount[invType] += 1
+      })
+
+      details = Object.entries(invTypeCount).map(([k, v]) => v + "x " + k).join(", ")
+    } else if (meta.command == "getdata") {
+      let getdataTypeCount = {}
+      let getdata = message.msg.Getdata.items
+      getdata.forEach(i => {
+        let getdataType = Object.keys(i.item)[0]
+        if (!(getdataType in getdataTypeCount)) {
+          getdataTypeCount[getdataType] = 0
+        }
+        getdataTypeCount[getdataType] += 1
+      })
+
+      details = Object.entries(getdataTypeCount).map(([k, v]) => v + "x " + k).join(", ")
+    } else if (meta.command == "addrv2") {
+      if (message.msg.Emptyaddrv2) {
+        details = "empty!"
+        peers[meta.peer_id].weird = true;
+      } else {
+        details = message.msg.Addrv2.addresses.length + "x "
+      }
+    } else if (meta.command == "addr") {
+      details = message.msg.Addr.addresses.length + "x "
+    } else if (meta.command == "ping") {
+      if (message.msg.Oldping) {
+        details = "no-value"
+        peers[meta.peer_id].weird = true;
+      } else {
+        // JS MAX_SAFE_INTEGER is smaller than this 64 bit ping-"value". The
+        // value is not accurate anymore.
+        details = message.msg.Ping.value.toString(16).substring(0, 8) + "…"
+      }
+    } else if (meta.command == "pong") {
+      details = message.msg.Pong.value.toString(16).substring(0, 8) + "…"
+    } else if (meta.command == "tx") {
+      let txid = new Uint8Array(message.msg.Tx.tx.txid)
+      txid.reverse();
+      details = uint8ArrayToHexString(txid).substr(0, 8) + "…"
+    }
+
+    let msg = { dir: direction, msg: meta.command, details: details }
+    peers[meta.peer_id].msgs.push(msg)
+    if (meta.peer_id == modalPeerId) {
+      addMessageToModal(msg)
+    }
+
+    redrawPeer(meta.peer_id)
+  }
+
+  function handle_ebpf_extractor_connection(connection) {
+    if (connection.hasOwnProperty("Closed")) {
+      closeEvent = connection.Closed
+      if (closeEvent.conn.peer_id in peers) {
+        peers[closeEvent.conn.peer_id].closed = true;
+        redrawPeer(closeEvent.conn.peer_id)
+      }
+    } else if (connection.hasOwnProperty("Inbound")) {
+
+    } else if (connection.hasOwnProperty("InboundEvicted")) {
+      inboundEvictionEvent = connection.InboundEvicted
+      if (inboundEvictionEvent.conn.peer_id in peers) {
+        peers[inboundEvictionEvent.conn.peer_id].evicted = true;
+        redrawPeer(inboundEvictionEvent.conn.peer_id)
+      }
+    } else {
+      console.log(connection)
+    }
+  }
 
   function handleWebsocketReset() {
     peers = new Object()
@@ -423,7 +420,7 @@
   window.onload = (event) => {
     cleanUpClosedPeers()
     runUnitTests()
-    initWebsocketPicker("websockets.json", "websocket-picker", handleWebsocketMessage, handleWebsocketReset)
+    initWebsocketPicker("websockets.json", "websocket-picker", processWebsocketMessage, handleWebsocketReset)
   };
 
 
