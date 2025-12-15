@@ -38,17 +38,17 @@ Options:
       --query-interval <QUERY_INTERVAL>
           Interval (in seconds) in which to query from the Bitcoin Core RPC endpoint [default: 10]
       --disable-getpeerinfo
-          Disable quering and publishing of `getpeerinfo` data
+          Disable querying and publishing of `getpeerinfo` data
       --disable-getmempoolinfo
-          Disable quering and publishing of `getmempoolinfo` data
+          Disable querying and publishing of `getmempoolinfo` data
       --disable-uptime
-          Disable quering and publishing of `uptime` data
+          Disable querying and publishing of `uptime` data
       --disable-getnettotals
-          Disable quering and publishing of `getnettotals` data
+          Disable querying and publishing of `getnettotals` data
       --disable-getmemoryinfo
-          Disable quering and publishing of `getmemoryinfo` data
+          Disable querying and publishing of `getmemoryinfo` data
       --disable-getaddrmaninfo
-          Disable quering and publishing of `getaddrmaninfo` data
+          Disable querying and publishing of `getaddrmaninfo` data
       --disable-getchaintxstats
           Disable querying and publishing of `getchaintxstats` data
   -h, --help
