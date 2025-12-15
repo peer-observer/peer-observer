@@ -49,6 +49,8 @@ Options:
           Disable quering and publishing of `getmemoryinfo` data
       --disable-getaddrmaninfo
           Disable quering and publishing of `getaddrmaninfo` data
+      --disable-getchaintxstats
+          Disable querying and publishing of `getchaintxstats` data
   -h, --help
           Print help
   -V, --version
