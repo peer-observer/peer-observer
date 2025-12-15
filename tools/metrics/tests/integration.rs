@@ -28,8 +28,8 @@ use shared::{
         log_extractor::{self, LogDebugCategory},
         p2p_extractor,
         rpc_extractor::{
-            self, AddrManInfo, AddrManInfoNetwork, MemoryInfo, MempoolInfo, NetTotals, PeerInfo,
-            PeerInfos, UploadTarget,
+            self, AddrManInfo, AddrManInfoNetwork, ChainTxStats, MemoryInfo, MempoolInfo,
+            NetTotals, PeerInfo, PeerInfos, UploadTarget,
         },
     },
     rand::{self, Rng},
@@ -2956,6 +2956,42 @@ async fn test_integration_metrics_rpc_getaddrmaninfo() {
         peerobserver_rpc_addrmaninfo{network="ipv5",table="new"} 5
         peerobserver_rpc_addrmaninfo{network="ipv5",table="total"} 555
         peerobserver_rpc_addrmaninfo{network="ipv5",table="tried"} 55
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_rpc_chaintxstats() {
+    println!("test that the chaintxstats metrics work");
+
+    // Real values from getchaintxstats query
+    publish_and_check(
+        &[
+            Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+                rpc_event: Some(rpc_extractor::rpc::RpcEvent::ChainTxStats(ChainTxStats {
+                    time: 1766024797,
+                    tx_count: 1285474630,
+                    window_final_block_hash:
+                        "00000000000000000001df7f8bf0eb2f537e6f1b4ddd54afa52279dc894fb451"
+                            .to_string(),
+                    window_final_block_height: 928348,
+                    window_block_count: 4320,
+                    window_tx_count: Some(2635071),
+                    window_interval: Some(13305840),
+                    tx_rate: Some(5.049518589821679),
+                })),
+            }))
+            .unwrap(),
+        ],
+        Subject::Rpc,
+        r#"
+        peerobserver_rpc_chaintxstats_tx_count 1285474630
+        peerobserver_rpc_chaintxstats_window_final_block_height 928348
+        peerobserver_rpc_chaintxstats_window_block_count 4320
+        peerobserver_rpc_chaintxstats_window_tx_count 2635071
+        peerobserver_rpc_chaintxstats_window_interval 13305840
+        peerobserver_rpc_chaintxstats_tx_rate 5.049518589821679
         "#,
     )
     .await;
