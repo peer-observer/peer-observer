@@ -567,6 +567,28 @@ fn handle_rpc_event(e: &rpc::RpcEvent, metrics: metrics::Metrics) {
                     .set(stat_util::median_f64(&cpuload_values_filtered));
             }
         }
+        rpc::RpcEvent::ChainTxStats(stats) => {
+            metrics.rpc_chaintxstats_tx_count.set(stats.tx_count);
+            metrics
+                .rpc_chaintxstats_window_final_block_height
+                .set(stats.window_final_block_height);
+            metrics
+                .rpc_chaintxstats_window_block_count
+                .set(stats.window_block_count);
+            if let Some(window_tx_count) = stats.window_tx_count {
+                metrics
+                    .rpc_chaintxstats_window_tx_count
+                    .set(window_tx_count);
+            }
+            if let Some(window_interval) = stats.window_interval {
+                metrics
+                    .rpc_chaintxstats_window_interval
+                    .set(window_interval);
+            }
+            if let Some(tx_rate) = stats.tx_rate {
+                metrics.rpc_chaintxstats_tx_rate.set(tx_rate);
+            }
+        }
     }
 }
 
