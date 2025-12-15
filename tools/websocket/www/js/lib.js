@@ -169,3 +169,73 @@ function runUnitTests() {
   testNetworkFromAddress();
   testIsLikelySpy();
 }
+
+// These do nothing on purpose. You should override these in your tool!
+function handle_ebpf_extractor_message(e) {};
+function handle_ebpf_extractor_connection(e) {};
+function handle_ebpf_extractor_mempool(e) {};
+function handle_ebpf_extractor_addrman(e) {};
+function handle_ebpf_extractor_validation(e) {};
+// rpc-extractor
+function handle_rpc_extractor_peerinfo(e) {};
+function handle_rpc_extractor_mempoolinfo(e) {};
+function handle_rpc_extractor_nettotals(e) {};
+function handle_rpc_extractor_uptime(e) {};
+// p2p-extractor
+function handle_p2p_extractor_pingduration(e) {};
+function handle_p2p_extractor_inventoryannouncement(e) {};
+function handle_p2p_extractor_addressannouncement(e) {};
+// TODO: there are a bunch of handling functions missing here.
+// Feel free to implement them, if you need them.
+
+function processWebsocketMessage(e) {
+  const event = JSON.parse(e.data)
+  if (event.hasOwnProperty("EbpfExtractor")) {
+    let ebpf_event = event.EbpfExtractor.ebpf_event;
+    if (ebpf_event.hasOwnProperty("Message")) {
+      handle_ebpf_extractor_message(ebpf_event.Message)
+    } else if (ebpf_event.hasOwnProperty("Connection")) {
+      handle_ebpf_extractor_connection(ebpf_event.Connection.event)
+    } else if (ebpf_event.hasOwnProperty("Mempool")) {
+      handle_ebpf_extractor_mempool(ebpf_event.Mempool.event)
+    } else if (ebpf_event.hasOwnProperty("Addrman")) {
+      handle_ebpf_extractor_addrman(ebpf_event.Addrman.event)
+    } else if (ebpf_event.hasOwnProperty("Validation")) {
+      handle_ebpf_extractor_validation(ebpf_event.Validation.event)
+    } else {
+      console.warn("Unhandled eBPF-extractor event", ebpf_event);
+    }
+
+  } else if (event.hasOwnProperty("RpcExtractor")) {
+    let rpc_event = event.RpcExtractor.rpc_event;
+    if (rpc_event.hasOwnProperty("PeerInfos")) {
+      handle_rpc_extractor_peerinfo(rpc_event.PeerInfos.infos)
+    } else if (rpc_event.hasOwnProperty("MempoolInfo")) {
+      handle_rpc_extractor_mempoolinfo(rpc_event.MempoolInfo)
+    } else if (rpc_event.hasOwnProperty("NetTotals")) {
+      handle_rpc_extractor_nettotals(rpc_event.NetTotals)
+    } else if (rpc_event.hasOwnProperty("Uptime")) {
+      handle_rpc_extractor_uptime(rpc_event.Uptime)
+    } else {
+      console.warn("Unhandled RPC-extractor event", rpc_event);
+    }
+
+  } else if (event.hasOwnProperty("P2pExtractor")) {
+    let p2p_event = event.P2pExtractor.p2p_event;
+    if (p2p_event.hasOwnProperty("PingDuration")) {
+      handle_p2p_extractor_pingduration(p2p_event.PingDuration)
+    } else if (p2p_event.hasOwnProperty("InventoryAnnouncement")) {
+      handle_p2p_extractor_inventoryannouncement(p2p_event.InventoryAnnouncement)
+    } else if (p2p_event.hasOwnProperty("AddressAnnouncement")) {
+      handle_p2p_extractor_addressannouncement(p2p_event.AddressAnnouncement)      
+    } else {
+      console.warn("Unhandled P2P-extractor event", p2p_event);
+    }
+
+  } else if (event.hasOwnProperty("LogExtractor")) {
+    console.warn("Unhandled log-extractor event", event);
+    // TODO: these aren't implemented yet, but feel free to do so if you need them.
+  } else {
+    console.warn("Unhandled event", event);
+  }
+}

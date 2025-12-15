@@ -170,18 +170,18 @@
         + `highbandwidth_from=${num_peers ? (num_hb_from/num_peers*100).toFixed(1) : 0}%, `
   }
 
+  function handle_rpc_extractor_peerinfo(infos) {
+    statusSpan.textContent = "connected";
+    console.log(infos)
+    redrawTable(infos)
+  }
+
   function handleWebsocketMessage(e) {
-    let event = JSON.parse(e.data)
-    if ("Rpc" in event) {
-      statusSpan.textContent = "connected";
-      console.log(event.Rpc.event.PeerInfos.infos)
-      redrawTable(event.Rpc.event.PeerInfos.infos)
-    } else {
-      if (statusSpan.textContent != "connected") {
-        statusSpan.textContent = "connected; waiting for first getpeerinfo";
-      }
+    if (statusSpan.textContent != "connected") {
+      statusSpan.textContent = "connected; waiting for first getpeerinfo";
     }
-  };
+    processWebsocketMessage(e)
+  }
 
   function handleWebsocketReset() {
     statusSpan.textContent = "connection reset";
