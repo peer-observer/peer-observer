@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <title>peer-observer websocket tools</title>
+</head>
+
+<body class="bg-light">
+  <div class="container py-4">
+    <header class="mb-4">
+      <h1 class="h3 mb-2">peer-observer websocket tools</h1>
+      <p class="text-muted mb-0">
+        Interactive tools built on live data from a Bitcoin Core node extracted with <a href="github.com/peer-observer/peer-observer">peer-observer</a>.
+      </p>
+    </header>
+
+    <div class="row row-cols-1 row-cols-md-2 g-3">
+      <div class="col">
+        <div class="card h-100">
+          <div class="card-body">
+            <h2 class="h5 card-title">
+              <a href="netinfo.html" class="stretched-link text-decoration-none">netinfo</a>
+            </h2>
+            <p class="card-text mb-1">
+              Overview of all peers, similar to Bitcoin Core's <code>bitcoin-cli -netinfo</code>.
+            </p>
+            <ul class="small mb-0">
+              <li>Shows connection type, network, transport, user agent, and tags (e.g. spy, high-bandwidth).</li>
+              <li>Summarizes per-direction bandwidth, ping, addr rate-limiting, and relay capabilities.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card h-100">
+          <div class="card-body">
+            <h2 class="h5 card-title">
+              <a href="peers.html" class="stretched-link text-decoration-none">peers</a>
+            </h2>
+            <p class="card-text mb-1">
+              Grid view of peers with per-peer message statistics.
+            </p>
+            <ul class="small mb-0">
+              <li>Shows total messages and bytes sent/received per peer.</li>
+              <li>Hover for per-message-type counts; click a peer to inspect a recent message.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card h-100">
+          <div class="card-body">
+            <h2 class="h5 card-title">
+              <a href="p2p-circle.html" class="stretched-link text-decoration-none">p2p-circle</a>
+            </h2>
+            <p class="card-text mb-1">
+              Visualization of P2P connections and messages.
+            </p>
+            <ul class="small mb-0">
+              <li>Draws our node in the center and peers around it, with one circle per connection.</li>
+              <li>Colors and labels peers by connection type or network.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card h-100">
+          <div class="card-body">
+            <h2 class="h5 card-title">
+              <a href="txrelay.html" class="stretched-link text-decoration-none">txrelay</a>
+            </h2>
+            <p class="card-text mb-1">
+              Transaction relay behavior per peer.
+            </p>
+            <ul class="small mb-0">
+              <li>Counts <code>inv</code>, <code>getdata</code>, and <code>tx</code> messages in both directions.</li>
+              <li>Highlights ratios (announced vs received/sent) and flags peers that request unannounced or send unrequested transactions.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card h-100">
+          <div class="card-body">
+            <h2 class="h5 card-title">
+              <a href="addrrelay.html" class="stretched-link text-decoration-none">addrrelay</a>
+            </h2>
+            <p class="card-text mb-1">
+              Address relay behavior per peer.
+            </p>
+            <ul class="small mb-0">
+              <li>Tracks <code>getaddr</code>, <code>addr</code>, and <code>addrv2</code> messages by address type (IPv4, IPv6, Tor, I2P).</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card h-100">
+          <div class="card-body">
+            <h2 class="h5 card-title">
+              <a href="pingpong.html" class="stretched-link text-decoration-none">pingpong</a>
+            </h2>
+            <p class="card-text mb-1">
+              Ping/pong activity per peer.
+            </p>
+            <ul class="small mb-0">
+              <li>Counts how often we ping peers and how often they ping us.</li>
+              <li>Makes it easy to spot peers that overuse ping.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="mt-4 small text-muted">
+      <p class="mb-0">
+        See the <a href="github.com/peer-observer/peer-observer">peer-observer</a> project on GitHub for details and source code.
+      </p>
+    </footer>
+  </div>
+
+  <script src="js/bootstrap.min.js"
+    integrity="sha384-0pUGZvbkm6XF6gxjEnlmuGrJXVbNuzT9qBBavbLwCsOGabYfZo0T0to5eqruptLy"
+    crossorigin="anonymous"></script>
+</body>
+
+</html>
+
+
