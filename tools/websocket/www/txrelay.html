@@ -10,9 +10,15 @@
 </head>
 
 
-<body>
-  <h1>tx relay</h1>
-  <div id="websocket-picker"></div>
+<body class="container-fluid">
+  <header class="py-3">
+    <h1 class="h3 mb-1">tx relay</h1>
+    <p class="text-muted mb-2">
+      Per-peer transaction relay behavior. Counts <code>inv</code>, <code>getdata</code>, and <code>tx</code> messages
+      in both directions and shows peers requesting unannounced or sending unrequested transactions.
+    </p>
+    <div id="websocket-picker" class="mb-3"></div>
+  </header>
   <table class="table table-striped table-sm">
     <thead>
       <tr>

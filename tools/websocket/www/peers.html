@@ -49,8 +49,15 @@
   </table>
 </div>
 
-<body>
-  <div id="websocket-picker"></div>
+<body class="container-fluid">
+  <header class="py-3">
+    <h1 class="h3 mb-1">peers</h1>
+    <p class="text-muted mb-2">
+      Grid view of peers with per-peer message statistics. Shows total messages and bytes sent/received and lets you
+      inspect recent messages per peer.
+    </p>
+    <div id="websocket-picker" class="mb-3"></div>
+  </header>
   <div id="peer-grid"></div>
 </body>
 

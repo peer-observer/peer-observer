@@ -10,8 +10,14 @@
 </head>
 
 <body class="container">
-  <h1>P2P connections and messages</h1>
-  <div id="websocket-picker"></div>
+  <header class="py-3">
+    <h1 class="h3 mb-1">P2P connections and messages</h1>
+    <p class="text-muted mb-2">
+      Visualization of P2P connections and messages around our node. Peers are arranged in a circle with inbound and
+      outbound messages animated as lines between nodes.
+    </p>
+    <div id="websocket-picker" class="mb-3"></div>
+  </header>
   <div id="plot" class="d-flex justify-content-center"></div>
   <div>
     <label>connections </label> <span id="stats-connections">-</span>
