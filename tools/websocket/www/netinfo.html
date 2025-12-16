@@ -10,7 +10,15 @@
 </head>
 
 <body class="container-fluid">
-  <div id="websocket-picker"></div>
+  <header class="py-3">
+    <h1 class="h3 mb-1">netinfo</h1>
+    <p class="text-muted mb-2">
+      Overview of all peers, similar to Bitcoin Core's <code>bitcoin-cli -netinfo</code>. Shows connection details,
+      bandwidth usage, addr relay behavior, and various tags per peer.
+    </p>
+    <div id="websocket-picker" class="mb-3"></div>
+  </header>
+
   <p>status: <span id="status">disconnected</span></p>
   <p>summary:
     <span id="summary"></span>

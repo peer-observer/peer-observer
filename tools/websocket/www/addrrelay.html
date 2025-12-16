@@ -10,9 +10,15 @@
 </head>
 
 
-<body>
-  <h1>addr relay</h1>
-  <div id="websocket-picker"></div>
+<body class="container-fluid">
+  <header class="py-3">
+    <h1 class="h3 mb-1">addr relay</h1>
+    <p class="text-muted mb-2">
+      Per-peer view of address relay behavior. Tracks <code>getaddr</code>, <code>addr</code>, and
+      <code>addrv2</code> messages split by address type (IPv4, IPv6, Tor, I2P) in both directions.
+    </p>
+    <div id="websocket-picker" class="mb-3"></div>
+  </header>
   <table class="table table-striped table-sm table-bordered">
     <thead>
       <tr>

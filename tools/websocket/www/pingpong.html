@@ -10,9 +10,15 @@
 </head>
 
 
-<body>
-  <h1>ping pong</h1>
-  <div id="websocket-picker"></div>
+<body class="container-fluid">
+  <header class="py-3">
+    <h1 class="h3 mb-1">ping pong</h1>
+    <p class="text-muted mb-2">
+      Per-peer ping/pong activity. Counts how often we ping peers and how often they ping us, helping to spot peers
+      that overuse ping or fail to respond with <code>pong</code>.
+    </p>
+    <div id="websocket-picker" class="mb-3"></div>
+  </header>
   <table class="table table-striped table-sm table-bordered">
     <thead>
       <tr>
