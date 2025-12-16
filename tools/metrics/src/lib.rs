@@ -7,6 +7,7 @@ use shared::futures::StreamExt;
 use shared::log::{debug, info, warn, Level};
 use shared::metricserver;
 use shared::prost::Message;
+use shared::protobuf::bitcoin_primitives;
 use shared::protobuf::{
     ebpf_extractor::{
         addrman::addrman_event,
@@ -737,6 +738,31 @@ fn handle_addrman_event(aevent: &addrman_event::Event, metrics: metrics::Metrics
     }
 }
 
+fn check_self_and_subnet_announcement(
+    address: bitcoin_primitives::address::Address,
+    ip: &str,
+    subnet: &str,
+    direction: &str,
+    metrics: &metrics::Metrics,
+) {
+    // If the sender address and address.address match, assume it's a self-announcement.
+    let network = address.network();
+    if address.inner() == ip {
+        metrics
+            .p2p_address_selfannouncements
+            .with_label_values(&[&direction, &network])
+            .inc();
+    } else if network == "IPv4" || network == "IPv6" {
+        let addr_subnet = util::subnet(address.inner());
+        if addr_subnet == subnet {
+            metrics
+                .p2p_address_subnetannouncements
+                .with_label_values(&[&direction, &network])
+                .inc();
+        }
+    }
+}
+
 fn handle_p2p_message(msg: &message::MessageEvent, timestamp_ms: u64, metrics: metrics::Metrics) {
     let conn_type = msg.meta.conn_type.to_string();
     let direction = if msg.meta.inbound {
@@ -805,14 +831,13 @@ fn handle_p2p_message(msg: &message::MessageEvent, timestamp_ms: u64, metrics: m
                         .with_label_values(&[&direction, &address.services.to_string()])
                         .inc();
 
-                    // If the sender address and address.address match, assume it's a self-announcement.
-                    if address.address.as_ref().unwrap().inner() == ip {
-                        let network = address.address.as_ref().unwrap().network().to_string();
-                        metrics
-                            .p2p_address_selfannouncements
-                            .with_label_values(&[&direction, &network])
-                            .inc();
-                    }
+                    check_self_and_subnet_announcement(
+                        address.address.as_ref().unwrap().clone(),
+                        &ip,
+                        &subnet,
+                        &direction,
+                        &metrics,
+                    );
                 }
             }
             Msg::Addrv2(addrv2) => {
@@ -851,14 +876,13 @@ fn handle_p2p_message(msg: &message::MessageEvent, timestamp_ms: u64, metrics: m
                         .with_label_values(&[&direction, &address.services.to_string()])
                         .inc();
 
-                    // If the sender address and address.address match, assume it's a self-announcement.
-                    if address.address.as_ref().unwrap().inner() == ip {
-                        let network = address.address.as_ref().unwrap().network().to_string();
-                        metrics
-                            .p2p_address_selfannouncements
-                            .with_label_values(&[&direction, &network])
-                            .inc();
-                    }
+                    check_self_and_subnet_announcement(
+                        address.address.as_ref().unwrap().clone(),
+                        &ip,
+                        &subnet,
+                        &direction,
+                        &metrics,
+                    );
                 }
             }
             Msg::Emptyaddrv2(_) => {
