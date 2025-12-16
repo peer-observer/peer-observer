@@ -30,6 +30,35 @@ function switchWebsocket(url) {
   g_ws.addEventListener("message", g_messageCallback);
 }
 
+function drawWebsocketError(id) {
+  let picker = document.getElementById(id);
+  picker.style.padding = "1em";
+  
+  let alertDiv = document.createElement("div");
+  alertDiv.classList.add("alert");
+  alertDiv.classList.add("alert-warning");
+  alertDiv.style.marginBottom = "0";
+  
+  let heading = document.createElement("strong");
+  heading.textContent = "websockets.json not found";
+  alertDiv.appendChild(heading);
+  
+  let br = document.createElement("br");
+  alertDiv.appendChild(br);
+  
+  let text = document.createTextNode("The websocket picker requires a websockets.json file to be served alongside the HTML files. ");
+  alertDiv.appendChild(text);
+  
+  let link = document.createElement("a");
+  link.href = "https://github.com/peer-observer/peer-observer/blob/master/tools/websocket/README.md#websocket-picker";
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.textContent = "See documentation.";
+  alertDiv.appendChild(link);
+  
+  picker.appendChild(alertDiv);
+}
+
 function drawWebsockets(id) {
   let picker = document.getElementById(id);
   picker.style.padding = "1em";
@@ -84,11 +113,26 @@ function initWebsocketPicker(
   g_resetCallback = resetCallback;
 
   fetch(websocketJsonReq)
-    .then((response) => response.json())
+    .then((response) => {
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.error("websockets.json file not found (404)!");
+          drawWebsocketError(divId);
+        } else {
+          console.error("could not fetch websockets.json: HTTP", response.status);
+          websockets = {};
+          drawWebsockets(divId);
+        }
+        return;
+      }
+      return response.json();
+    })
     .then((data) => {
-      console.log("learned about the following websockets:", data);
-      websockets = data;
-      drawWebsockets(divId);
+      if (data) {
+        console.log("learned about the following websockets:", data);
+        websockets = data;
+        drawWebsockets(divId);
+      }
     })
     .catch((e) => {
       console.error("could not fetch websockets", e);
