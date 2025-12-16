@@ -27,7 +27,9 @@ use shared::{
         event::{event::PeerObserverEvent, Event},
         log_extractor::{self, LogDebugCategory},
         p2p_extractor,
-        rpc_extractor::{self, MempoolInfo, NetTotals, PeerInfo, PeerInfos, UploadTarget},
+        rpc_extractor::{
+            self, MemoryInfo, MempoolInfo, NetTotals, PeerInfo, PeerInfos, UploadTarget,
+        },
     },
     rand::{self, Rng},
     simple_logger::SimpleLogger,
@@ -2839,6 +2841,37 @@ async fn test_integration_metrics_rpc_getnettotals() {
         r#"
         peerobserver_rpc_nettotals_total_bytes_received 2222
         peerobserver_rpc_nettotals_total_bytes_sent 3333
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_rpc_getmemoryinfo() {
+    println!("test that the getmemoryinfo metrics work");
+
+    publish_and_check(
+        &[
+            Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+                rpc_event: Some(rpc_extractor::rpc::RpcEvent::MemoryInfo(MemoryInfo {
+                    free: 2,
+                    used: 6,
+                    locked: 4,
+                    total: 8,
+                    chunks_free: 10,
+                    chunks_used: 12,
+                })),
+            }))
+            .unwrap(),
+        ],
+        Subject::Rpc,
+        r#"
+        peerobserver_rpc_memoryinfo_locked_chunks_free 10
+        peerobserver_rpc_memoryinfo_locked_chunks_used 12
+        peerobserver_rpc_memoryinfo_locked_free 2
+        peerobserver_rpc_memoryinfo_locked_locked 4
+        peerobserver_rpc_memoryinfo_locked_total 8
+        peerobserver_rpc_memoryinfo_locked_used 6
         "#,
     )
     .await;

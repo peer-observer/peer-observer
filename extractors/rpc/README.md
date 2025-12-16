@@ -45,6 +45,8 @@ Options:
           Disable quering and publishing of `uptime` data
       --disable-getnettotals
           Disable quering and publishing of `getnettotals` data
+      --disable-getmemoryinfo
+          Disable quering and publishing of `getmemoryinfo` data
   -h, --help
           Print help
   -V, --version

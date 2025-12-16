@@ -70,6 +70,10 @@ pub struct Args {
     /// Disable quering and publishing of `getnettotals` data.
     #[arg(long, default_value_t = false)]
     pub disable_getnettotals: bool,
+
+    /// Disable quering and publishing of `getmemoryinfo` data.
+    #[arg(long, default_value_t = false)]
+    pub disable_getmemoryinfo: bool,
 }
 
 impl Args {
@@ -83,6 +87,7 @@ impl Args {
         disable_getmempoolinfo: bool,
         disable_uptime: bool,
         disable_getnettotals: bool,
+        disable_getmemoryinfo: bool,
     ) -> Args {
         Self {
             nats_address,
@@ -96,6 +101,7 @@ impl Args {
             disable_getmempoolinfo,
             disable_uptime,
             disable_getnettotals,
+            disable_getmemoryinfo,
             // when adding more disable_* args, make sure to update the disable_all below
         }
     }
@@ -135,11 +141,16 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         "Querying getnettotals enabled:   {}",
         !args.disable_getnettotals
     );
+    log::info!(
+        "Querying getmemoryinfo enabled:  {}",
+        !args.disable_getmemoryinfo
+    );
     // check if we have at least one RPC to query
     let disable_all = args.disable_getpeerinfo
         && args.disable_getmempoolinfo
         && args.disable_uptime
-        && args.disable_getnettotals;
+        && args.disable_getnettotals
+        && args.disable_getmemoryinfo;
     if disable_all {
         log::warn!("No RPC configured to be queried!");
     }
@@ -165,6 +176,11 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
                 if !args.disable_getnettotals {
                     if let Err(e) = getnettotals(&rpc_client, &nats_client).await {
                         log::error!("Could not fetch and publish 'getnettotals': {}", e)
+                    }
+                }
+                if !args.disable_getmemoryinfo {
+                    if let Err(e) = getmemoryinfo(&rpc_client, &nats_client).await {
+                        log::error!("Could not fetch and publish 'getmemoryinfo': {}", e)
                     }
                 }
             }
@@ -246,6 +262,22 @@ async fn getnettotals(
 
     let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
         rpc_event: Some(rpc_extractor::rpc::RpcEvent::NetTotals(net_totals.into())),
+    }))?;
+
+    nats_client
+        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
+        .await?;
+    Ok(())
+}
+
+async fn getmemoryinfo(
+    rpc_client: &Client,
+    nats_client: &async_nats::Client,
+) -> Result<(), FetchOrPublishError> {
+    let memory_info = rpc_client.get_memory_info()?;
+
+    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+        rpc_event: Some(rpc_extractor::rpc::RpcEvent::MemoryInfo(memory_info.into())),
     }))?;
 
     nats_client

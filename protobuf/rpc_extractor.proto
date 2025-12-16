@@ -8,6 +8,7 @@ message rpc {
     MempoolInfo mempool_info = 2;
     uint32 uptime = 3;
     NetTotals net_totals = 4;
+    MemoryInfo memory_info = 5;
   }
 }
 
@@ -97,4 +98,14 @@ message UploadTarget {
   required bool   serve_historical_blocks  = 4; // True if serving historical blocks
   required uint64 bytes_left_in_cycle      = 5; // Bytes left in current time cycle
   required uint64 time_left_in_cycle       = 6; // Seconds left in current time cycle
+}
+
+// A getmemoryinfo RPC result: Returns information about memory usage.
+message MemoryInfo {
+  required uint64 used         = 1; // Number of bytes used
+  required uint64 free         = 2; // Number of bytes available in current arenas
+  required uint64 total        = 3; // Total number of bytes managed
+  required uint64 locked       = 4; // Amount of bytes that succeeded locking
+  required uint64 chunks_used  = 5; // Number of allocated chunks
+  required uint64 chunks_free  = 6; // Number of unused chunks
 }

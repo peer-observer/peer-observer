@@ -7,7 +7,7 @@ use shared::{
     log::{self, info},
     prost::Message,
     protobuf::event::{Event, event::PeerObserverEvent},
-    protobuf::rpc_extractor::rpc::RpcEvent::{MempoolInfo, NetTotals, PeerInfos, Uptime},
+    protobuf::rpc_extractor::rpc::RpcEvent::{MempoolInfo, MemoryInfo, NetTotals, PeerInfos, Uptime},
     simple_logger::SimpleLogger,
     testing::nats_server::NatsServerForTesting,
     tokio::{self, sync::watch},
@@ -39,6 +39,7 @@ fn make_test_args(
     disable_getmempoolinfo: bool,
     disable_uptime: bool,
     disable_getnettotals: bool,
+    disable_getmemoryinfo: bool,
 ) -> Args {
     Args::new(
         format!("127.0.0.1:{}", nats_port),
@@ -50,6 +51,7 @@ fn make_test_args(
         disable_getmempoolinfo,
         disable_uptime,
         disable_getnettotals,
+        disable_getmemoryinfo,
     )
 }
 
@@ -85,6 +87,7 @@ async fn check(
     disable_getmempoolinfo: bool,
     disable_uptime: bool,
     disable_getnettotals: bool,
+    disable_getmemoryinfo: bool,
     check_expected: fn(PeerObserverEvent) -> (),
 ) {
     setup();
@@ -101,6 +104,7 @@ async fn check(
             disable_getmempoolinfo,
             disable_uptime,
             disable_getnettotals,
+            disable_getmemoryinfo,
         );
         rpc_extractor::run(args, shutdown_rx.clone())
             .await
@@ -128,7 +132,7 @@ async fn check(
 async fn test_integration_rpc_getpeerinfo() {
     println!("test that we receive getpeerinfo RPC events");
 
-    check(false, true, true, true, |event| {
+    check(false, true, true, true, true, |event| {
         match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -155,7 +159,7 @@ async fn test_integration_rpc_getpeerinfo() {
 async fn test_integration_rpc_getmempoolinfo() {
     println!("test that we receive getmempoolinfo RPC events");
 
-    check(true, false, true, true, |event| match event {
+    check(true, false, true, true, true, |event| match event {
         PeerObserverEvent::RpcExtractor(r) => {
             if let Some(ref e) = r.rpc_event {
                 match e {
@@ -188,7 +192,7 @@ async fn test_integration_rpc_getmempoolinfo() {
 async fn test_integration_rpc_uptime() {
     println!("test that we receive uptime RPC events");
 
-    check(true, true, false, true, |event| match event {
+    check(true, true, false, true, true, |event| match event {
         PeerObserverEvent::RpcExtractor(r) => {
             if let Some(ref e) = r.rpc_event {
                 match e {
@@ -210,7 +214,7 @@ async fn test_integration_rpc_uptime() {
 async fn test_integration_rpc_getnettotals() {
     println!("test that we receive getnettotals RPC events");
 
-    check(true, true, true, false, |event| match event {
+    check(true, true, true, false, true, |event| match event {
         PeerObserverEvent::RpcExtractor(r) => {
             if let Some(ref e) = r.rpc_event {
                 match e {
@@ -218,6 +222,29 @@ async fn test_integration_rpc_getnettotals() {
                         assert!(net_totals.time_millis > 0);
                         assert!(net_totals.total_bytes_received > 0);
                         assert!(net_totals.total_bytes_sent > 0);
+                        return;
+                    }
+                    _ => panic!("unexpected RPC data {:?}", r.rpc_event),
+                }
+            }
+        }
+        _ => panic!("unexpected event {:?}", event),
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_rpc_getmemoryinfo() {
+    println!("test that we receive getmemoryinfo RPC events");
+
+    check(true, true, true, true, false, |event| match event {
+        PeerObserverEvent::RpcExtractor(r) => {
+            if let Some(ref e) = r.rpc_event {
+                match e {
+                    MemoryInfo(info) => {
+                        assert!(info.total > 0);
+                        assert!(info.used <= info.total);
+                        assert!(info.locked <= info.total);
                         return;
                     }
                     _ => panic!("unexpected RPC data {:?}", r.rpc_event),

@@ -1,5 +1,7 @@
-use corepc_client::types::v17::GetNetTotals as RPCGetNetTotals;
-use corepc_client::types::v17::UploadTarget as RPCUploadTarget;
+use corepc_client::types::v17::{
+    GetMemoryInfoStats as RPCGetMemoryInfoStats, GetNetTotals as RPCGetNetTotals,
+    UploadTarget as RPCUploadTarget,
+};
 use corepc_client::types::v26::{
     GetMempoolInfo, GetPeerInfo as RPCGetPeerInfo, PeerInfo as RPCPeerInfo,
 };
@@ -36,6 +38,7 @@ impl fmt::Display for rpc::RpcEvent {
             rpc::RpcEvent::MempoolInfo(info) => write!(f, "{}", info),
             rpc::RpcEvent::Uptime(seconds) => write!(f, "Uptime({}s)", seconds),
             rpc::RpcEvent::NetTotals(totals) => write!(f, "{}", totals),
+            rpc::RpcEvent::MemoryInfo(info) => write!(f, "{}", info),
         }
     }
 }
@@ -159,5 +162,36 @@ impl fmt::Display for UploadTarget {
             "UploadTarget(target={}B, reached={})",
             self.target, self.target_reached
         )
+    }
+}
+
+impl fmt::Display for MemoryInfo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "MemoryInfo(used={}B, total={}B, locked={}B)",
+            self.used, self.total, self.locked
+        )
+    }
+}
+
+impl From<RPCGetMemoryInfoStats> for MemoryInfo {
+    fn from(stats: RPCGetMemoryInfoStats) -> Self {
+        // GetMemoryInfoStats is a BTreeMap<String, Locked>
+        // Bitcoin Core returns a map with key "locked"
+        let locked = stats
+            .0
+            .get("locked")
+            .expect("getmemoryinfo response should contain 'locked' key")
+            .clone();
+
+        MemoryInfo {
+            used: locked.used,
+            free: locked.free,
+            total: locked.total,
+            locked: locked.locked,
+            chunks_used: locked.chunks_used,
+            chunks_free: locked.chunks_free,
+        }
     }
 }

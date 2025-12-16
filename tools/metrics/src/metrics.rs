@@ -279,6 +279,14 @@ pub struct Metrics {
     pub rpc_nettotals_total_bytes_received: IntGauge,
     pub rpc_nettotals_total_bytes_sent: IntGauge,
 
+    // getmemoryinfo
+    pub rpc_memoryinfo_locked_used: IntGauge,
+    pub rpc_memoryinfo_locked_free: IntGauge,
+    pub rpc_memoryinfo_locked_total: IntGauge,
+    pub rpc_memoryinfo_locked_locked: IntGauge,
+    pub rpc_memoryinfo_locked_chunks_used: IntGauge,
+    pub rpc_memoryinfo_locked_chunks_free: IntGauge,
+
     // P2P-extractor
     pub p2pextractor_ping_duration_nanoseconds: IntGauge,
     pub p2pextractor_addrv2relay_addresses: IntCounterVec,
@@ -420,6 +428,14 @@ impl Metrics {
         ig!(rpc_nettotals_total_bytes_received, "Total bytes received by the node", registry);
         ig!(rpc_nettotals_total_bytes_sent, "Total bytes sent by the node", registry);
 
+        // getmemoryinfo
+        ig!(rpc_memoryinfo_locked_used, "Number of bytes used in locked memory", registry);
+        ig!(rpc_memoryinfo_locked_free, "Number of bytes available in locked memory arenas", registry);
+        ig!(rpc_memoryinfo_locked_total, "Total bytes managed in locked memory", registry);
+        ig!(rpc_memoryinfo_locked_locked, "Bytes successfully locked in memory", registry);
+        ig!(rpc_memoryinfo_locked_chunks_used, "Number of allocated chunks in locked memory", registry);
+        ig!(rpc_memoryinfo_locked_chunks_free, "Number of unused chunks in locked memory", registry);
+
         // P2P-extractor
         ig!(p2pextractor_ping_duration_nanoseconds, "The time it takes for a connected Bitcoin node to respond to a ping with a pong in nanoseconds.", registry);
         icv!(p2pextractor_addrv2relay_addresses, "The total number of addresses relayed to the p2p-extractor by the node, per network", ["network"], registry);
@@ -556,6 +572,14 @@ impl Metrics {
             // getnettotals
             rpc_nettotals_total_bytes_received,
             rpc_nettotals_total_bytes_sent,
+
+            // getmemoryinfo
+            rpc_memoryinfo_locked_used,
+            rpc_memoryinfo_locked_free,
+            rpc_memoryinfo_locked_total,
+            rpc_memoryinfo_locked_locked,
+            rpc_memoryinfo_locked_chunks_used,
+            rpc_memoryinfo_locked_chunks_free,
 
             // p2p-extractor
             p2pextractor_ping_duration_nanoseconds,

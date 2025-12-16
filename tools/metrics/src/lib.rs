@@ -169,6 +169,18 @@ fn handle_rpc_event(e: &rpc::RpcEvent, metrics: metrics::Metrics) {
                 .rpc_nettotals_total_bytes_sent
                 .set(net_totals.total_bytes_sent as i64);
         }
+        rpc::RpcEvent::MemoryInfo(info) => {
+            metrics.rpc_memoryinfo_locked_used.set(info.used as i64);
+            metrics.rpc_memoryinfo_locked_free.set(info.free as i64);
+            metrics.rpc_memoryinfo_locked_total.set(info.total as i64);
+            metrics.rpc_memoryinfo_locked_locked.set(info.locked as i64);
+            metrics
+                .rpc_memoryinfo_locked_chunks_used
+                .set(info.chunks_used as i64);
+            metrics
+                .rpc_memoryinfo_locked_chunks_free
+                .set(info.chunks_free as i64);
+        }
         rpc::RpcEvent::MempoolInfo(info) => {
             metrics
                 .rpc_mempoolinfo_mempool_loaded
