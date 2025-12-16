@@ -175,6 +175,7 @@ pub struct Metrics {
     pub p2p_addrv2_services: IntCounterVec,
     pub p2p_addrv2_addresses: HistogramVec,
     pub p2p_addrv2_timestamp_offset_seconds: HistogramVec,
+    pub p2p_address_selfannouncements: IntCounterVec,
     pub p2p_addrv2_empty: IntCounterVec,
     pub p2p_ping_inbound_value: IntCounterVec,
     pub conn_inbound: IntCounter,
@@ -314,6 +315,7 @@ impl Metrics {
         icv!(p2p_addrv2_services, "Number of addresses with these service bits contained in an 'addrv2' message.", [LABEL_P2P_DIRECTION, LABEL_P2P_SERVICES], registry);
         hv!(p2p_addrv2_addresses, "Histogram of the number of addresses contained in an 'addrv2' message.", BUCKETS_ADDR_ADDRESS_COUNT, [LABEL_P2P_DIRECTION], registry);
         hv!(p2p_addrv2_timestamp_offset_seconds, "Histogram of the timestamp offset (in seconds) of addresses contained in an 'addrv2' message.", BUCKETS_ADDR_ADDRESS_TIMESTAMP_OFFSET, [LABEL_P2P_DIRECTION, LABEL_P2P_ADDR_TIMESTAMP_OFFSET], registry);
+        icv!(p2p_address_selfannouncements, "Number addr(v2) messages entries that are self-announcements (e.g. addr(v2) entry address matches the sender address).", [LABEL_CONN_NETWORK, LABEL_P2P_DIRECTION], registry);
         icv!(p2p_ping_inbound_value, "Number of pings per value (0, u8, u16, u32, u64)", [LABEL_P2P_PING_VALUE], registry);
         icv!(p2p_addrv2_empty, "Number of empty addrv2 messages received and sent (by address).", [LABEL_P2P_DIRECTION, LABEL_CONN_ADDR], registry);
         ic!(conn_inbound, "Number of inbound connections.", registry);
@@ -449,6 +451,7 @@ impl Metrics {
             p2p_addrv2_services,
             p2p_addrv2_addresses,
             p2p_addrv2_timestamp_offset_seconds,
+            p2p_address_selfannouncements,
             p2p_addrv2_empty,
             p2p_ping_inbound_value,
             conn_inbound,

@@ -748,6 +748,92 @@ async fn test_integration_metrics_p2p_addrv2() {
 }
 
 #[tokio::test]
+async fn test_integration_metrics_p2p_address_self_announcement() {
+    println!("test that the P2P address self-announcement metric works");
+
+    let timestamp_now = current_timestamp() as u32;
+
+    publish_and_check(
+        &[
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
+                    meta: Metadata {
+                        peer_id: 8,
+                        addr: "5.5.5.5:1111".to_string(),
+                        conn_type: 2,
+                        command: "addrv2".to_string(),
+                        inbound: true,
+                        size: 5432,
+                    },
+                    msg: Some(Msg::Addrv2(AddrV2 {
+                        addresses: [
+                            Address {
+                                port: 1234,
+                                services: u64::MAX,
+                                timestamp: timestamp_now + 512,
+                                address: Some(bitcoin_primitives::address::Address::Ipv4(
+                                    String::from("5.5.5.5"),
+                                )),
+                            },
+                            Address {
+                                port: 2412,
+                                services: 2311,
+                                timestamp: timestamp_now,
+                                address: Some(bitcoin_primitives::address::Address::Ipv4(
+                                    String::from("6.6.6.6"),
+                                )),
+                            },
+                        ]
+                        .to_vec(),
+                    })),
+                })),
+            }))
+            .unwrap(),
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
+                    meta: Metadata {
+                        peer_id: 8,
+                        addr: "[2222:2222:2222:2222::1]:1111".to_string(),
+                        conn_type: 2,
+                        command: "addr".to_string(),
+                        inbound: true,
+                        size: 5432,
+                    },
+                    msg: Some(Msg::Addrv2(AddrV2 {
+                        addresses: [
+                            Address {
+                                port: 1234,
+                                services: u64::MAX,
+                                timestamp: timestamp_now + 512,
+                                address: Some(bitcoin_primitives::address::Address::Ipv4(
+                                    String::from("5.5.5.5"),
+                                )),
+                            },
+                            Address {
+                                port: 2412,
+                                services: 2311,
+                                timestamp: timestamp_now,
+                                address: Some(bitcoin_primitives::address::Address::Ipv6(
+                                    String::from("2222:2222:2222:2222::1"),
+                                )),
+                            },
+                        ]
+                        .to_vec(),
+                    })),
+                })),
+            }))
+            .unwrap(),
+        ],
+        Subject::NetMsg,
+        r#"
+        peerobserver_p2p_address_selfannouncements{direction="IPv4",network="inbound"} 1
+        peerobserver_p2p_address_selfannouncements{direction="IPv6",network="inbound"} 1
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
 async fn test_integration_metrics_p2p_version() {
     println!("test that the P2P version metrics work");
 

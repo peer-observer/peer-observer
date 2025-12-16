@@ -804,6 +804,15 @@ fn handle_p2p_message(msg: &message::MessageEvent, timestamp_ms: u64, metrics: m
                         .p2p_addr_services
                         .with_label_values(&[&direction, &address.services.to_string()])
                         .inc();
+
+                    // If the sender address and address.address match, assume it's a self-announcement.
+                    if address.address.as_ref().unwrap().inner() == ip {
+                        let network = address.address.as_ref().unwrap().network().to_string();
+                        metrics
+                            .p2p_address_selfannouncements
+                            .with_label_values(&[&direction, &network])
+                            .inc();
+                    }
                 }
             }
             Msg::Addrv2(addrv2) => {
@@ -841,6 +850,15 @@ fn handle_p2p_message(msg: &message::MessageEvent, timestamp_ms: u64, metrics: m
                         .p2p_addrv2_services
                         .with_label_values(&[&direction, &address.services.to_string()])
                         .inc();
+
+                    // If the sender address and address.address match, assume it's a self-announcement.
+                    if address.address.as_ref().unwrap().inner() == ip {
+                        let network = address.address.as_ref().unwrap().network().to_string();
+                        metrics
+                            .p2p_address_selfannouncements
+                            .with_label_values(&[&direction, &network])
+                            .inc();
+                    }
                 }
             }
             Msg::Emptyaddrv2(_) => {

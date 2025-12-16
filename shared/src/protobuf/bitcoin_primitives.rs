@@ -321,6 +321,19 @@ impl address::Address {
             address::Address::Unknown(_) => "Unknown",
         }
     }
+
+    /// Returns the address without the the network wrapper. E.g without IPv4(..).
+    pub fn inner(&self) -> String {
+        match self {
+            address::Address::Ipv4(x) => format!("{}", x),
+            address::Address::Ipv6(x) => format!("{}", x),
+            address::Address::Torv2(x) => format!("{}", x),
+            address::Address::Torv3(x) => format!("{}", x),
+            address::Address::I2p(x) => format!("{}", x),
+            address::Address::Cjdns(x) => format!("{}", x),
+            address::Address::Unknown(x) => format!("{}", x),
+        }
+    }
 }
 
 impl fmt::Display for UnknownAddress {
