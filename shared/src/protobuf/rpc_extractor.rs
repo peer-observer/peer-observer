@@ -3,6 +3,7 @@ use corepc_client::types::v17::{
     UploadTarget as RPCUploadTarget,
 };
 use corepc_client::types::v26::{
+    AddrManInfoNetwork as RPCAddrManInfoNetwork, GetAddrManInfo as RPCGetAddrManInfo,
     GetMempoolInfo, GetPeerInfo as RPCGetPeerInfo, PeerInfo as RPCPeerInfo,
 };
 use std::fmt;
@@ -39,6 +40,7 @@ impl fmt::Display for rpc::RpcEvent {
             rpc::RpcEvent::Uptime(seconds) => write!(f, "Uptime({}s)", seconds),
             rpc::RpcEvent::NetTotals(totals) => write!(f, "{}", totals),
             rpc::RpcEvent::MemoryInfo(info) => write!(f, "{}", info),
+            rpc::RpcEvent::AddrmanInfo(info) => write!(f, "{}", info),
         }
     }
 }
@@ -192,6 +194,41 @@ impl From<RPCGetMemoryInfoStats> for MemoryInfo {
             locked: locked.locked,
             chunks_used: locked.chunks_used,
             chunks_free: locked.chunks_free,
+        }
+    }
+}
+
+impl fmt::Display for AddrManInfo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let total: u64 = self.networks.values().map(|n| n.total).sum();
+        write!(f, "AddrManInfo(total={})", total)
+    }
+}
+
+impl fmt::Display for AddrManInfoNetwork {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "AddrManInfoNetwork(new={}, tried={}, total={})",
+            self.new, self.tried, self.total
+        )
+    }
+}
+
+impl From<RPCGetAddrManInfo> for AddrManInfo {
+    fn from(info: RPCGetAddrManInfo) -> Self {
+        let networks = info.0.into_iter().map(|(k, v)| (k, v.into())).collect();
+
+        AddrManInfo { networks }
+    }
+}
+
+impl From<RPCAddrManInfoNetwork> for AddrManInfoNetwork {
+    fn from(network: RPCAddrManInfoNetwork) -> Self {
+        AddrManInfoNetwork {
+            new: network.new,
+            tried: network.tried,
+            total: network.total,
         }
     }
 }

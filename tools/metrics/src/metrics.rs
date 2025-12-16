@@ -287,6 +287,9 @@ pub struct Metrics {
     pub rpc_memoryinfo_locked_chunks_used: IntGauge,
     pub rpc_memoryinfo_locked_chunks_free: IntGauge,
 
+    // getaddrmaninfo
+    pub rpc_addrmaninfo: IntGaugeVec,
+
     // P2P-extractor
     pub p2pextractor_ping_duration_nanoseconds: IntGauge,
     pub p2pextractor_addrv2relay_addresses: IntCounterVec,
@@ -436,6 +439,9 @@ impl Metrics {
         ig!(rpc_memoryinfo_locked_chunks_used, "Number of allocated chunks in locked memory", registry);
         ig!(rpc_memoryinfo_locked_chunks_free, "Number of unused chunks in locked memory", registry);
 
+        // getaddrmaninfo
+        igv!(rpc_addrmaninfo, "Address manager information by network and table (new/tried/total)", ["network", "table"], registry);
+
         // P2P-extractor
         ig!(p2pextractor_ping_duration_nanoseconds, "The time it takes for a connected Bitcoin node to respond to a ping with a pong in nanoseconds.", registry);
         icv!(p2pextractor_addrv2relay_addresses, "The total number of addresses relayed to the p2p-extractor by the node, per network", ["network"], registry);
@@ -580,6 +586,9 @@ impl Metrics {
             rpc_memoryinfo_locked_locked,
             rpc_memoryinfo_locked_chunks_used,
             rpc_memoryinfo_locked_chunks_free,
+
+            // getaddrmaninfo
+            rpc_addrmaninfo,
 
             // p2p-extractor
             p2pextractor_ping_duration_nanoseconds,

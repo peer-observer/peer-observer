@@ -28,7 +28,8 @@ use shared::{
         log_extractor::{self, LogDebugCategory},
         p2p_extractor,
         rpc_extractor::{
-            self, MemoryInfo, MempoolInfo, NetTotals, PeerInfo, PeerInfos, UploadTarget,
+            self, AddrManInfo, AddrManInfoNetwork, MemoryInfo, MempoolInfo, NetTotals, PeerInfo,
+            PeerInfos, UploadTarget,
         },
     },
     rand::{self, Rng},
@@ -2911,6 +2912,50 @@ async fn test_integration_metrics_rpc_mempoolinfo() {
         peerobserver_rpc_mempoolinfo_transaction_count 1000
         peerobserver_rpc_mempoolinfo_transaction_fees 4000.1
         peerobserver_rpc_mempoolinfo_transaction_vbyte 2000
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_rpc_getaddrmaninfo() {
+    println!("test that the addrmaninfo metrics work");
+
+    let mut networks = HashMap::new();
+    networks.insert(
+        "all_networks".to_string(),
+        AddrManInfoNetwork {
+            new: 1,
+            tried: 2,
+            total: 3,
+        },
+    );
+    networks.insert(
+        "ipv5".to_string(),
+        AddrManInfoNetwork {
+            new: 5,
+            tried: 55,
+            total: 555,
+        },
+    );
+
+    publish_and_check(
+        &[
+            Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+                rpc_event: Some(rpc_extractor::rpc::RpcEvent::AddrmanInfo(AddrManInfo {
+                    networks,
+                })),
+            }))
+            .unwrap(),
+        ],
+        Subject::Rpc,
+        r#"
+        peerobserver_rpc_addrmaninfo{network="all_networks",table="new"} 1
+        peerobserver_rpc_addrmaninfo{network="all_networks",table="total"} 3
+        peerobserver_rpc_addrmaninfo{network="all_networks",table="tried"} 2
+        peerobserver_rpc_addrmaninfo{network="ipv5",table="new"} 5
+        peerobserver_rpc_addrmaninfo{network="ipv5",table="total"} 555
+        peerobserver_rpc_addrmaninfo{network="ipv5",table="tried"} 55
         "#,
     )
     .await;

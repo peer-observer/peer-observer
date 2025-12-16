@@ -181,6 +181,22 @@ fn handle_rpc_event(e: &rpc::RpcEvent, metrics: metrics::Metrics) {
                 .rpc_memoryinfo_locked_chunks_free
                 .set(info.chunks_free as i64);
         }
+        rpc::RpcEvent::AddrmanInfo(info) => {
+            for (network, data) in &info.networks {
+                metrics
+                    .rpc_addrmaninfo
+                    .with_label_values(&[network.as_str(), "new"])
+                    .set(data.new as i64);
+                metrics
+                    .rpc_addrmaninfo
+                    .with_label_values(&[network.as_str(), "tried"])
+                    .set(data.tried as i64);
+                metrics
+                    .rpc_addrmaninfo
+                    .with_label_values(&[network.as_str(), "total"])
+                    .set(data.total as i64);
+            }
+        }
         rpc::RpcEvent::MempoolInfo(info) => {
             metrics
                 .rpc_mempoolinfo_mempool_loaded

@@ -9,6 +9,7 @@ message rpc {
     uint32 uptime = 3;
     NetTotals net_totals = 4;
     MemoryInfo memory_info = 5;
+    AddrManInfo addrman_info = 6;
   }
 }
 
@@ -108,4 +109,16 @@ message MemoryInfo {
   required uint64 locked       = 4; // Amount of bytes that succeeded locking
   required uint64 chunks_used  = 5; // Number of allocated chunks
   required uint64 chunks_free  = 6; // Number of unused chunks
+}
+
+// A getaddrmaninfo RPC result: Returns address manager information.
+message AddrManInfo {
+  map<string, AddrManInfoNetwork> networks = 1; // Address counts by network type
+}
+
+// Address manager information by network. Part of getaddrmaninfo.
+message AddrManInfoNetwork {
+  required uint64 new   = 1; // Number of addresses in new table
+  required uint64 tried = 2; // Number of addresses in tried table
+  required uint64 total = 3; // Total addresses (new + tried)
 }

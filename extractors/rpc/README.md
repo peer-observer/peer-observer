@@ -47,6 +47,8 @@ Options:
           Disable quering and publishing of `getnettotals` data
       --disable-getmemoryinfo
           Disable quering and publishing of `getmemoryinfo` data
+      --disable-getaddrmaninfo
+          Disable quering and publishing of `getaddrmaninfo` data
   -h, --help
           Print help
   -V, --version
