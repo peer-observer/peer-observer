@@ -169,32 +169,41 @@ async fn test_integration_rpc_getpeerinfo() {
 async fn test_integration_rpc_getmempoolinfo() {
     println!("test that we receive getmempoolinfo RPC events");
 
-    check(true, false, true, true, true, true, true, |event| match event {
-        PeerObserverEvent::RpcExtractor(r) => {
-            if let Some(ref e) = r.rpc_event {
-                match e {
-                    MempoolInfo(info) => {
-                        assert_eq!(info.loaded, true);
-                        assert_eq!(info.size, 0);
-                        assert_eq!(info.usage, 0);
-                        assert_eq!(info.bytes, 0);
-                        assert_eq!(info.total_fee, 0.0);
-                        assert_eq!(info.max_mempool, 300000000);
-                        // These will change between v29 and v30, so don't hardcode something here.
-                        assert!(info.mempoolminfee > 0.0);
-                        assert!(info.minrelaytxfee > 0.0);
-                        assert!(info.incrementalrelayfee > 0.0);
+    check(
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        |event| match event {
+            PeerObserverEvent::RpcExtractor(r) => {
+                if let Some(ref e) = r.rpc_event {
+                    match e {
+                        MempoolInfo(info) => {
+                            assert_eq!(info.loaded, true);
+                            assert_eq!(info.size, 0);
+                            assert_eq!(info.usage, 0);
+                            assert_eq!(info.bytes, 0);
+                            assert_eq!(info.total_fee, 0.0);
+                            assert_eq!(info.max_mempool, 300000000);
+                            // These will change between v29 and v30, so don't hardcode something here.
+                            assert!(info.mempoolminfee > 0.0);
+                            assert!(info.minrelaytxfee > 0.0);
+                            assert!(info.incrementalrelayfee > 0.0);
 
-                        assert_eq!(info.unbroadcastcount, 0);
-                        assert_eq!(info.fullrbf, true);
-                        return;
+                            assert_eq!(info.unbroadcastcount, 0);
+                            assert_eq!(info.fullrbf, true);
+                            return;
+                        }
+                        _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }
-                    _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                 }
             }
-        }
-        _ => panic!("unexpected event {:?}", event),
-    })
+            _ => panic!("unexpected event {:?}", event),
+        },
+    )
     .await;
 }
 
@@ -202,21 +211,30 @@ async fn test_integration_rpc_getmempoolinfo() {
 async fn test_integration_rpc_uptime() {
     println!("test that we receive uptime RPC events");
 
-    check(true, true, false, true, true, true, true, |event| match event {
-        PeerObserverEvent::RpcExtractor(r) => {
-            if let Some(ref e) = r.rpc_event {
-                match e {
-                    Uptime(uptime_seconds) => {
-                        // Uptime should be a positive number
-                        assert!(*uptime_seconds > 0);
-                        return;
+    check(
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        |event| match event {
+            PeerObserverEvent::RpcExtractor(r) => {
+                if let Some(ref e) = r.rpc_event {
+                    match e {
+                        Uptime(uptime_seconds) => {
+                            // Uptime should be a positive number
+                            assert!(*uptime_seconds > 0);
+                            return;
+                        }
+                        _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }
-                    _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                 }
             }
-        }
-        _ => panic!("unexpected event {:?}", event),
-    })
+            _ => panic!("unexpected event {:?}", event),
+        },
+    )
     .await;
 }
 
@@ -224,22 +242,31 @@ async fn test_integration_rpc_uptime() {
 async fn test_integration_rpc_getnettotals() {
     println!("test that we receive getnettotals RPC events");
 
-    check(true, true, true, false, true, true, true, |event| match event {
-        PeerObserverEvent::RpcExtractor(r) => {
-            if let Some(ref e) = r.rpc_event {
-                match e {
-                    NetTotals(net_totals) => {
-                        assert!(net_totals.time_millis > 0);
-                        assert!(net_totals.total_bytes_received > 0);
-                        assert!(net_totals.total_bytes_sent > 0);
-                        return;
+    check(
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        |event| match event {
+            PeerObserverEvent::RpcExtractor(r) => {
+                if let Some(ref e) = r.rpc_event {
+                    match e {
+                        NetTotals(net_totals) => {
+                            assert!(net_totals.time_millis > 0);
+                            assert!(net_totals.total_bytes_received > 0);
+                            assert!(net_totals.total_bytes_sent > 0);
+                            return;
+                        }
+                        _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }
-                    _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                 }
             }
-        }
-        _ => panic!("unexpected event {:?}", event),
-    })
+            _ => panic!("unexpected event {:?}", event),
+        },
+    )
     .await;
 }
 
@@ -247,22 +274,31 @@ async fn test_integration_rpc_getnettotals() {
 async fn test_integration_rpc_getmemoryinfo() {
     println!("test that we receive getmemoryinfo RPC events");
 
-    check(true, true, true, true, false, true, true, |event| match event {
-        PeerObserverEvent::RpcExtractor(r) => {
-            if let Some(ref e) = r.rpc_event {
-                match e {
-                    MemoryInfo(info) => {
-                        assert!(info.total > 0);
-                        assert!(info.used <= info.total);
-                        assert!(info.locked <= info.total);
-                        return;
+    check(
+        true,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        |event| match event {
+            PeerObserverEvent::RpcExtractor(r) => {
+                if let Some(ref e) = r.rpc_event {
+                    match e {
+                        MemoryInfo(info) => {
+                            assert!(info.total > 0);
+                            assert!(info.used <= info.total);
+                            assert!(info.locked <= info.total);
+                            return;
+                        }
+                        _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }
-                    _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                 }
             }
-        }
-        _ => panic!("unexpected event {:?}", event),
-    })
+            _ => panic!("unexpected event {:?}", event),
+        },
+    )
     .await;
 }
 
@@ -270,38 +306,47 @@ async fn test_integration_rpc_getmemoryinfo() {
 async fn test_integration_rpc_getaddrmaninfo() {
     println!("test that we receive getaddrmaninfo RPC events");
 
-    check(true, true, true, true, true, false, true, |event| match event {
-        PeerObserverEvent::RpcExtractor(r) => {
-            if let Some(ref e) = r.rpc_event {
-                match e {
-                    AddrmanInfo(info) => {
-                        assert!(!info.networks.is_empty());
+    check(
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true,
+        |event| match event {
+            PeerObserverEvent::RpcExtractor(r) => {
+                if let Some(ref e) = r.rpc_event {
+                    match e {
+                        AddrmanInfo(info) => {
+                            assert!(!info.networks.is_empty());
 
-                        if let Some(all_nets) = info.networks.get("all_networks") {
-                            assert_eq!(
-                                all_nets.total,
-                                all_nets.new + all_nets.tried,
-                                "all_networks: total should equal new + tried"
-                            );
+                            if let Some(all_nets) = info.networks.get("all_networks") {
+                                assert_eq!(
+                                    all_nets.total,
+                                    all_nets.new + all_nets.tried,
+                                    "all_networks: total should equal new + tried"
+                                );
+                            }
+
+                            for (network, data) in &info.networks {
+                                assert_eq!(
+                                    data.total,
+                                    data.new + data.tried,
+                                    "Network {}: total should equal new + tried",
+                                    network
+                                );
+                            }
+
+                            return;
                         }
-
-                        for (network, data) in &info.networks {
-                            assert_eq!(
-                                data.total,
-                                data.new + data.tried,
-                                "Network {}: total should equal new + tried",
-                                network
-                            );
-                        }
-
-                        return;
+                        _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }
-                    _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                 }
             }
-        }
-        _ => panic!("unexpected event {:?}", event),
-    })
+            _ => panic!("unexpected event {:?}", event),
+        },
+    )
     .await;
 }
 
@@ -309,26 +354,35 @@ async fn test_integration_rpc_getaddrmaninfo() {
 async fn test_integration_rpc_getchaintxstats() {
     println!("test that we receive getchaintxstats RPC events");
 
-    check(true, true, true, true, true, true, false, |event| match event {
-        PeerObserverEvent::RpcExtractor(r) => {
-            if let Some(ref e) = r.rpc_event {
-                match e {
-                    ChainTxStats(stats) => {
-                        assert!(stats.time > 0);
-                        assert!(stats.tx_count > 0);
-                        assert!(!stats.window_final_block_hash.is_empty());
-                        assert!(stats.window_final_block_height >= 0);
-                        assert!(stats.window_block_count >= 0);
-                        // Note: window_tx_count, window_interval, and tx_rate
-                        // are only present when window_block_count > 0, which
-                        // requires mined blocks. Fresh regtest has 0 blocks.
-                        return;
+    check(
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        |event| match event {
+            PeerObserverEvent::RpcExtractor(r) => {
+                if let Some(ref e) = r.rpc_event {
+                    match e {
+                        ChainTxStats(stats) => {
+                            assert!(stats.time > 0);
+                            assert!(stats.tx_count > 0);
+                            assert!(!stats.window_final_block_hash.is_empty());
+                            assert!(stats.window_final_block_height >= 0);
+                            assert!(stats.window_block_count >= 0);
+                            // Note: window_tx_count, window_interval, and tx_rate
+                            // are only present when window_block_count > 0, which
+                            // requires mined blocks. Fresh regtest has 0 blocks.
+                            return;
+                        }
+                        _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }
-                    _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                 }
             }
-        }
-        _ => panic!("unexpected event {:?}", event),
-    })
+            _ => panic!("unexpected event {:?}", event),
+        },
+    )
     .await;
 }

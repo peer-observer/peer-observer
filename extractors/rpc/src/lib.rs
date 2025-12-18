@@ -141,6 +141,11 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         duration_sec
     );
 
+    // Use a separate interval for queries that can be run less frequently
+    // Currently only getchaintxstats, hence named as such
+    let chaintxstats_duration = Duration::from_secs(args.query_interval * 60);
+    let mut chaintxstats_interval = time::interval(chaintxstats_duration);
+
     log::info!(
         "Querying getpeerinfo enabled:    {}",
         !args.disable_getpeerinfo
@@ -205,10 +210,11 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
                     && let Err(e) = getaddrmaninfo(&rpc_client, &nats_client).await {
                         log::error!("Could not fetch and publish 'getaddrmaninfo': {}", e)
                     }
-                if !args.disable_getchaintxstats
-                    && let Err(e) = getchaintxstats(&rpc_client, &nats_client).await {
-                        log::error!("Could not fetch and publish 'getchaintxstats': {}", e)
-                    }
+            }
+            _ = chaintxstats_interval.tick(), if !args.disable_getchaintxstats => {
+                if let Err(e) = getchaintxstats(&rpc_client, &nats_client).await {
+                    log::error!("Could not fetch and publish 'getchaintxstats': {}", e)
+                }
             }
             res = shutdown_rx.changed() => {
                 match res {
