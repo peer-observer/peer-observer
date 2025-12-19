@@ -778,14 +778,14 @@ fn check_self_and_subnet_announcement(
     if address.inner() == ip {
         metrics
             .p2p_address_selfannouncements
-            .with_label_values(&[&direction, &network])
+            .with_label_values(&[&network, &direction])
             .inc();
     } else if network == "IPv4" || network == "IPv6" {
         let addr_subnet = util::subnet(address.inner());
         if addr_subnet == subnet {
             metrics
                 .p2p_address_subnetannouncements
-                .with_label_values(&[&direction, &network])
+                .with_label_values(&[&network, &direction])
                 .inc();
         }
     }

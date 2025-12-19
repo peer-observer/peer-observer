@@ -829,8 +829,8 @@ async fn test_integration_metrics_p2p_address_self_announcement() {
         ],
         Subject::NetMsg,
         r#"
-        peerobserver_p2p_address_selfannouncements{direction="IPv4",network="inbound"} 1
-        peerobserver_p2p_address_selfannouncements{direction="IPv6",network="inbound"} 1
+        peerobserver_p2p_address_selfannouncements{direction="inbound",network="IPv4"} 1
+        peerobserver_p2p_address_selfannouncements{direction="inbound",network="IPv6"} 1
         "#,
     )
     .await;
@@ -915,8 +915,8 @@ async fn test_integration_metrics_p2p_address_subnet_announcement() {
         ],
         Subject::NetMsg,
         r#"
-        peerobserver_p2p_address_subnetannouncements{direction="IPv4",network="inbound"} 1
-        peerobserver_p2p_address_subnetannouncements{direction="IPv6",network="inbound"} 1
+        peerobserver_p2p_address_subnetannouncements{direction="inbound",network="IPv4"} 1
+        peerobserver_p2p_address_subnetannouncements{direction="inbound",network="IPv6"} 1
         "#,
     )
     .await;
