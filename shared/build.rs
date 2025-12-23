@@ -2,7 +2,6 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
-use prost_build;
 
 fn main() {
     // Generate Rust types for the protobuf's
@@ -42,7 +41,7 @@ fn main() {
 }
 
 fn generate_ip_match(addr: &str) -> String {
-    return format!(" \"{}\" ", addr);
+    format!(" \"{}\" ", addr)
 }
 
 // generates a 'rs_file' with a 'match_fn_name' IP match function from a 'input' list
@@ -54,7 +53,7 @@ fn gen_ip_match_fn(input: &str, rs_file: &str, match_fn_name: &str) {
 
     let match_statement = input_list
         .lines()
-        .map(|ip| generate_ip_match(ip))
+        .map(generate_ip_match)
         .collect::<Vec<String>>()
         .join("|");
 

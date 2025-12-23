@@ -99,7 +99,7 @@ impl From<p2p::message_filter::GetCFHeaders> for GetCfHeaders {
     fn from(getcfheaders: p2p::message_filter::GetCFHeaders) -> Self {
         GetCfHeaders {
             filter_type: getcfheaders.filter_type as u32,
-            start_height: getcfheaders.start_height as u32,
+            start_height: getcfheaders.start_height,
             stop_hash: getcfheaders.stop_hash.as_byte_array().to_vec(),
         }
     }
@@ -283,7 +283,7 @@ impl fmt::Display for GetHeaders {
         let hashes_strs: Vec<String> = self
             .locator_hashes
             .iter()
-            .map(|h| bitcoin::BlockHash::from_slice(&h).unwrap().to_string())
+            .map(|h| bitcoin::BlockHash::from_slice(h).unwrap().to_string())
             .collect();
         write!(
             f,
@@ -300,7 +300,7 @@ impl fmt::Display for GetBlocks {
         let hashes_strs: Vec<String> = self
             .locator_hashes
             .iter()
-            .map(|h| bitcoin::BlockHash::from_slice(&h).unwrap().to_string())
+            .map(|h| bitcoin::BlockHash::from_slice(h).unwrap().to_string())
             .collect();
         write!(
             f,
@@ -357,7 +357,6 @@ impl fmt::Display for Reject {
             self.reason_details,
             bitcoin::BlockHash::from_slice(&self.hash)
                 .unwrap()
-                .to_string()
         )
     }
 }
@@ -518,7 +517,7 @@ impl fmt::Display for CfHeaders {
             .filter_hashes
             .iter()
             .map(|h| {
-                bitcoin::hash_types::FilterHash::from_slice(&h)
+                bitcoin::hash_types::FilterHash::from_slice(h)
                     .unwrap()
                     .to_string()
             })
@@ -540,7 +539,7 @@ impl fmt::Display for CfCheckpt {
             .filter_headers
             .iter()
             .map(|h| {
-                bitcoin::hash_types::FilterHeader::from_slice(&h)
+                bitcoin::hash_types::FilterHeader::from_slice(h)
                     .unwrap()
                     .to_string()
             })
@@ -586,7 +585,7 @@ impl fmt::Display for MerkleBlock {
             .hashes
             .iter()
             .map(|h| {
-                bitcoin::hash_types::TxMerkleNode::from_slice(&h)
+                bitcoin::hash_types::TxMerkleNode::from_slice(h)
                     .unwrap()
                     .to_string()
             })
@@ -677,17 +676,17 @@ impl From<&p2p::message::NetworkMessage> for message_event::Msg {
             NetworkMessage::Ping(x) => Msg::Ping(Ping { value: *x }),
             NetworkMessage::Pong(x) => Msg::Pong(Pong { value: *x }),
             NetworkMessage::Inv(invs) => Msg::Inv(Inv {
-                items: invs.iter().map(|inv| inv.clone().into()).collect(),
+                items: invs.iter().map(|inv| (*inv).into()).collect(),
             }),
             NetworkMessage::NotFound(invs) => Msg::Notfound(NotFound {
-                items: invs.iter().map(|inv| inv.clone().into()).collect(),
+                items: invs.iter().map(|inv| (*inv).into()).collect(),
             }),
             NetworkMessage::Tx(tx) => Msg::Tx(tx.clone().into()),
             NetworkMessage::GetData(gets) => Msg::Getdata(GetData {
-                items: gets.iter().map(|get| get.clone().into()).collect(),
+                items: gets.iter().map(|get| (*get).into()).collect(),
             }),
             NetworkMessage::Headers(headers) => Msg::Headers(Headers {
-                headers: headers.iter().map(|h| h.clone().into()).collect(),
+                headers: headers.iter().map(|h| (*h).into()).collect(),
             }),
             NetworkMessage::Addr(addrs) => Msg::Addr(Addr {
                 addresses: addrs
@@ -728,7 +727,7 @@ impl From<&p2p::message::NetworkMessage> for message_event::Msg {
             NetworkMessage::CmpctBlock(cmpct_block) => {
                 Msg::Compactblock(cmpct_block.compact_block.clone().into())
             }
-            NetworkMessage::SendCmpct(send_cmpct) => Msg::Sendcompact(send_cmpct.clone().into()),
+            NetworkMessage::SendCmpct(send_cmpct) => Msg::Sendcompact((*send_cmpct).into()),
             NetworkMessage::Block(block) => Msg::Block(block.clone().into()),
             NetworkMessage::GetBlockTxn(request) => {
                 Msg::Getblocktxn(request.txs_request.clone().into())

@@ -1,6 +1,5 @@
 #![cfg_attr(feature = "strict", deny(warnings))]
 
-use crossbeam;
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use rand::Rng;
 use shared::bitcoin::consensus::{encode, Decodable};
@@ -213,17 +212,11 @@ fn worker(
 }
 
 fn handle_event(event: PeerObserverEvent, timestamp: u64, input_sender: Sender<Input>) {
-    match event {
-        PeerObserverEvent::EbpfExtractor(event) => match event.ebpf_event.unwrap() {
-            EbpfEvent::Message(msg) => {
-                if msg.meta.inbound {
-                    handle_inbound_message(msg, timestamp, input_sender);
-                }
-            }
-            _ => (),
-        },
-        _ => (),
-    }
+    if let PeerObserverEvent::EbpfExtractor(event) = event { if let EbpfEvent::Message(msg) = event.ebpf_event.unwrap() {
+        if msg.meta.inbound {
+            handle_inbound_message(msg, timestamp, input_sender);
+        }
+    } }
 }
 
 fn handle_inbound_message(msg: NetMessage, timestamp: u64, input_sender: Sender<Input>) {
@@ -314,7 +307,7 @@ fn try_connect(address: SocketAddr) -> Option<VersionMessage> {
             }
         }
     }
-    return None;
+    None
 }
 
 // TODO:
@@ -452,7 +445,7 @@ async fn main() {
                 version_useragent: version_msg
                     .as_ref()
                     .map_or(String::default(), |v| v.user_agent.clone()),
-                version_relay: version_msg.as_ref().map_or(false, |v| v.relay),
+                version_relay: version_msg.as_ref().is_some_and(|v| v.relay),
                 version_version: version_msg.as_ref().map_or(0, |v| v.version),
                 version_services: version_msg.as_ref().map_or(0, |v| v.services.to_u64()),
                 version_start_height: version_msg.as_ref().map_or(-1, |v| v.start_height),

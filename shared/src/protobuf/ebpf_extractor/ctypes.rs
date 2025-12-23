@@ -37,19 +37,19 @@ pub struct P2PMessageMetadata {
 impl P2PMessageMetadata {
     /// Extracts the IP address of the peer as a string from the addr bytes.
     pub fn peer_addr(&self) -> String {
-        String::from_utf8_lossy(&self.peer_addr.split(|c| *c == 0x00u8).next().unwrap())
+        String::from_utf8_lossy(self.peer_addr.split(|c| *c == 0x00u8).next().unwrap())
             .into_owned()
     }
 
     /// Extracts the connection type of the peer as a string from the peer_conn_type bytes.
     pub fn peer_conn_type(&self) -> String {
-        String::from_utf8_lossy(&self.peer_conn_type.split(|c| *c == 0x00u8).next().unwrap())
+        String::from_utf8_lossy(self.peer_conn_type.split(|c| *c == 0x00u8).next().unwrap())
             .into_owned()
     }
 
     /// Extracts the type (i.e. command) of the message  as a string from the msg_type bytes.
     pub fn msg_type(&self) -> String {
-        String::from_utf8_lossy(&self.msg_type.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
+        String::from_utf8_lossy(self.msg_type.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
     }
 
     pub fn from_bytes(x: &[u8]) -> Self {
@@ -118,12 +118,12 @@ pub struct Connection {
 impl Connection {
     /// Extracts the IP address of the peer as a string from the addr bytes.
     pub fn addr(&self) -> String {
-        String::from_utf8_lossy(&self.addr.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
+        String::from_utf8_lossy(self.addr.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
     }
 
     /// Extracts the connection type of the peer as a string from the conn_type bytes.
     pub fn conn_type(&self) -> String {
-        String::from_utf8_lossy(&self.conn_type.split(|c| *c == 0x00u8).next().unwrap())
+        String::from_utf8_lossy(self.conn_type.split(|c| *c == 0x00u8).next().unwrap())
             .into_owned()
     }
 }
@@ -226,7 +226,7 @@ impl MisbehavingConnection {
 
     /// Extracts the misbehavior message as a string from the message bytes.
     pub fn message(&self) -> String {
-        String::from_utf8_lossy(&self.message.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
+        String::from_utf8_lossy(self.message.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
     }
 }
 
@@ -300,7 +300,7 @@ impl fmt::Display for MempoolRemoved {
 impl MempoolRemoved {
     /// Returns the removal reason as String
     pub fn reason(&self) -> String {
-        String::from_utf8_lossy(&self.reason.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
+        String::from_utf8_lossy(self.reason.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
     }
 
     pub fn from_bytes(x: &[u8]) -> MempoolRemoved {
@@ -383,7 +383,7 @@ impl fmt::Display for MempoolRejected {
 impl MempoolRejected {
     /// Returns the rejection reason as String
     pub fn reason(&self) -> String {
-        String::from_utf8_lossy(&self.reason.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
+        String::from_utf8_lossy(self.reason.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
     }
 
     pub fn from_bytes(x: &[u8]) -> MempoolRejected {
@@ -436,7 +436,7 @@ fn decode_network_message(
             if let Some(message) = decode_weird_network_message(meta, payload) {
                 return Ok(message);
             }
-            return Err(e);
+            Err(e)
         }
     }
 }
@@ -530,12 +530,12 @@ pub struct AddrmanInsertNew {
 impl AddrmanInsertNew {
     /// Extracts the IP address as a string from the addr bytes.
     pub fn addr(&self) -> String {
-        String::from_utf8_lossy(&self.addr.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
+        String::from_utf8_lossy(self.addr.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
     }
 
     /// Extracts the source IP address as a string from the source bytes.
     pub fn source(&self) -> String {
-        String::from_utf8_lossy(&self.source.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
+        String::from_utf8_lossy(self.source.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
     }
 
     pub fn from_bytes(x: &[u8]) -> AddrmanInsertNew {
@@ -572,12 +572,12 @@ pub struct AddrmanInsertTried {
 impl AddrmanInsertTried {
     /// Extracts the IP address as a string from the addr bytes.
     pub fn addr(&self) -> String {
-        String::from_utf8_lossy(&self.addr.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
+        String::from_utf8_lossy(self.addr.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
     }
 
     /// Extracts the source IP address as a string from the source bytes.
     pub fn source(&self) -> String {
-        String::from_utf8_lossy(&self.source.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
+        String::from_utf8_lossy(self.source.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
     }
 
     pub fn from_bytes(x: &[u8]) -> AddrmanInsertTried {
