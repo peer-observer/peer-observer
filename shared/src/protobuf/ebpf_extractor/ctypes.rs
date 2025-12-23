@@ -37,8 +37,7 @@ pub struct P2PMessageMetadata {
 impl P2PMessageMetadata {
     /// Extracts the IP address of the peer as a string from the addr bytes.
     pub fn peer_addr(&self) -> String {
-        String::from_utf8_lossy(self.peer_addr.split(|c| *c == 0x00u8).next().unwrap())
-            .into_owned()
+        String::from_utf8_lossy(self.peer_addr.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
     }
 
     /// Extracts the connection type of the peer as a string from the peer_conn_type bytes.
@@ -123,8 +122,7 @@ impl Connection {
 
     /// Extracts the connection type of the peer as a string from the conn_type bytes.
     pub fn conn_type(&self) -> String {
-        String::from_utf8_lossy(self.conn_type.split(|c| *c == 0x00u8).next().unwrap())
-            .into_owned()
+        String::from_utf8_lossy(self.conn_type.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
     }
 }
 

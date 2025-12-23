@@ -355,8 +355,7 @@ impl fmt::Display for Reject {
             self.rejected_command,
             self.reason,
             self.reason_details,
-            bitcoin::BlockHash::from_slice(&self.hash)
-                .unwrap()
+            bitcoin::BlockHash::from_slice(&self.hash).unwrap()
         )
     }
 }
