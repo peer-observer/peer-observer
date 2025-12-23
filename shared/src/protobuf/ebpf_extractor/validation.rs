@@ -37,7 +37,7 @@ impl fmt::Display for validation_event::Event {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             validation_event::Event::BlockConnected(connected) => {
-                write!(f, "{}", connected.to_string())
+                write!(f, "{}", connected)
             }
         }
     }

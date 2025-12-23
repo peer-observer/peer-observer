@@ -203,7 +203,7 @@ impl From<p2p::message_blockdata::Inventory> for InventoryItem {
             },
             Inventory::Unknown { inv_type, hash } => InventoryItem {
                 item: Some(inventory_item::Item::Unknown(UnknownItem {
-                    inv_type: inv_type,
+                    inv_type,
                     hash: hash.to_vec(),
                 })),
             },
@@ -237,35 +237,35 @@ impl fmt::Display for InventoryItem {
         if let Some(item) = &self.item {
             match item {
                 Item::Transaction(txid) => {
-                    write!(f, "Tx({})", bitcoin::Txid::from_slice(&txid).unwrap())
+                    write!(f, "Tx({})", bitcoin::Txid::from_slice(txid).unwrap())
                 }
                 Item::Block(hash) => write!(
                     f,
                     "Block({})",
-                    bitcoin::BlockHash::from_slice(&hash).unwrap()
+                    bitcoin::BlockHash::from_slice(hash).unwrap()
                 ),
                 Item::Wtx(wtxid) => {
-                    write!(f, "WTx({})", bitcoin::Wtxid::from_slice(&wtxid).unwrap())
+                    write!(f, "WTx({})", bitcoin::Wtxid::from_slice(wtxid).unwrap())
                 }
                 Item::WitnessTransaction(wtxid) => {
                     write!(
                         f,
                         "WitnessTx({})",
-                        bitcoin::Wtxid::from_slice(&wtxid).unwrap()
+                        bitcoin::Wtxid::from_slice(wtxid).unwrap()
                     )
                 }
                 Item::WitnessBlock(hash) => {
                     write!(
                         f,
                         "WitnessBlock({})",
-                        bitcoin::BlockHash::from_slice(&hash).unwrap()
+                        bitcoin::BlockHash::from_slice(hash).unwrap()
                     )
                 }
                 Item::CompactBlock(hash) => {
                     write!(
                         f,
                         "CompactBlock({})",
-                        bitcoin::BlockHash::from_slice(&hash).unwrap()
+                        bitcoin::BlockHash::from_slice(hash).unwrap()
                     )
                 }
                 Item::Unknown(uitem) => write!(
@@ -325,12 +325,12 @@ impl address::Address {
     /// Returns the address without the the network wrapper. E.g without IPv4(..).
     pub fn inner(&self) -> String {
         match self {
-            address::Address::Ipv4(x) => format!("{}", x),
-            address::Address::Ipv6(x) => format!("{}", x),
-            address::Address::Torv2(x) => format!("{}", x),
-            address::Address::Torv3(x) => format!("{}", x),
-            address::Address::I2p(x) => format!("{}", x),
-            address::Address::Cjdns(x) => format!("{}", x),
+            address::Address::Ipv4(x) => x.to_string(),
+            address::Address::Ipv6(x) => x.to_string(),
+            address::Address::Torv2(x) => x.to_string(),
+            address::Address::Torv3(x) => x.to_string(),
+            address::Address::I2p(x) => x.to_string(),
+            address::Address::Cjdns(x) => x.to_string(),
             address::Address::Unknown(x) => format!("{}", x),
         }
     }

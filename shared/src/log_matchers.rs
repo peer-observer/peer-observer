@@ -76,7 +76,7 @@ impl LogMatcher for UnknownLogMessage {
 
 impl LogMatcher for BlockConnectedLog {
     fn parse_event(line: &str) -> Option<LogEvent> {
-        let Some(caps) = BLOCK_CONNECTED_REGEX.captures(&line) else {
+        let Some(caps) = BLOCK_CONNECTED_REGEX.captures(line) else {
             return None;
         };
 
@@ -91,7 +91,7 @@ impl LogMatcher for BlockConnectedLog {
 
 impl LogMatcher for BlockCheckedLog {
     fn parse_event(line: &str) -> Option<LogEvent> {
-        let Some(caps) = BLOCK_CHECKED_REGEX.captures(&line) else {
+        let Some(caps) = BLOCK_CHECKED_REGEX.captures(line) else {
             return None;
         };
 
@@ -99,7 +99,7 @@ impl LogMatcher for BlockCheckedLog {
         let state = caps.get(2)?.as_str().to_string();
         let debug_message = caps
             .get(3)
-            .map_or_else(|| String::new(), |m| m.as_str().to_string());
+            .map_or_else(String::new, |m| m.as_str().to_string());
         Some(LogEvent::BlockCheckedLog(BlockCheckedLog {
             block_hash,
             state,
