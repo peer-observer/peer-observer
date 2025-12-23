@@ -72,8 +72,7 @@ pub async fn run(
                 match event::Event::decode(msg.payload) {
                     Ok(event) => {
                         if let Some(event) = event.peer_observer_event {
-                            match serde_json::to_string::<PeerObserverEvent>(&event.clone().into())
-                            {
+                            match serde_json::to_string::<PeerObserverEvent>(&event.clone()) {
                                 Ok(msg) => {
                                     broadcast_to_clients(&msg, &clients).await;
                                 }
@@ -147,13 +146,10 @@ async fn handle_client(
     while let Some(msg) = incoming.next().await {
         match msg {
             Ok(m) => {
-                match m {
-                    TungsteniteMessage::Close(_) => {
-                        // Remove the client from the shared list if the connection is closed
-                        clients.lock().await.remove(&addr);
-                        break;
-                    }
-                    _ => (), // We ignore all other messages a client sends us.
+                if let TungsteniteMessage::Close(_) = m {
+                    // Remove the client from the shared list if the connection is closed
+                    clients.lock().await.remove(&addr);
+                    break;
                 }
             }
             Err(_) => {

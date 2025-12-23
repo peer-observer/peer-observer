@@ -297,7 +297,7 @@ async fn handle_connection(
                                 if !args.disable_invs {
                                     let items: Vec<bitcoin_primitives::InventoryItem> = inventory
                                         .iter()
-                                        .map(|i| i.clone().into())
+                                        .map(|i| (*i).into())
                                         .collect();
                                     publish_inventory_announcement_event(items, &nats_client).await;
                                 }

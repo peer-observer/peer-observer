@@ -34,7 +34,7 @@ const RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR: i32 = -5;
 const RINGBUFF_CALLBACK_UNABLE_TO_PARSE_P2P_MSG: i32 = -20;
 
 const NO_EVENTS_ERROR_DURATION: Duration = Duration::from_secs(60 * 3);
-const NO_EVENTS_WARN_DURATION: Duration = Duration::from_secs(60 * 1);
+const NO_EVENTS_WARN_DURATION: Duration = Duration::from_secs(60);
 
 struct Tracepoint<'a> {
     pub context: &'a str,
@@ -279,13 +279,13 @@ async fn run() -> Result<(), RuntimeError> {
     let mut ringbuff_builder = RingBufferBuilder::new();
 
     // P2P net msgs tracepoints
-    let map_net_msg_small = find_map(&obj, "net_msg_small")?;
-    let map_net_msg_medium = find_map(&obj, "net_msg_medium")?;
-    let map_net_msg_large = find_map(&obj, "net_msg_large")?;
-    let map_net_msg_huge = find_map(&obj, "net_msg_huge")?;
+    let map_net_msg_small = find_map(obj, "net_msg_small")?;
+    let map_net_msg_medium = find_map(obj, "net_msg_medium")?;
+    let map_net_msg_large = find_map(obj, "net_msg_large")?;
+    let map_net_msg_huge = find_map(obj, "net_msg_huge")?;
     if !args.no_p2pmsg_tracepoints {
         active_tracepoints.extend(&TRACEPOINTS_NET_MESSAGE);
-        #[cfg_attr(rustfmt, rustfmt_skip)]
+        #[rustfmt::skip]
         ringbuff_builder
             .add(&map_net_msg_small,    |data| { handle_net_message(data, &nc) })?
             .add(&map_net_msg_medium,   |data| { handle_net_message(data, &nc) })?
@@ -294,14 +294,14 @@ async fn run() -> Result<(), RuntimeError> {
     }
 
     // P2P connection tracepoints
-    let map_net_conn_inbound = find_map(&obj, "net_conn_inbound")?;
-    let map_net_conn_outbound = find_map(&obj, "net_conn_outbound")?;
-    let map_net_conn_closed = find_map(&obj, "net_conn_closed")?;
-    let map_net_conn_inbound_evicted = find_map(&obj, "net_conn_inbound_evicted")?;
-    let map_net_conn_misbehaving = find_map(&obj, "net_conn_misbehaving")?;
+    let map_net_conn_inbound = find_map(obj, "net_conn_inbound")?;
+    let map_net_conn_outbound = find_map(obj, "net_conn_outbound")?;
+    let map_net_conn_closed = find_map(obj, "net_conn_closed")?;
+    let map_net_conn_inbound_evicted = find_map(obj, "net_conn_inbound_evicted")?;
+    let map_net_conn_misbehaving = find_map(obj, "net_conn_misbehaving")?;
     if !args.no_connection_tracepoints {
         active_tracepoints.extend(&TRACEPOINTS_NET_CONN);
-        #[cfg_attr(rustfmt, rustfmt_skip)]
+        #[rustfmt::skip]
         ringbuff_builder
             .add(&map_net_conn_inbound,         |data| { handle_net_conn_inbound(data, &nc) })?
             .add(&map_net_conn_outbound,        |data| { handle_net_conn_outbound(data, &nc) })?
@@ -311,7 +311,7 @@ async fn run() -> Result<(), RuntimeError> {
     }
 
     // validation tracepoints
-    let map_validation_block_connected = find_map(&obj, "validation_block_connected")?;
+    let map_validation_block_connected = find_map(obj, "validation_block_connected")?;
     if !args.no_validation_tracepoints {
         active_tracepoints.extend(&TRACEPOINTS_VALIDATION);
         ringbuff_builder.add(&map_validation_block_connected, |data| {
@@ -320,13 +320,13 @@ async fn run() -> Result<(), RuntimeError> {
     }
 
     // mempool tracepoints
-    let map_mempool_added = find_map(&obj, "mempool_added")?;
-    let map_mempool_removed = find_map(&obj, "mempool_removed")?;
-    let map_mempool_rejected = find_map(&obj, "mempool_rejected")?;
-    let map_mempool_replaced = find_map(&obj, "mempool_replaced")?;
+    let map_mempool_added = find_map(obj, "mempool_added")?;
+    let map_mempool_removed = find_map(obj, "mempool_removed")?;
+    let map_mempool_rejected = find_map(obj, "mempool_rejected")?;
+    let map_mempool_replaced = find_map(obj, "mempool_replaced")?;
     if !args.no_mempool_tracepoints {
         active_tracepoints.extend(&TRACEPOINTS_MEMPOOL);
-        #[cfg_attr(rustfmt, rustfmt_skip)]
+        #[rustfmt::skip]
         ringbuff_builder
             .add(&map_mempool_added,    |data| { handle_mempool_added(data, &nc) })?
             .add(&map_mempool_removed,  |data| { handle_mempool_removed(data, &nc) })?
@@ -335,11 +335,11 @@ async fn run() -> Result<(), RuntimeError> {
     }
 
     // addrman tracepoints
-    let map_addrman_insert_new = find_map(&obj, "addrman_insert_new")?;
-    let map_addrman_insert_tried = find_map(&obj, "addrman_insert_tried")?;
+    let map_addrman_insert_new = find_map(obj, "addrman_insert_new")?;
+    let map_addrman_insert_tried = find_map(obj, "addrman_insert_tried")?;
     if args.addrman_tracepoints {
         active_tracepoints.extend(&TRACEPOINTS_ADDRMAN);
-        #[cfg_attr(rustfmt, rustfmt_skip)]
+        #[rustfmt::skip]
         ringbuff_builder
             .add(&map_addrman_insert_new, |data| { handle_addrman_new(data, &nc) })?
             .add(&map_addrman_insert_tried, |data| { handle_addrman_tried(data, &nc) })?;
@@ -353,7 +353,7 @@ async fn run() -> Result<(), RuntimeError> {
     // attach tracepoints
     let mut _links = Vec::new();
     for tracepoint in active_tracepoints {
-        let prog = find_prog_mut(&obj, tracepoint.function)?;
+        let prog = find_prog_mut(obj, tracepoint.function)?;
         _links.push(prog.attach_usdt(
             pid,
             &args.bitcoind_path,
@@ -448,7 +448,7 @@ fn handle_net_conn_closed(data: &[u8], nc: &async_nats::Client) -> i32 {
             );
         }
     });
-    return RINGBUFF_CALLBACK_OK;
+    RINGBUFF_CALLBACK_OK
 }
 
 fn handle_net_conn_outbound(data: &[u8], nc: &async_nats::Client) -> i32 {
@@ -478,7 +478,7 @@ fn handle_net_conn_outbound(data: &[u8], nc: &async_nats::Client) -> i32 {
             );
         }
     });
-    return RINGBUFF_CALLBACK_OK;
+    RINGBUFF_CALLBACK_OK
 }
 
 fn handle_net_conn_inbound(data: &[u8], nc: &async_nats::Client) -> i32 {
@@ -507,7 +507,7 @@ fn handle_net_conn_inbound(data: &[u8], nc: &async_nats::Client) -> i32 {
             );
         }
     });
-    return RINGBUFF_CALLBACK_OK;
+    RINGBUFF_CALLBACK_OK
 }
 
 fn handle_net_conn_inbound_evicted(data: &[u8], nc: &async_nats::Client) -> i32 {
@@ -538,7 +538,7 @@ fn handle_net_conn_inbound_evicted(data: &[u8], nc: &async_nats::Client) -> i32 
             );
         }
     });
-    return RINGBUFF_CALLBACK_OK;
+    RINGBUFF_CALLBACK_OK
 }
 
 fn handle_net_conn_misbehaving(data: &[u8], nc: &async_nats::Client) -> i32 {
@@ -569,13 +569,13 @@ fn handle_net_conn_misbehaving(data: &[u8], nc: &async_nats::Client) -> i32 {
             );
         }
     });
-    return RINGBUFF_CALLBACK_OK;
+    RINGBUFF_CALLBACK_OK
 }
 
 fn handle_net_message(data: &[u8], nc: &async_nats::Client) -> i32 {
     let message = P2PMessage::from_bytes(data);
     let protobuf_message = match message.decode_to_protobuf_network_message() {
-        Ok(msg) => msg.into(),
+        Ok(msg) => msg,
         Err(e) => {
             log::warn!("Could not parse P2P msg with size={}: {}", data.len(), e);
             return RINGBUFF_CALLBACK_UNABLE_TO_PARSE_P2P_MSG;
@@ -602,7 +602,7 @@ fn handle_net_message(data: &[u8], nc: &async_nats::Client) -> i32 {
             error!("could not publish message in 'handle_net_message': {}", e);
         }
     });
-    return RINGBUFF_CALLBACK_OK;
+    RINGBUFF_CALLBACK_OK
 }
 
 fn handle_addrman_new(data: &[u8], nc: &async_nats::Client) -> i32 {
@@ -627,7 +627,7 @@ fn handle_addrman_new(data: &[u8], nc: &async_nats::Client) -> i32 {
             error!("could not publish message in 'handle_addrman_new': {}", e);
         }
     });
-    return RINGBUFF_CALLBACK_OK;
+    RINGBUFF_CALLBACK_OK
 }
 
 fn handle_addrman_tried(data: &[u8], nc: &async_nats::Client) -> i32 {
@@ -652,7 +652,7 @@ fn handle_addrman_tried(data: &[u8], nc: &async_nats::Client) -> i32 {
             error!("could not publish message in 'handle_addrman_tried': {}", e);
         }
     });
-    return RINGBUFF_CALLBACK_OK;
+    RINGBUFF_CALLBACK_OK
 }
 
 fn handle_mempool_added(data: &[u8], nc: &async_nats::Client) -> i32 {
@@ -677,7 +677,7 @@ fn handle_mempool_added(data: &[u8], nc: &async_nats::Client) -> i32 {
             error!("could not publish message in 'handle_mempool_added': {}", e);
         }
     });
-    return RINGBUFF_CALLBACK_OK;
+    RINGBUFF_CALLBACK_OK
 }
 
 fn handle_mempool_removed(data: &[u8], nc: &async_nats::Client) -> i32 {
@@ -705,7 +705,7 @@ fn handle_mempool_removed(data: &[u8], nc: &async_nats::Client) -> i32 {
             );
         }
     });
-    return RINGBUFF_CALLBACK_OK;
+    RINGBUFF_CALLBACK_OK
 }
 
 fn handle_mempool_replaced(data: &[u8], nc: &async_nats::Client) -> i32 {
@@ -733,7 +733,7 @@ fn handle_mempool_replaced(data: &[u8], nc: &async_nats::Client) -> i32 {
             );
         }
     });
-    return RINGBUFF_CALLBACK_OK;
+    RINGBUFF_CALLBACK_OK
 }
 
 fn handle_mempool_rejected(data: &[u8], nc: &async_nats::Client) -> i32 {
@@ -761,7 +761,7 @@ fn handle_mempool_rejected(data: &[u8], nc: &async_nats::Client) -> i32 {
             );
         }
     });
-    return RINGBUFF_CALLBACK_OK;
+    RINGBUFF_CALLBACK_OK
 }
 
 fn handle_validation_block_connected(data: &[u8], nc: &async_nats::Client) -> i32 {
@@ -794,5 +794,5 @@ fn handle_validation_block_connected(data: &[u8], nc: &async_nats::Client) -> i3
             );
         }
     });
-    return RINGBUFF_CALLBACK_OK;
+    RINGBUFF_CALLBACK_OK
 }

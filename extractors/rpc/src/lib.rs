@@ -169,36 +169,30 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
     loop {
         shared::tokio::select! {
             _ = interval.tick() => {
-                if !args.disable_getpeerinfo {
-                    if let Err(e) = getpeerinfo(&rpc_client, &nats_client).await {
+                if !args.disable_getpeerinfo
+                    && let Err(e) = getpeerinfo(&rpc_client, &nats_client).await {
                         log::error!("Could not fetch and publish 'getpeerinfo': {}", e)
                     }
-                }
-                if !args.disable_getmempoolinfo {
-                    if let Err(e) = getmempoolinfo(&rpc_client, &nats_client).await {
+                if !args.disable_getmempoolinfo
+                    && let Err(e) = getmempoolinfo(&rpc_client, &nats_client).await {
                         log::error!("Could not fetch and publish 'getmempoolinfo': {}", e)
                     }
-                }
-                if !args.disable_uptime {
-                    if let Err(e) = uptime(&rpc_client, &nats_client).await {
+                if !args.disable_uptime
+                    && let Err(e) = uptime(&rpc_client, &nats_client).await {
                         log::error!("Could not fetch and publish 'uptime': {}", e)
                     }
-                }
-                if !args.disable_getnettotals {
-                    if let Err(e) = getnettotals(&rpc_client, &nats_client).await {
+                if !args.disable_getnettotals
+                    && let Err(e) = getnettotals(&rpc_client, &nats_client).await {
                         log::error!("Could not fetch and publish 'getnettotals': {}", e)
                     }
-                }
-                if !args.disable_getmemoryinfo {
-                    if let Err(e) = getmemoryinfo(&rpc_client, &nats_client).await {
+                if !args.disable_getmemoryinfo
+                    && let Err(e) = getmemoryinfo(&rpc_client, &nats_client).await {
                         log::error!("Could not fetch and publish 'getmemoryinfo': {}", e)
                     }
-                }
-                if !args.disable_getaddrmaninfo {
-                    if let Err(e) = getaddrmaninfo(&rpc_client, &nats_client).await {
+                if !args.disable_getaddrmaninfo
+                    && let Err(e) = getaddrmaninfo(&rpc_client, &nats_client).await {
                         log::error!("Could not fetch and publish 'getaddrmaninfo': {}", e)
                     }
-                }
             }
             res = shutdown_rx.changed() => {
                 match res {

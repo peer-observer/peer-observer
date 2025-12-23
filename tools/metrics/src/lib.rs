@@ -521,7 +521,7 @@ fn handle_rpc_event(e: &rpc::RpcEvent, metrics: metrics::Metrics) {
                     .set(ipv4_inbound_peer_slash16s.len() as f64 / ipv4_inbound_peers as f64)
             }
 
-            if invtosend_values.len() > 0 {
+            if !invtosend_values.is_empty() {
                 metrics
                     .rpc_peer_info_invtosend_sum
                     .set(invtosend_values.iter().sum::<u64>() as i64);
@@ -542,7 +542,7 @@ fn handle_rpc_event(e: &rpc::RpcEvent, metrics: metrics::Metrics) {
                     .set(stat_util::median_f64(&invtosend_values_f64));
             }
 
-            if cpuload_values.len() > 0 {
+            if !cpuload_values.is_empty() {
                 let mut cpuload_values_filtered: Vec<f64> = cpuload_values
                     .iter()
                     .cloned()
@@ -605,7 +605,7 @@ fn handle_validation_event(e: &validation_event::Event, metrics: metrics::Metric
             // See https://github.com/bitcoin/bitcoin/pull/29877
             // Assume the tracepoint passed nanoseconds here, but we don't need the
             // nanosecond precision and already have metrics recorded as microseconds.
-            let duration_microseconds = (v.connection_time / 1000) as u64;
+            let duration_microseconds = v.connection_time / 1000;
             metrics
                 .validation_block_connected_latest_height
                 .set(v.height as i64);
@@ -844,7 +844,7 @@ fn handle_p2p_message(msg: &message::MessageEvent, timestamp_ms: u64, metrics: m
                     if offset >= 0 {
                         past_offset.observe(offset as f64);
                     } else {
-                        future_offset.observe((offset * -1) as f64);
+                        future_offset.observe(-offset as f64);
                     }
                     for i in metrics::BUCKETS_ADDR_SERVICE_BITS {
                         if (1 << i as u8) & address.services > 0 {
@@ -888,7 +888,7 @@ fn handle_p2p_message(msg: &message::MessageEvent, timestamp_ms: u64, metrics: m
                     if offset >= 0 {
                         past_offset.observe(offset as f64);
                     } else {
-                        future_offset.observe((offset * -1) as f64);
+                        future_offset.observe(-offset as f64);
                     }
 
                     for i in metrics::BUCKETS_ADDR_SERVICE_BITS {

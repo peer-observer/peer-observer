@@ -41,7 +41,7 @@ pub fn subnet(ip: String) -> String {
             }
         }
     }
-    return ip;
+    ip
 }
 
 // Return current timestamp in unix format

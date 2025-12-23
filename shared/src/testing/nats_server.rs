@@ -63,11 +63,13 @@ impl NatsServerForTesting {
                 .stderr(Stdio::piped())
                 .kill_on_drop(true)
                 .spawn()
-                .expect(&format!(
-                    "Failed to start nats-server with binary='{}' and args='{}'",
-                    nats_server_binary_path,
-                    args.join(" ")
-                ));
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "Failed to start nats-server with binary='{}' and args='{}'",
+                        nats_server_binary_path,
+                        args.join(" ")
+                    )
+                });
 
             // Spawn a task to handle stdout
             let stdout = child
@@ -119,10 +121,8 @@ impl NatsServerForTesting {
                         }
                     }
                     rx = kill_rx => {
-                        if let Err(_) = rx {
+                        if rx.is_err() {
                             panic!("failed to receive ready oneshot");
-                        } else {
-                            ();
                         }
                     }
                 }
