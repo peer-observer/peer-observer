@@ -10,6 +10,7 @@ pkgs.mkShell {
     buildInputs = [
       pkgs.rustc
       pkgs.cargo
+      pkgs.clippy
       pkgs.cmake
       pkgs.protobuf
 
