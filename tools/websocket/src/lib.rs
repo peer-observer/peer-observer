@@ -146,13 +146,10 @@ async fn handle_client(
     while let Some(msg) = incoming.next().await {
         match msg {
             Ok(m) => {
-                match m {
-                    TungsteniteMessage::Close(_) => {
-                        // Remove the client from the shared list if the connection is closed
-                        clients.lock().await.remove(&addr);
-                        break;
-                    }
-                    _ => (), // We ignore all other messages a client sends us.
+                if let TungsteniteMessage::Close(_) = m {
+                    // Remove the client from the shared list if the connection is closed
+                    clients.lock().await.remove(&addr);
+                    break;
                 }
             }
             Err(_) => {

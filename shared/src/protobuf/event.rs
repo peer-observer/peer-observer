@@ -1,3 +1,9 @@
+// The generated event module creates an event::event module.
+// This isn't nice, but since we can't really control the inner one
+// (due to being generated), allow it here. This avoids clippy from
+// complaining about it.
+#![allow(clippy::module_inception)]
+
 use log::trace;
 use std::time::SystemTime;
 use std::time::SystemTimeError;
