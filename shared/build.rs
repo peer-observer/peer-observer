@@ -2,7 +2,6 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
-
 fn main() {
     // Generate Rust types for the protobuf's
     if let Err(e) = prost_build::Config::new()

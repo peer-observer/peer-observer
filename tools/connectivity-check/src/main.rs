@@ -212,11 +212,13 @@ fn worker(
 }
 
 fn handle_event(event: PeerObserverEvent, timestamp: u64, input_sender: Sender<Input>) {
-    if let PeerObserverEvent::EbpfExtractor(event) = event { if let EbpfEvent::Message(msg) = event.ebpf_event.unwrap() {
-        if msg.meta.inbound {
-            handle_inbound_message(msg, timestamp, input_sender);
+    if let PeerObserverEvent::EbpfExtractor(event) = event {
+        if let EbpfEvent::Message(msg) = event.ebpf_event.unwrap() {
+            if msg.meta.inbound {
+                handle_inbound_message(msg, timestamp, input_sender);
+            }
         }
-    } }
+    }
 }
 
 fn handle_inbound_message(msg: NetMessage, timestamp: u64, input_sender: Sender<Input>) {

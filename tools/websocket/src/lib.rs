@@ -72,8 +72,7 @@ pub async fn run(
                 match event::Event::decode(msg.payload) {
                     Ok(event) => {
                         if let Some(event) = event.peer_observer_event {
-                            match serde_json::to_string::<PeerObserverEvent>(&event.clone())
-                            {
+                            match serde_json::to_string::<PeerObserverEvent>(&event.clone()) {
                                 Ok(msg) => {
                                     broadcast_to_clients(&msg, &clients).await;
                                 }
