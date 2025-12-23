@@ -963,7 +963,7 @@ fn handle_p2p_message(msg: &message::MessageEvent, timestamp_ms: u64, metrics: m
                     1..=0xFF => "u8",
                     0x100..=0xFFFF => "u16",
                     0x10000..=0xFFFFFFFF => "u32",
-                    0x10000000..=u64::MAX => "u64",
+                    0x100000000..=u64::MAX => "u64",
                 };
                 if msg.meta.inbound {
                     metrics

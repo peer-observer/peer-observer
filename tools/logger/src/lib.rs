@@ -78,6 +78,7 @@ impl Args {
             || self.log_extractor)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         nats_address: String,
         log_level: log::Level,

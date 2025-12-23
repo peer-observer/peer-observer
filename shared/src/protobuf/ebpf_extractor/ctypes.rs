@@ -498,13 +498,16 @@ fn decode_weird_network_message(
 
 #[derive(Debug)]
 pub struct P2PMessageDecodeError {
-    meta: P2PMessageMetadata,
+    meta: Box<P2PMessageMetadata>,
     error: consensus::encode::Error,
 }
 
 impl P2PMessageDecodeError {
     fn new(meta: P2PMessageMetadata, error: consensus::encode::Error) -> Self {
-        P2PMessageDecodeError { meta, error }
+        P2PMessageDecodeError {
+            meta: Box::new(meta),
+            error,
+        }
     }
 }
 

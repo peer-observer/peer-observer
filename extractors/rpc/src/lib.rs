@@ -81,6 +81,7 @@ pub struct Args {
 }
 
 impl Args {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         nats_address: String,
         log_level: log::Level,

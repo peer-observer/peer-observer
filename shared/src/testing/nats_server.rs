@@ -123,8 +123,6 @@ impl NatsServerForTesting {
                     rx = kill_rx => {
                         if rx.is_err() {
                             panic!("failed to receive ready oneshot");
-                        } else {
-                            ();
                         }
                     }
                 }

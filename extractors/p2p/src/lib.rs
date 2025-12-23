@@ -128,6 +128,7 @@ pub struct Args {
 }
 
 impl Args {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         nats_address: String,
         log_level: log::Level,
@@ -326,7 +327,7 @@ async fn handle_connection(
         }
     }
     log::info!("closing connection: '{}'", addr);
-    let _ = stream.shutdown();
+    let _ = stream.shutdown().await;
 }
 
 async fn publish_addr_announcement_event(
