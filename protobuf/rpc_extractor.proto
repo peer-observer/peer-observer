@@ -10,6 +10,7 @@ message rpc {
     NetTotals net_totals = 4;
     MemoryInfo memory_info = 5;
     AddrManInfo addrman_info = 6;
+    NetworkInfo network_info = 7;
   }
 }
 
@@ -121,4 +122,40 @@ message AddrManInfoNetwork {
   required uint64 new   = 1; // Number of addresses in new table
   required uint64 tried = 2; // Number of addresses in tried table
   required uint64 total = 3; // Total addresses (new + tried)
+}
+
+// A getnetworkinfo RPC result: Returns an object containing various state info regarding P2P networking.
+message NetworkInfo {
+  required uint32 version = 1;                            // The server version
+  required string subversion = 2;                         // The server subversion string
+  required uint32 protocol_version = 3;                   // The protocol version
+  required string local_services = 4;                     // The services we offer to the network (hex string)
+  repeated string local_services_names = 5;               // Human-readable service names
+  required bool local_relay = 6;                          // True if transaction relay is requested from peers
+  required int32 time_offset = 7;                         // The time offset
+  required uint32 connections = 8;                        // The total number of connections
+  required uint32 connections_in = 9;                     // The number of inbound connections
+  required uint32 connections_out = 10;                   // The number of outbound connections
+  required bool network_active = 11;                      // Whether p2p networking is enabled
+  repeated NetworkInfoNetwork networks = 12;              // Information per network
+  required double relay_fee = 13;                         // Minimum relay fee for transactions in BTC/kB
+  required double incremental_fee = 14;                   // Minimum fee rate increment for mempool limiting in BTC/kB
+  repeated NetworkInfoLocalAddress local_addresses = 15;  // List of local addresses
+  required string warnings = 16;                          // Any network and blockchain warnings
+}
+
+// Network information for each network type (ipv4, ipv6, onion)
+message NetworkInfoNetwork {
+  required string name = 1;                              // Network name (ipv4, ipv6, onion, i2p, cjdns)
+  required bool limited = 2;                             // Is the network limited using -onlynet?
+  required bool reachable = 3;                           // Is the network reachable?
+  required string proxy = 4;                             // The proxy that is used for this network, or empty string
+  required bool proxy_randomize_credentials = 5;         // Whether randomized credentials are used
+}
+
+// Local address information
+message NetworkInfoLocalAddress {
+  required string address = 1;                           // Network address
+  required uint32 port = 2;                              // Network port
+  required uint32 score = 3;                             // Relative score
 }
