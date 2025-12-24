@@ -28,8 +28,8 @@ use shared::{
         log_extractor::{self, LogDebugCategory},
         p2p_extractor,
         rpc_extractor::{
-            self, AddrManInfo, AddrManInfoNetwork, MemoryInfo, MempoolInfo, NetTotals, PeerInfo,
-            PeerInfos, UploadTarget,
+            self, AddrManInfo, AddrManInfoNetwork, MemoryInfo, MempoolInfo, NetTotals, NetworkInfo,
+            NetworkInfoLocalAddress, NetworkInfoNetwork, PeerInfo, PeerInfos, UploadTarget,
         },
     },
     rand::{self, Rng},
@@ -3226,6 +3226,71 @@ async fn test_integration_metrics_logextractor_blockchecked_mutated_events() {
         r#"
         peerobserver_log_block_checked_events 1
         peerobserver_log_mutated_blocks{status="bad-txns-duplicate"} 1
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_rpc_getnetworkinfo() {
+    println!("test that the getnetworkinfo metrics work");
+
+    publish_and_check(
+        &[
+            Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+                rpc_event: Some(rpc_extractor::rpc::RpcEvent::NetworkInfo(NetworkInfo {
+                    version: 270000,
+                    subversion: "/Satoshi:27.0.0/".to_string(),
+                    protocol_version: 70016,
+                    local_services: "000000000000040d".to_string(),
+                    local_services_names: vec!["NETWORK".to_string(), "WITNESS".to_string()],
+                    local_relay: true,
+                    time_offset: 0,
+                    connections: 8,
+                    connections_in: 3,
+                    connections_out: 5,
+                    network_active: true,
+                    networks: vec![
+                        NetworkInfoNetwork {
+                            name: "ipv4".to_string(),
+                            limited: false,
+                            reachable: true,
+                            proxy: "".to_string(),
+                            proxy_randomize_credentials: false,
+                        },
+                        NetworkInfoNetwork {
+                            name: "ipv6".to_string(),
+                            limited: false,
+                            reachable: true,
+                            proxy: "".to_string(),
+                            proxy_randomize_credentials: false,
+                        },
+                    ],
+                    relay_fee: 0.00001,
+                    incremental_fee: 0.00001,
+                    local_addresses: vec![],
+                    warnings: "".to_string(),
+                })),
+            }))
+            .unwrap(),
+        ],
+        Subject::Rpc,
+        r#"
+        peerobserver_rpc_networkinfo_version 270000
+        peerobserver_rpc_networkinfo_protocol_version 70016
+        peerobserver_rpc_networkinfo_time_offset 0
+        peerobserver_rpc_networkinfo_connections 8
+        peerobserver_rpc_networkinfo_connections_in 3
+        peerobserver_rpc_networkinfo_connections_out 5
+        peerobserver_rpc_networkinfo_network_active 1
+        peerobserver_rpc_networkinfo_relay_fee 0.00001
+        peerobserver_rpc_networkinfo_incremental_fee 0.00001
+        peerobserver_rpc_networkinfo_warnings 0
+        peerobserver_rpc_networkinfo_local_addresses_count 0
+        peerobserver_rpc_networkinfo_networks{network="ipv4",property="limited"} 0
+        peerobserver_rpc_networkinfo_networks{network="ipv4",property="reachable"} 1
+        peerobserver_rpc_networkinfo_networks{network="ipv6",property="limited"} 0
+        peerobserver_rpc_networkinfo_networks{network="ipv6",property="reachable"} 1
         "#,
     )
     .await;
