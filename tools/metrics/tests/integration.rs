@@ -3092,6 +3092,7 @@ async fn test_integration_metrics_logextractor_logevents() {
             Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
                 category: LogDebugCategory::Unknown.into(),
                 log_timestamp: 1234,
+                threadname: String::new(),
                 log_event: Some(log_extractor::log::LogEvent::UnknownLogMessage(
                     log_extractor::UnknownLogMessage {
                         raw_message: "test1".to_string(),
@@ -3102,6 +3103,7 @@ async fn test_integration_metrics_logextractor_logevents() {
             Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
                 category: LogDebugCategory::Unknown.into(),
                 log_timestamp: 1234,
+                threadname: String::new(),
                 log_event: Some(log_extractor::log::LogEvent::UnknownLogMessage(
                     log_extractor::UnknownLogMessage {
                         raw_message: "test2".to_string(),
@@ -3127,6 +3129,7 @@ async fn test_integration_metrics_logextractor_blockconnected_events() {
             Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
                 category: LogDebugCategory::Validation.into(),
                 log_timestamp: 345,
+                threadname: String::new(),
                 log_event: Some(log_extractor::log::LogEvent::BlockConnectedLog(
                     log_extractor::BlockConnectedLog {
                         block_height: 1234,
@@ -3140,6 +3143,7 @@ async fn test_integration_metrics_logextractor_blockconnected_events() {
             Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
                 category: LogDebugCategory::Validation.into(),
                 log_timestamp: 3452,
+                threadname: String::new(),
                 log_event: Some(log_extractor::log::LogEvent::BlockConnectedLog(
                     log_extractor::BlockConnectedLog {
                         block_height: 2222,
@@ -3153,6 +3157,7 @@ async fn test_integration_metrics_logextractor_blockconnected_events() {
             Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
                 category: LogDebugCategory::Unknown.into(),
                 log_timestamp: 1234,
+                threadname: String::new(),
                 log_event: Some(log_extractor::log::LogEvent::UnknownLogMessage(
                     log_extractor::UnknownLogMessage {
                         raw_message: "test2".to_string(),
@@ -3180,6 +3185,7 @@ async fn test_integration_metrics_logextractor_blockchecked_events() {
             Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
                 category: LogDebugCategory::Validation.into(),
                 log_timestamp: 345,
+                threadname: String::new(),
                 log_event: Some(log_extractor::log::LogEvent::BlockCheckedLog(
                     log_extractor::BlockCheckedLog {
                         debug_message: "".to_string(),
@@ -3210,6 +3216,7 @@ async fn test_integration_metrics_logextractor_blockchecked_mutated_events() {
             Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
                 category: LogDebugCategory::Validation.into(),
                 log_timestamp: 345,
+                threadname: String::new(),
                 log_event: Some(log_extractor::log::LogEvent::BlockCheckedLog(
                     log_extractor::BlockCheckedLog {
                         debug_message: "duplicate transaction".to_string(),
