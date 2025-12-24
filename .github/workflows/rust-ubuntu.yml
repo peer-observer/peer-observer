@@ -31,7 +31,7 @@ jobs:
       run: |
         sudo apt-get install -y \
           nats-server
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - name: Build
       run: cargo build --all-features
     - name: Run tests and integration tests
