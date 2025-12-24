@@ -78,6 +78,14 @@ pub struct Args {
     /// Disable quering and publishing of `getaddrmaninfo` data.
     #[arg(long, default_value_t = false)]
     pub disable_getaddrmaninfo: bool,
+
+    /// Disable querying and publishing of `getnetworkinfo` data.
+    #[arg(long, default_value_t = false)]
+    pub disable_getnetworkinfo: bool,
+
+    /// Disable querying and publishing of `getblockchaininfo` data.
+    #[arg(long, default_value_t = false)]
+    pub disable_getblockchaininfo: bool,
 }
 
 impl Args {
@@ -93,6 +101,8 @@ impl Args {
         disable_getnettotals: bool,
         disable_getmemoryinfo: bool,
         disable_getaddrmaninfo: bool,
+        disable_getnetworkinfo: bool,
+        disable_getblockchaininfo: bool,
     ) -> Args {
         Self {
             nats_address,
@@ -108,6 +118,8 @@ impl Args {
             disable_getnettotals,
             disable_getmemoryinfo,
             disable_getaddrmaninfo,
+            disable_getnetworkinfo,
+            disable_getblockchaininfo,
             // when adding more disable_* args, make sure to update the disable_all below
         }
     }
@@ -155,13 +167,23 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         "Querying getaddrmaninfo enabled: {}",
         !args.disable_getaddrmaninfo
     );
+    log::info!(
+        "Querying getnetworkinfo enabled: {}",
+        !args.disable_getnetworkinfo
+    );
+    log::info!(
+        "Querying getblockchaininfo enabled: {}",
+        !args.disable_getblockchaininfo
+    );
     // check if we have at least one RPC to query
     let disable_all = args.disable_getpeerinfo
         && args.disable_getmempoolinfo
         && args.disable_uptime
         && args.disable_getnettotals
         && args.disable_getmemoryinfo
-        && args.disable_getaddrmaninfo;
+        && args.disable_getaddrmaninfo
+        && args.disable_getnetworkinfo
+        && args.disable_getblockchaininfo;
     if disable_all {
         log::warn!("No RPC configured to be queried!");
     }
@@ -197,6 +219,16 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
                 if !args.disable_getaddrmaninfo {
                     if let Err(e) = getaddrmaninfo(&rpc_client, &nats_client).await {
                         log::error!("Could not fetch and publish 'getaddrmaninfo': {}", e)
+                    }
+                }
+                if !args.disable_getnetworkinfo {
+                    if let Err(e) = getnetworkinfo(&rpc_client, &nats_client).await {
+                        log::error!("Could not fetch and publish 'getnetworkinfo': {}", e)
+                    }
+                }
+                if !args.disable_getblockchaininfo {
+                    if let Err(e) = getblockchaininfo(&rpc_client, &nats_client).await {
+                        log::error!("Could not fetch and publish 'getblockchaininfo': {}", e)
                     }
                 }
             }
@@ -311,6 +343,42 @@ async fn getaddrmaninfo(
     let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
         rpc_event: Some(rpc_extractor::rpc::RpcEvent::AddrmanInfo(
             addrman_info.into(),
+        )),
+    }))?;
+
+    nats_client
+        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
+        .await?;
+    Ok(())
+}
+
+async fn getnetworkinfo(
+    rpc_client: &Client,
+    nats_client: &async_nats::Client,
+) -> Result<(), FetchOrPublishError> {
+    let network_info = rpc_client.get_network_info()?;
+
+    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+        rpc_event: Some(rpc_extractor::rpc::RpcEvent::NetworkInfo(
+            network_info.into(),
+        )),
+    }))?;
+
+    nats_client
+        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
+        .await?;
+    Ok(())
+}
+
+async fn getblockchaininfo(
+    rpc_client: &Client,
+    nats_client: &async_nats::Client,
+) -> Result<(), FetchOrPublishError> {
+    let blockchain_info = rpc_client.get_blockchain_info()?;
+
+    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+        rpc_event: Some(rpc_extractor::rpc::RpcEvent::BlockchainInfo(
+            blockchain_info.into(),
         )),
     }))?;
 

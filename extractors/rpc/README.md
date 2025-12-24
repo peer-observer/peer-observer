@@ -49,6 +49,10 @@ Options:
           Disable quering and publishing of `getmemoryinfo` data
       --disable-getaddrmaninfo
           Disable quering and publishing of `getaddrmaninfo` data
+      --disable-getnetworkinfo
+          Disable querying and publishing of `getnetworkinfo` data
+      --disable-getblockchaininfo
+          Disable querying and publishing of `getblockchaininfo` data
   -h, --help
           Print help
   -V, --version

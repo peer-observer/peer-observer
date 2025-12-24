@@ -197,6 +197,69 @@ fn handle_rpc_event(e: &rpc::RpcEvent, metrics: metrics::Metrics) {
                     .set(data.total as i64);
             }
         }
+        rpc::RpcEvent::NetworkInfo(info) => {
+            metrics.rpc_networkinfo_version.set(info.version as i64);
+            metrics
+                .rpc_networkinfo_protocol_version
+                .set(info.protocol_version as i64);
+            metrics
+                .rpc_networkinfo_time_offset
+                .set(info.time_offset as i64);
+            metrics
+                .rpc_networkinfo_connections
+                .set(info.connections as i64);
+            metrics
+                .rpc_networkinfo_connections_in
+                .set(info.connections_in as i64);
+            metrics
+                .rpc_networkinfo_connections_out
+                .set(info.connections_out as i64);
+            metrics
+                .rpc_networkinfo_network_active
+                .set(if info.network_active { 1 } else { 0 });
+            metrics.rpc_networkinfo_relay_fee.set(info.relay_fee);
+            metrics
+                .rpc_networkinfo_incremental_fee
+                .set(info.incremental_fee);
+            metrics
+                .rpc_networkinfo_warnings
+                .set(if info.warnings.is_empty() { 0 } else { 1 });
+            metrics
+                .rpc_networkinfo_local_addresses_count
+                .set(info.local_addresses.len() as i64);
+
+            // Set dimensional metrics for each network
+            for network in &info.networks {
+                metrics
+                    .rpc_networkinfo_networks
+                    .with_label_values(&[network.name.as_str(), "limited"])
+                    .set(if network.limited { 1 } else { 0 });
+                metrics
+                    .rpc_networkinfo_networks
+                    .with_label_values(&[network.name.as_str(), "reachable"])
+                    .set(if network.reachable { 1 } else { 0 });
+            }
+        }
+        rpc::RpcEvent::BlockchainInfo(info) => {
+            metrics.rpc_blockchaininfo_blocks.set(info.blocks as i64);
+            metrics.rpc_blockchaininfo_headers.set(info.headers as i64);
+            metrics.rpc_blockchaininfo_difficulty.set(info.difficulty);
+            metrics
+                .rpc_blockchaininfo_verification_progress
+                .set(info.verificationprogress);
+            metrics
+                .rpc_blockchaininfo_initial_block_download
+                .set(if info.initialblockdownload { 1 } else { 0 });
+            metrics
+                .rpc_blockchaininfo_size_on_disk
+                .set(info.size_on_disk as i64);
+            metrics
+                .rpc_blockchaininfo_pruned
+                .set(if info.pruned { 1 } else { 0 });
+            metrics
+                .rpc_blockchaininfo_warnings
+                .set(if info.warnings.is_empty() { 0 } else { 1 });
+        }
         rpc::RpcEvent::MempoolInfo(info) => {
             metrics
                 .rpc_mempoolinfo_mempool_loaded
