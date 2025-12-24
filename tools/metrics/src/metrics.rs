@@ -304,6 +304,16 @@ pub struct Metrics {
     pub rpc_networkinfo_local_addresses_count: IntGauge,
     pub rpc_networkinfo_networks: IntGaugeVec,
 
+    // getblockchaininfo
+    pub rpc_blockchaininfo_blocks: IntGauge,
+    pub rpc_blockchaininfo_headers: IntGauge,
+    pub rpc_blockchaininfo_difficulty: Gauge,
+    pub rpc_blockchaininfo_verification_progress: Gauge,
+    pub rpc_blockchaininfo_initial_block_download: IntGauge,
+    pub rpc_blockchaininfo_size_on_disk: IntGauge,
+    pub rpc_blockchaininfo_pruned: IntGauge,
+    pub rpc_blockchaininfo_warnings: IntGauge,
+
     // P2P-extractor
     pub p2pextractor_ping_duration_nanoseconds: IntGauge,
     pub p2pextractor_addrv2relay_addresses: IntCounterVec,
@@ -470,6 +480,16 @@ impl Metrics {
         ig!(rpc_networkinfo_local_addresses_count, "Number of local addresses from getnetworkinfo.", registry);
         igv!(rpc_networkinfo_networks, "Network status by network type from getnetworkinfo.", [LABEL_RPC_NETWORK_TYPE, "property"], registry);
 
+        // getblockchaininfo
+        ig!(rpc_blockchaininfo_blocks, "Height of the most-work fully-validated chain from getblockchaininfo.", registry);
+        ig!(rpc_blockchaininfo_headers, "Current number of headers validated from getblockchaininfo.", registry);
+        g!(rpc_blockchaininfo_difficulty, "Current difficulty from getblockchaininfo.", registry);
+        g!(rpc_blockchaininfo_verification_progress, "Estimate of verification progress [0..1] from getblockchaininfo.", registry);
+        ig!(rpc_blockchaininfo_initial_block_download, "Whether this node is in Initial Block Download mode (1=yes, 0=no) from getblockchaininfo.", registry);
+        ig!(rpc_blockchaininfo_size_on_disk, "Estimated size of block and undo files on disk in bytes from getblockchaininfo.", registry);
+        ig!(rpc_blockchaininfo_pruned, "Whether the blocks are subject to pruning (1=yes, 0=no) from getblockchaininfo.", registry);
+        ig!(rpc_blockchaininfo_warnings, "Whether warnings exist (1=yes, 0=no) from getblockchaininfo.", registry);
+
         // P2P-extractor
         ig!(p2pextractor_ping_duration_nanoseconds, "The time it takes for a connected Bitcoin node to respond to a ping with a pong in nanoseconds.", registry);
         icv!(p2pextractor_addrv2relay_addresses, "The total number of addresses relayed to the p2p-extractor by the node, per network", ["network"], registry);
@@ -631,6 +651,16 @@ impl Metrics {
             rpc_networkinfo_warnings,
             rpc_networkinfo_local_addresses_count,
             rpc_networkinfo_networks,
+
+            // getblockchaininfo
+            rpc_blockchaininfo_blocks,
+            rpc_blockchaininfo_headers,
+            rpc_blockchaininfo_difficulty,
+            rpc_blockchaininfo_verification_progress,
+            rpc_blockchaininfo_initial_block_download,
+            rpc_blockchaininfo_size_on_disk,
+            rpc_blockchaininfo_pruned,
+            rpc_blockchaininfo_warnings,
 
             // p2p-extractor
             p2pextractor_ping_duration_nanoseconds,

@@ -11,6 +11,7 @@ message rpc {
     MemoryInfo memory_info = 5;
     AddrManInfo addrman_info = 6;
     NetworkInfo network_info = 7;
+    BlockchainInfo blockchain_info = 8;
   }
 }
 
@@ -158,4 +159,23 @@ message NetworkInfoLocalAddress {
   required string address = 1;                           // Network address
   required uint32 port = 2;                              // Network port
   required uint32 score = 3;                             // Relative score
+}
+
+// A getblockchaininfo RPC result: Returns various state info regarding blockchain processing.
+message BlockchainInfo {
+  required string chain = 1;                             // Current network name (main, test, regtest)
+  required uint32 blocks = 2;                            // Height of the most-work fully-validated chain
+  required uint32 headers = 3;                           // Current number of headers validated
+  required string bestblockhash = 4;                     // Hash of the currently best block
+  required double difficulty = 5;                        // Current difficulty
+  required uint64 time = 6;                              // Block time of the best block (UNIX timestamp)
+  required uint64 mediantime = 7;                        // Median time for the current best block
+  required double verificationprogress = 8;              // Estimate of verification progress [0..1]
+  required bool initialblockdownload = 9;                // Whether this node is in Initial Block Download mode
+  required string chainwork = 10;                        // Total amount of work in active chain (hexadecimal)
+  required uint64 size_on_disk = 11;                     // Estimated size of block and undo files on disk
+  required bool pruned = 12;                             // If the blocks are subject to pruning
+  optional uint32 pruneheight = 13;                      // Lowest-height complete block stored (only if pruning enabled)
+  optional uint64 prune_target_size = 14;                // Target size used by pruning (only if automatic pruning enabled)
+  required string warnings = 15;                         // Any network and blockchain warnings
 }

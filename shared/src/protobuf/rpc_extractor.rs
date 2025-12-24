@@ -7,7 +7,8 @@ use corepc_client::types::v26::{
     GetMempoolInfo, GetPeerInfo as RPCGetPeerInfo, PeerInfo as RPCPeerInfo,
 };
 use corepc_node::vtype::{
-    GetNetworkInfo as RPCGetNetworkInfo, GetNetworkInfoAddress as RPCGetNetworkInfoAddress,
+    GetBlockchainInfo as RPCGetBlockchainInfo, GetNetworkInfo as RPCGetNetworkInfo,
+    GetNetworkInfoAddress as RPCGetNetworkInfoAddress,
     GetNetworkInfoNetwork as RPCGetNetworkInfoNetwork,
 };
 use std::fmt;
@@ -46,6 +47,7 @@ impl fmt::Display for rpc::RpcEvent {
             rpc::RpcEvent::MemoryInfo(info) => write!(f, "{}", info),
             rpc::RpcEvent::AddrmanInfo(info) => write!(f, "{}", info),
             rpc::RpcEvent::NetworkInfo(info) => write!(f, "{}", info),
+            rpc::RpcEvent::BlockchainInfo(info) => write!(f, "{}", info),
         }
     }
 }
@@ -312,5 +314,44 @@ impl fmt::Display for NetworkInfoNetwork {
 impl fmt::Display for NetworkInfoLocalAddress {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "LocalAddress({}:{})", self.address, self.port)
+    }
+}
+
+impl From<RPCGetBlockchainInfo> for BlockchainInfo {
+    fn from(info: RPCGetBlockchainInfo) -> Self {
+        BlockchainInfo {
+            chain: info.chain,
+            blocks: info.blocks as u32,
+            headers: info.headers as u32,
+            bestblockhash: info.best_block_hash,
+            difficulty: info.difficulty,
+            time: info.time as u64,
+            mediantime: info.median_time as u64,
+            verificationprogress: info.verification_progress,
+            initialblockdownload: info.initial_block_download,
+            chainwork: info.chain_work,
+            size_on_disk: info.size_on_disk,
+            pruned: info.pruned,
+            pruneheight: info.prune_height.map(|h| h as u32),
+            prune_target_size: info.prune_target_size.map(|s| s as u64),
+            warnings: info.warnings.join("; "),
+        }
+    }
+}
+
+impl fmt::Display for BlockchainInfo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "BlockchainInfo(chain={}, blocks={}, ibd={}, warnings={})",
+            self.chain,
+            self.blocks,
+            self.initialblockdownload,
+            if self.warnings.is_empty() {
+                "none"
+            } else {
+                &self.warnings
+            }
+        )
     }
 }

@@ -240,6 +240,26 @@ fn handle_rpc_event(e: &rpc::RpcEvent, metrics: metrics::Metrics) {
                     .set(if network.reachable { 1 } else { 0 });
             }
         }
+        rpc::RpcEvent::BlockchainInfo(info) => {
+            metrics.rpc_blockchaininfo_blocks.set(info.blocks as i64);
+            metrics.rpc_blockchaininfo_headers.set(info.headers as i64);
+            metrics.rpc_blockchaininfo_difficulty.set(info.difficulty);
+            metrics
+                .rpc_blockchaininfo_verification_progress
+                .set(info.verificationprogress);
+            metrics
+                .rpc_blockchaininfo_initial_block_download
+                .set(if info.initialblockdownload { 1 } else { 0 });
+            metrics
+                .rpc_blockchaininfo_size_on_disk
+                .set(info.size_on_disk as i64);
+            metrics
+                .rpc_blockchaininfo_pruned
+                .set(if info.pruned { 1 } else { 0 });
+            metrics
+                .rpc_blockchaininfo_warnings
+                .set(if info.warnings.is_empty() { 0 } else { 1 });
+        }
         rpc::RpcEvent::MempoolInfo(info) => {
             metrics
                 .rpc_mempoolinfo_mempool_loaded
