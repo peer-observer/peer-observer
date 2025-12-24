@@ -11,7 +11,7 @@ use shared::{
     prost::Message,
     protobuf::{
         event::{Event, event::PeerObserverEvent},
-        log_extractor::log,
+        log_extractor::{LogDebugCategory, log},
     },
     simple_logger::SimpleLogger,
     testing::nats_server::NatsServerForTesting,
@@ -438,6 +438,135 @@ async fn test_integration_logextractor_mutated_block_bad_txnmrklroot() {
                                 assert_eq!(block_checked.state, "bad-txnmrklroot");
                                 assert_eq!(block_checked.debug_message, "hashMerkleRoot mismatch");
                                 info!("BlockCheckedLog event {}", block_checked);
+                                return true;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => panic!("unexpected event {:?}", event),
+            };
+            false
+        },
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_logextractor_unknown_with_threadname() {
+    println!("test that we receive unknown log events with threadname");
+
+    check(
+        vec!["-logthreadnames=1"],
+        |_node1| {},
+        |event| {
+            match event {
+                PeerObserverEvent::LogExtractor(r) => {
+                    if let Some(ref e) = r.log_event {
+                        match e {
+                            log::LogEvent::UnknownLogMessage(unknown_log_message) => {
+                                assert!(unknown_log_message.raw_message.len() > 0);
+                                assert!(!r.threadname.is_empty(), "threadname should not be empty");
+                                assert_eq!(r.category, LogDebugCategory::Unknown as i32);
+                                info!("UnknownLogMessage with threadname: {}", r.threadname);
+                                return true;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => panic!("unexpected event {:?}", event),
+            };
+            false
+        },
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_logextractor_unknown_with_category() {
+    println!("test that we receive unknown log events with category");
+
+    check(
+        vec!["-debug=net"],
+        |_node1| {},
+        |event| {
+            match event {
+                PeerObserverEvent::LogExtractor(r) => {
+                    if let Some(ref e) = r.log_event {
+                        match e {
+                            log::LogEvent::UnknownLogMessage(unknown_log_message) => {
+                                assert!(unknown_log_message.raw_message.len() > 0);
+                                assert_eq!(r.category, LogDebugCategory::Net as i32);
+                                info!("UnknownLogMessage with category Net");
+                                return true;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => panic!("unexpected event {:?}", event),
+            };
+            false
+        },
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_logextractor_unknown_with_threadname_and_category() {
+    println!("test that we receive unknown log events with threadname and category");
+
+    check(
+        vec!["-logthreadnames=1", "-debug=net"],
+        |_node1| {},
+        |event| {
+            match event {
+                PeerObserverEvent::LogExtractor(r) => {
+                    if let Some(ref e) = r.log_event {
+                        match e {
+                            log::LogEvent::UnknownLogMessage(unknown_log_message) => {
+                                assert!(unknown_log_message.raw_message.len() > 0);
+                                assert!(!r.threadname.is_empty(), "threadname should not be empty");
+                                assert_eq!(r.category, LogDebugCategory::Net as i32);
+                                info!(
+                                    "UnknownLogMessage with threadname {} and category Net",
+                                    r.threadname
+                                );
+                                return true;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => panic!("unexpected event {:?}", event),
+            };
+            false
+        },
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_logextractor_unknown_with_all_metadata() {
+    println!("test that we receive unknown log events with all metadata");
+
+    check(
+        vec!["-logthreadnames=1", "-logsourcelocations=1", "-debug=net"],
+        |_node1| {},
+        |event| {
+            match event {
+                PeerObserverEvent::LogExtractor(r) => {
+                    if let Some(ref e) = r.log_event {
+                        match e {
+                            log::LogEvent::UnknownLogMessage(unknown_log_message) => {
+                                assert!(unknown_log_message.raw_message.len() > 0);
+                                assert!(!r.threadname.is_empty(), "threadname should not be empty");
+                                assert_eq!(r.category, LogDebugCategory::Net as i32);
+                                info!(
+                                    "UnknownLogMessage with threadname {} and category Net",
+                                    r.threadname
+                                );
                                 return true;
                             }
                             _ => {}

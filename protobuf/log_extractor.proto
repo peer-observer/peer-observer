@@ -5,13 +5,15 @@ package log_extractor;
 message log {
   required uint64 log_timestamp = 1; // unix timestamp in microseconds
   required LogDebugCategory category = 2;
+  required string threadname = 3;
   oneof log_event {
-    UnknownLogMessage unknown_log_message = 3;
-    BlockConnectedLog block_connected_log = 4;
-    BlockCheckedLog block_checked_log = 5;
+    UnknownLogMessage unknown_log_message = 4;
+    BlockConnectedLog block_connected_log = 5;
+    BlockCheckedLog block_checked_log = 6;
   }
 }
 
+// Follows LogFlags in logging.h
 enum LogDebugCategory {
     UNKNOWN = 0;
     ADDRMAN = 1;
