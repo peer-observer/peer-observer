@@ -42,11 +42,26 @@ jobs:
       uses: cachix/install-nix-action@v31
       with:
         nix_path: nixpkgs=channel:nixos-25.11
-    # needed to have all packages code-generated for fmt
+    # needed to have all modules code-generated for fmt
     - name: Run cargo check
       run: nix-shell --pure --command "cargo check --all"
     - name: Run cargo fmt
       run: nix-shell --pure --command "cargo fmt --all -- --check"
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install Nix
+      uses: cachix/install-nix-action@v31
+      with:
+        nix_path: nixpkgs=channel:nixos-25.11
+    # build the ebpf-extractor to code-gen the required
+    # extractors/ebpf/src/tracing.gen.rs file is generated
+    - name: build the ebpf-extractor
+      run: nix-shell --pure --command "cargo build --bin ebpf-extractor"
+    - name: cargo clippy
+      run: nix-shell --pure --command "cargo clippy --all-features"
 
   coverage:
     runs-on: ubuntu-latest
