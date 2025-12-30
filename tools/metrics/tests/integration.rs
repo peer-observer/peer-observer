@@ -28,7 +28,8 @@ use shared::{
         log_extractor::{self, LogDebugCategory},
         p2p_extractor,
         rpc_extractor::{
-            self, AddrManInfo, AddrManInfoNetwork, MemoryInfo, MempoolInfo, NetTotals, PeerInfo,
+            self, AddrManInfo, AddrManInfoNetwork, BlockchainInfo, MemoryInfo, MempoolInfo,
+            NetTotals, NetworkInfo, NetworkInfoLocalAddress, NetworkInfoNetwork, PeerInfo,
             PeerInfos, UploadTarget,
         },
     },
@@ -3226,6 +3227,119 @@ async fn test_integration_metrics_logextractor_blockchecked_mutated_events() {
         r#"
         peerobserver_log_block_checked_events 1
         peerobserver_log_mutated_blocks{status="bad-txns-duplicate"} 1
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_rpc_getnetworkinfo() {
+    println!("test that the getnetworkinfo metrics work");
+
+    publish_and_check(
+        &[
+            Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+                rpc_event: Some(rpc_extractor::rpc::RpcEvent::NetworkInfo(NetworkInfo {
+                    version: 270000,
+                    subversion: "/Satoshi:27.0.0/".to_string(),
+                    protocol_version: 70016,
+                    local_services: "000000000000040d".to_string(),
+                    local_services_names: vec!["NETWORK".to_string(), "WITNESS".to_string()],
+                    local_relay: true,
+                    time_offset: 0,
+                    connections: 8,
+                    connections_in: 3,
+                    connections_out: 5,
+                    network_active: true,
+                    networks: vec![
+                        NetworkInfoNetwork {
+                            name: "ipv4".to_string(),
+                            limited: false,
+                            reachable: true,
+                            proxy: "".to_string(),
+                            proxy_randomize_credentials: false,
+                        },
+                        NetworkInfoNetwork {
+                            name: "ipv6".to_string(),
+                            limited: false,
+                            reachable: true,
+                            proxy: "".to_string(),
+                            proxy_randomize_credentials: false,
+                        },
+                    ],
+                    relay_fee: 0.00001,
+                    incremental_fee: 0.00001,
+                    local_addresses: vec![],
+                    warnings: "".to_string(),
+                })),
+            }))
+            .unwrap(),
+        ],
+        Subject::Rpc,
+        r#"
+        peerobserver_rpc_networkinfo_version 270000
+        peerobserver_rpc_networkinfo_protocol_version 70016
+        peerobserver_rpc_networkinfo_time_offset 0
+        peerobserver_rpc_networkinfo_connections 8
+        peerobserver_rpc_networkinfo_connections_in 3
+        peerobserver_rpc_networkinfo_connections_out 5
+        peerobserver_rpc_networkinfo_network_active 1
+        peerobserver_rpc_networkinfo_relay_fee 0.00001
+        peerobserver_rpc_networkinfo_incremental_fee 0.00001
+        peerobserver_rpc_networkinfo_warnings 0
+        peerobserver_rpc_networkinfo_local_addresses_count 0
+        peerobserver_rpc_networkinfo_networks{network="ipv4",property="limited"} 0
+        peerobserver_rpc_networkinfo_networks{network="ipv4",property="reachable"} 1
+        peerobserver_rpc_networkinfo_networks{network="ipv6",property="limited"} 0
+        peerobserver_rpc_networkinfo_networks{network="ipv6",property="reachable"} 1
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_rpc_getblockchaininfo() {
+    println!("test that the getblockchaininfo metrics work");
+
+    publish_and_check(
+        &[
+            Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+                rpc_event: Some(rpc_extractor::rpc::RpcEvent::BlockchainInfo(
+                    BlockchainInfo {
+                        chain: "main".to_string(),
+                        blocks: 850000,
+                        headers: 850010,
+                        bestblockhash:
+                            "0000000000000000000123456789abcdef0123456789abcdef0123456789abcd"
+                                .to_string(),
+                        difficulty: 83148355189239.77,
+                        time: 1704067200,
+                        mediantime: 1704066000,
+                        verificationprogress: 0.9999,
+                        initialblockdownload: false,
+                        chainwork:
+                            "00000000000000000000000000000000000000005c000e2ce43fe415a2a16a54"
+                                .to_string(),
+                        size_on_disk: 623000000000,
+                        pruned: false,
+                        pruneheight: None,
+                        prune_target_size: None,
+                        warnings: "".to_string(),
+                    },
+                )),
+            }))
+            .unwrap(),
+        ],
+        Subject::Rpc,
+        r#"
+        peerobserver_rpc_blockchaininfo_blocks 850000
+        peerobserver_rpc_blockchaininfo_headers 850010
+        peerobserver_rpc_blockchaininfo_difficulty 83148355189239.77
+        peerobserver_rpc_blockchaininfo_verification_progress 0.9999
+        peerobserver_rpc_blockchaininfo_initial_block_download 0
+        peerobserver_rpc_blockchaininfo_size_on_disk 623000000000
+        peerobserver_rpc_blockchaininfo_pruned 0
+        peerobserver_rpc_blockchaininfo_warnings 0
         "#,
     )
     .await;
