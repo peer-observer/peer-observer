@@ -19,8 +19,21 @@ const NANOS_PER_MICRO: i128 = 1_000;
 ///   - `(?:...)`: Non-capturing group for the decimal part.
 ///   - `\.\d{1,6}`: Matches a decimal point followed by 1 to 6 digits.
 /// - `Z`: Matches the literal `Z` indicating UTC timezone.
-static RFC3339_DATE_REGEX: &str = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z";
+static RFC3339_DATE_PATTERN: &str = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z";
 
+/// Regular expression to capture metadata inside square brackets `[...]`
+/// (e.g., log category, thread name, function, etc.).
+///
+/// Captures: the content between `[` and `]`.
+///
+/// Breakdown:
+/// - `\[`          literal `[`.
+/// - `([^\]]+)`    capturing group: one or more characters except `]`.
+/// - `\]`          literal `]`.
+static METADATA_PATTERN: &str = r"\[([^\]]+)\]";
+
+/// Regular expression for matching a 64-character hexadecimal block hash.
+/// Matches strings consisting of exactly 64 characters in the range `0-9` or `a-f`.
 static BLOCK_HASH_PATTERN: &str = r"[0-9a-f]{64}";
 
 /// Regular expression for matching the output of `ValidationState::ToString()`.
@@ -34,19 +47,24 @@ static VALIDATION_STATE_PATTERN: &str = r"(.*?)(?:,\s|$)(.+)?";
 lazy_static! {
     /// Regular expression for parsing default infos from log lines.
     ///
-    /// Matches a log line with the following components:
-    /// - `^({})`: Captures an RFC3339-compliant timestamp (defined by `RFC3339_DATE_REGEX`) at the start of the line.
-    /// - `\s+`: Matches one or more whitespace characters after the timestamp.
-    /// - `(?:\[([^\]]+)\]\s+)?`: Optionally captures content within square brackets (debug category):
-    ///   - `(?:...)`: Non-capturing group for the bracketed content and trailing whitespace.
-    ///   - `[^\]]+`: Matches one or more characters that are not `]`.
-    ///   - `\s+`: Matches trailing whitespace after the brackets (if present).
-    /// - `(.+)$`: Captures the remaining log message content until the end of the line
-    static ref LOG_LINE_REGEX: Regex = Regex::new(&format!(
-        r"^({})\s+(?:\[([^\]]+)\]\s+)?(.+)$",
-        RFC3339_DATE_REGEX
-    ))
-    .unwrap();
+    /// Breakdown:
+    /// - `^`                          : Start of line.
+    /// - `(?P<timestamp>{})`          : Named capture for the timestamp (uses RFC3339_DATE_PATTERN).
+    /// - `\s+`                        : One or more whitespace after timestamp.
+    /// - `(?P<metadata>(?:{}\s+)*)`   : Named capture for metadata:
+    ///   - `(?:{}\s+)*`               : Zero or more occurrences of METADATA_PATTERN followed by whitespace.
+    /// - `(?P<message>.+)$`           : Named capture for the remaining message until end of line.
+    static ref LOG_LINE_REGEX: Regex = {
+        let pattern = format!(
+            r"^(?P<timestamp>{})\s+(?P<metadata>(?:{}\s+)*)(?P<message>.+)$",
+            RFC3339_DATE_PATTERN,
+            METADATA_PATTERN
+        );
+
+        Regex::new(&pattern).unwrap()
+    };
+
+    static ref METADATA_REGEX: Regex = Regex::new(METADATA_PATTERN).unwrap();
 
     static ref BLOCK_CONNECTED_REGEX: Regex = Regex::new(&format!(
         r"BlockConnected: block hash=({}) block height=(\d+)",
@@ -118,7 +136,12 @@ impl BlockCheckedLog {
 }
 
 pub fn parse_log_event(line: &str) -> Log {
-    let (timestamp_micro, category, message) = parse_common_log_data(line);
+    let CommonLogData {
+        timestamp_micro,
+        category,
+        threadname,
+        message,
+    } = parse_common_log_data(line);
 
     let matchers: Vec<fn(&str) -> Option<LogEvent>> =
         vec![BlockConnectedLog::parse_event, BlockCheckedLog::parse_event];
@@ -127,6 +150,7 @@ pub fn parse_log_event(line: &str) -> Log {
             return Log {
                 log_timestamp: timestamp_micro,
                 category: category.into(),
+                threadname,
                 log_event: Some(event),
             };
         }
@@ -136,59 +160,66 @@ pub fn parse_log_event(line: &str) -> Log {
     Log {
         log_timestamp: timestamp_micro,
         category: category.into(),
+        threadname,
         log_event: UnknownLogMessage::parse_event(&message),
     }
 }
 
-fn parse_common_log_data(line: &str) -> (u64, LogDebugCategory, String) {
+struct CommonLogData {
+    pub timestamp_micro: u64,
+    pub category: LogDebugCategory,
+    pub threadname: String,
+    pub message: String,
+}
+
+fn parse_common_log_data(line: &str) -> CommonLogData {
     let caps = LOG_LINE_REGEX.captures(line);
     if caps.is_none() {
-        return (0, LogDebugCategory::Unknown, String::new());
+        return CommonLogData {
+            timestamp_micro: 0,
+            category: LogDebugCategory::Unknown,
+            threadname: String::new(),
+            message: String::new(),
+        };
     }
 
     let caps = caps.unwrap();
-    let timestamp_str = &caps[1];
-    let category = caps.get(2).map(|m| m.as_str());
 
+    let timestamp_str = &caps["timestamp"];
     let timestamp_nano = match OffsetDateTime::parse(timestamp_str, &Rfc3339) {
         Ok(dt) => dt.unix_timestamp_nanos(),
         Err(_) => 0,
     };
     let timestamp_micro = (timestamp_nano / NANOS_PER_MICRO) as u64;
 
-    let log_type =
-        match category.and_then(|cat| LogDebugCategory::from_str_name(&cat.to_uppercase())) {
-            Some(cat) => cat,
-            None => LogDebugCategory::Unknown,
-        };
+    let metadata = caps
+        .name("metadata")
+        .map(|m| m.as_str())
+        .unwrap_or_else(|| "");
+    let mut metadata_items: Vec<String> = METADATA_REGEX
+        .captures_iter(metadata)
+        .map(|cap| cap[1].to_string())
+        .collect();
 
-    (timestamp_micro, log_type, caps[3].to_string())
+    // if exists, category is usually the last metadata item
+    let mut category = LogDebugCategory::Unknown;
+    if let Some(last_item) = metadata_items.last() {
+        if let Some(cat) = LogDebugCategory::from_str_name(&last_item.to_uppercase()) {
+            category = cat;
+            metadata_items.pop();
+        }
+    }
+
+    // if exists, threadname is usually the first metadata item
+    let threadname = metadata_items.first().cloned().unwrap_or_default();
+
+    CommonLogData {
+        timestamp_micro,
+        category,
+        threadname,
+        message: caps["message"].to_string(),
+    }
 }
-
-// TODO: mempool_event::Event::Added
-// TODO: mempool_event::Event::Removed
-// TODO: mempool_event::Event::Replaced
-// TODO: mempool_event::Event::Rejected
-// TODO: validation_event::Event::BlockConnected
-// TODO: connection_event::Event::Inbound
-// TODO: connection_event::Event::Outbound
-// TODO: connection_event::Event::Closed
-// TODO: connection_event::Event::InboundEvicted
-// TODO: connection_event::Event::Misbehaving
-// TODO: addrman_event::Event::New
-// TODO: addrman_event::Event::Tried
-// TODO: p2p::P2pEvent::PingDuration
-// TODO: log::LogEvent::UnknownLogMessage
-// TODO: rpc::RpcEvent::PeerInfos
-// TODO: message::message_event::Msg::Addr
-// TODO: message::message_event::Msg::Addrv2
-// TODO: message::message_event::Msg::Emptyaddrv2
-// TODO: message::message_event::Msg::Inv
-// TODO: message::message_event::Msg::Ping
-// TODO: message::message_event::Msg::Oldping
-// TODO: message::message_event::Msg::Version
-// TODO: message::message_event::Msg::Feefilter
-// TODO: message::message_event::Msg::Reject
 
 #[cfg(test)]
 mod tests {
@@ -201,6 +232,7 @@ mod tests {
 
         assert_eq!(log_event.log_timestamp, 1759372274000000);
         assert_eq!(log_event.category, LogDebugCategory::Unknown as i32);
+        assert_eq!(log_event.threadname, "");
 
         if let Some(LogEvent::UnknownLogMessage(unknown_log)) = log_event.log_event {
             assert_eq!(unknown_log.raw_message, "Verification progress: 50%");
@@ -212,6 +244,7 @@ mod tests {
 
     #[test]
     fn test_log_matcher_unknown_log_message_with_category() {
+        // debug (flags)
         let log = "2025-10-02T02:31:21Z [net] Flushed 0 addresses to peers.dat  2ms";
         let log_event = parse_log_event(log);
 
@@ -223,6 +256,57 @@ mod tests {
                 unknown_log.raw_message,
                 "Flushed 0 addresses to peers.dat  2ms"
             );
+            return;
+        }
+
+        panic!("Expected UnknownLogMessage event");
+    }
+
+    #[test]
+    fn test_log_matcher_unknown_with_threadname() {
+        // logthreadnames (flags)
+        let log = "2025-12-23T22:38:01.977182Z [msghand] received: pong (8 bytes) peer=0";
+        let log_event = parse_log_event(log);
+
+        assert_eq!(log_event.threadname, "msghand".to_string());
+        assert_eq!(log_event.category, LogDebugCategory::Unknown as i32);
+
+        if let Some(LogEvent::UnknownLogMessage(unknown_log)) = log_event.log_event {
+            assert_eq!(unknown_log.raw_message, "received: pong (8 bytes) peer=0");
+            return;
+        }
+
+        panic!("Expected UnknownLogMessage event");
+    }
+
+    #[test]
+    fn test_log_matcher_unknown_with_threadname_and_category() {
+        // logthreadnames + debug (flags)
+        let log = "2025-12-23T22:38:01.977182Z [msghand] [net] received: pong (8 bytes) peer=0";
+        let log_event = parse_log_event(log);
+
+        assert_eq!(log_event.threadname, "msghand".to_string());
+        assert_eq!(log_event.category, LogDebugCategory::Net as i32);
+
+        if let Some(LogEvent::UnknownLogMessage(unknown_log)) = log_event.log_event {
+            assert_eq!(unknown_log.raw_message, "received: pong (8 bytes) peer=0");
+            return;
+        }
+
+        panic!("Expected UnknownLogMessage event");
+    }
+
+    #[test]
+    fn test_log_matcher_unknown_with_all_metadata() {
+        // logthreadnames + logsourcelocations + debug (flags)
+        let log = "2025-12-23T22:38:01.977182Z [msghand] [net_processing.cpp:3452] [ProcessMessage] [net] received: pong (8 bytes) peer=0";
+        let log_event = parse_log_event(log);
+
+        assert_eq!(log_event.threadname, "msghand".to_string());
+        assert_eq!(log_event.category, LogDebugCategory::Net as i32);
+
+        if let Some(LogEvent::UnknownLogMessage(unknown_log)) = log_event.log_event {
+            assert_eq!(unknown_log.raw_message, "received: pong (8 bytes) peer=0");
             return;
         }
 
