@@ -245,7 +245,7 @@ checksum = "b4682ae6287fcf752ecaabbfcc7b6f9b72aa33933dc23a554d853aea8eea8635"
 [[package]]
 name = "bitreq"
 version = "0.2.0"
-source = "git+https://github.com/0xb10c/corepc?rev=3fb9897bca0e41ba1f96a4532578e64349c97864#3fb9897bca0e41ba1f96a4532578e64349c97864"
+source = "git+https://github.com/0xb10c/corepc?rev=022a23a81e859a5e6f0d8b3774e02f68b2f8a44b#022a23a81e859a5e6f0d8b3774e02f68b2f8a44b"
 dependencies = [
  "rustls 0.21.12",
  "rustls-webpki 0.101.7",
@@ -461,7 +461,7 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 [[package]]
 name = "corepc-client"
 version = "0.11.0"
-source = "git+https://github.com/0xb10c/corepc?rev=3fb9897bca0e41ba1f96a4532578e64349c97864#3fb9897bca0e41ba1f96a4532578e64349c97864"
+source = "git+https://github.com/0xb10c/corepc?rev=022a23a81e859a5e6f0d8b3774e02f68b2f8a44b#022a23a81e859a5e6f0d8b3774e02f68b2f8a44b"
 dependencies = [
  "bitcoin",
  "corepc-types",
@@ -474,7 +474,7 @@ dependencies = [
 [[package]]
 name = "corepc-node"
 version = "0.11.0"
-source = "git+https://github.com/0xb10c/corepc?rev=3fb9897bca0e41ba1f96a4532578e64349c97864#3fb9897bca0e41ba1f96a4532578e64349c97864"
+source = "git+https://github.com/0xb10c/corepc?rev=022a23a81e859a5e6f0d8b3774e02f68b2f8a44b#022a23a81e859a5e6f0d8b3774e02f68b2f8a44b"
 dependencies = [
  "anyhow",
  "bitcoin_hashes",
@@ -492,7 +492,7 @@ dependencies = [
 [[package]]
 name = "corepc-types"
 version = "0.11.0"
-source = "git+https://github.com/0xb10c/corepc?rev=3fb9897bca0e41ba1f96a4532578e64349c97864#3fb9897bca0e41ba1f96a4532578e64349c97864"
+source = "git+https://github.com/0xb10c/corepc?rev=022a23a81e859a5e6f0d8b3774e02f68b2f8a44b#022a23a81e859a5e6f0d8b3774e02f68b2f8a44b"
 dependencies = [
  "bitcoin",
  "serde",
@@ -1159,7 +1159,7 @@ dependencies = [
 [[package]]
 name = "jsonrpc"
 version = "0.18.0"
-source = "git+https://github.com/0xb10c/corepc?rev=3fb9897bca0e41ba1f96a4532578e64349c97864#3fb9897bca0e41ba1f96a4532578e64349c97864"
+source = "git+https://github.com/0xb10c/corepc?rev=022a23a81e859a5e6f0d8b3774e02f68b2f8a44b#022a23a81e859a5e6f0d8b3774e02f68b2f8a44b"
 dependencies = [
  "base64 0.22.1",
  "bitreq",
