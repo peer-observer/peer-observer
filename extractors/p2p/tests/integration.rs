@@ -95,9 +95,8 @@ fn setup_node(conf: corepc_node::Conf) -> corepc_node::Node {
     return corepc_node::Node::from_downloaded_with_conf(&conf).unwrap();
 }
 
-fn setup_node_with_addnode(p2p_extractor_port: u16) -> corepc_node::Node {
+fn configure_node() -> corepc_node::Node {
     let mut node_conf = corepc_node::Conf::default();
-    let addnode = format!("--addnode=127.0.0.1:{}", p2p_extractor_port);
     node_conf.args = vec![
         "-regtest",
         "-debug=net",
@@ -107,7 +106,6 @@ fn setup_node_with_addnode(p2p_extractor_port: u16) -> corepc_node::Node {
         "-connect=0",
         "-listen=1",
         "-fallbackfee=0.0000001",
-        &addnode,
     ];
     // enabling this is useful for debugging, but enabling this by default will
     // be quite spammy.
@@ -149,12 +147,21 @@ async fn check(
 
     // only start the node after the P2P extractor to make sure the
     // extractor is ready to accept connections
-    let node = setup_node_with_addnode(p2p_extractor_port);
+    let node = configure_node();
 
     let nc = async_nats::connect(format!("127.0.0.1:{}", nats_server.port))
         .await
         .unwrap();
     let mut sub = nc.subscribe("*").await.unwrap();
+
+    // initiate a v1 connection to the p2p-extractor
+    node.client
+        .add_connection(
+            &format!("127.0.0.1:{}", p2p_extractor_port),
+            "outbound-full-relay",
+            true,
+        )
+        .unwrap();
 
     // Make sure the p2p-extractor and node are connected
     let mut connected = false;

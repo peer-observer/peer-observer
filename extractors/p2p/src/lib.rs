@@ -499,11 +499,16 @@ fn build_raw_network_message(
 }
 
 fn build_version_message() -> message::NetworkMessage {
+    // HACK: Since we use addconnection in the tests, we need to match the service flags Bitcoin
+    // Core expects here. Otherwise, the Bitcoin Core errors with the following:
+    // peer does not offer the expected services (00000000 offered, 00000009 expected), disconnecting peer=0
+    let services: ServiceFlags = ServiceFlags::NETWORK | ServiceFlags::WITNESS;
+
     message::NetworkMessage::Version(message_network::VersionMessage {
         // use version 70016 to indicate we want wtxids for transaction invs
         // see https://github.com/bitcoin/bips/blob/master/bip-0339.mediawiki
         version: 70016,
-        services: ServiceFlags::NONE,
+        services,
         timestamp: util::current_timestamp() as i64,
         receiver: address::Address::new(
             &SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
