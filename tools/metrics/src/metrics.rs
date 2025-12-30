@@ -290,6 +290,20 @@ pub struct Metrics {
     // getaddrmaninfo
     pub rpc_addrmaninfo: IntGaugeVec,
 
+    // getnetworkinfo
+    pub rpc_networkinfo_version: IntGauge,
+    pub rpc_networkinfo_protocol_version: IntGauge,
+    pub rpc_networkinfo_time_offset: IntGauge,
+    pub rpc_networkinfo_connections: IntGauge,
+    pub rpc_networkinfo_connections_in: IntGauge,
+    pub rpc_networkinfo_connections_out: IntGauge,
+    pub rpc_networkinfo_network_active: IntGauge,
+    pub rpc_networkinfo_relay_fee: Gauge,
+    pub rpc_networkinfo_incremental_fee: Gauge,
+    pub rpc_networkinfo_warnings: IntGauge,
+    pub rpc_networkinfo_local_addresses_count: IntGauge,
+    pub rpc_networkinfo_networks: IntGaugeVec,
+
     // P2P-extractor
     pub p2pextractor_ping_duration_nanoseconds: IntGauge,
     pub p2pextractor_addrv2relay_addresses: IntCounterVec,
@@ -442,6 +456,20 @@ impl Metrics {
         // getaddrmaninfo
         igv!(rpc_addrmaninfo, "Address manager information by network and table (new/tried/total)", ["network", "table"], registry);
 
+        // getnetworkinfo
+        ig!(rpc_networkinfo_version, "Bitcoin Core version from getnetworkinfo.", registry);
+        ig!(rpc_networkinfo_protocol_version, "Protocol version from getnetworkinfo.", registry);
+        ig!(rpc_networkinfo_time_offset, "Time offset from getnetworkinfo.", registry);
+        ig!(rpc_networkinfo_connections, "Total number of connections from getnetworkinfo.", registry);
+        ig!(rpc_networkinfo_connections_in, "Number of inbound connections from getnetworkinfo.", registry);
+        ig!(rpc_networkinfo_connections_out, "Number of outbound connections from getnetworkinfo.", registry);
+        ig!(rpc_networkinfo_network_active, "Whether p2p networking is enabled (1=yes, 0=no) from getnetworkinfo.", registry);
+        g!(rpc_networkinfo_relay_fee, "Minimum relay fee in BTC/kB from getnetworkinfo.", registry);
+        g!(rpc_networkinfo_incremental_fee, "Minimum fee increment in BTC/kB from getnetworkinfo.", registry);
+        ig!(rpc_networkinfo_warnings, "Whether warnings exist (1=yes, 0=no) from getnetworkinfo.", registry);
+        ig!(rpc_networkinfo_local_addresses_count, "Number of local addresses from getnetworkinfo.", registry);
+        igv!(rpc_networkinfo_networks, "Network status by network type from getnetworkinfo.", [LABEL_RPC_NETWORK_TYPE, "property"], registry);
+
         // P2P-extractor
         ig!(p2pextractor_ping_duration_nanoseconds, "The time it takes for a connected Bitcoin node to respond to a ping with a pong in nanoseconds.", registry);
         icv!(p2pextractor_addrv2relay_addresses, "The total number of addresses relayed to the p2p-extractor by the node, per network", ["network"], registry);
@@ -589,6 +617,20 @@ impl Metrics {
 
             // getaddrmaninfo
             rpc_addrmaninfo,
+
+            // getnetworkinfo
+            rpc_networkinfo_version,
+            rpc_networkinfo_protocol_version,
+            rpc_networkinfo_time_offset,
+            rpc_networkinfo_connections,
+            rpc_networkinfo_connections_in,
+            rpc_networkinfo_connections_out,
+            rpc_networkinfo_network_active,
+            rpc_networkinfo_relay_fee,
+            rpc_networkinfo_incremental_fee,
+            rpc_networkinfo_warnings,
+            rpc_networkinfo_local_addresses_count,
+            rpc_networkinfo_networks,
 
             // p2p-extractor
             p2pextractor_ping_duration_nanoseconds,
