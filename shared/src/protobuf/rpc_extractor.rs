@@ -245,11 +245,7 @@ impl From<RPCGetChainTxStats> for ChainTxStats {
             window_block_count: stats.window_block_count,
             window_tx_count: stats.window_tx_count,
             window_interval: stats.window_interval,
-            // Note: Bitcoin Core returns txrate as a float,
-            // but corepc deserialises it as i64!
-            // The following will be changed once the upstream PR is merged:
-            // https://github.com/rust-bitcoin/corepc/pull/430
-            tx_rate: stats.tx_rate.map(|r| r as f64),
+            tx_rate: stats.tx_rate,
         }
     }
 }
