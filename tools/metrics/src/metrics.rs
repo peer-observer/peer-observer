@@ -290,6 +290,14 @@ pub struct Metrics {
     // getaddrmaninfo
     pub rpc_addrmaninfo: IntGaugeVec,
 
+    // getchaintxstats
+    pub rpc_chaintxstats_tx_count: IntGauge,
+    pub rpc_chaintxstats_window_final_block_height: IntGauge,
+    pub rpc_chaintxstats_window_block_count: IntGauge,
+    pub rpc_chaintxstats_window_tx_count: IntGauge,
+    pub rpc_chaintxstats_window_interval: IntGauge,
+    pub rpc_chaintxstats_tx_rate: Gauge,
+
     // P2P-extractor
     pub p2pextractor_ping_duration_nanoseconds: IntGauge,
     pub p2pextractor_addrv2relay_addresses: IntCounterVec,
@@ -442,6 +450,14 @@ impl Metrics {
         // getaddrmaninfo
         igv!(rpc_addrmaninfo, "Address manager information by network and table (new/tried/total)", ["network", "table"], registry);
 
+        // getchaintxstats
+        ig!(rpc_chaintxstats_tx_count, "Total number of transactions in the chain up to the final block in the window.", registry);
+        ig!(rpc_chaintxstats_window_final_block_height, "Height of the final block in the window.", registry);
+        ig!(rpc_chaintxstats_window_block_count, "Size of the window in number of blocks.", registry);
+        ig!(rpc_chaintxstats_window_tx_count, "Number of transactions in the window.", registry);
+        ig!(rpc_chaintxstats_window_interval, "Elapsed time in the window in seconds.", registry);
+        g!(rpc_chaintxstats_tx_rate, "Average rate of transactions per second in the window.", registry);
+
         // P2P-extractor
         ig!(p2pextractor_ping_duration_nanoseconds, "The time it takes for a connected Bitcoin node to respond to a ping with a pong in nanoseconds.", registry);
         icv!(p2pextractor_addrv2relay_addresses, "The total number of addresses relayed to the p2p-extractor by the node, per network", ["network"], registry);
@@ -589,6 +605,14 @@ impl Metrics {
 
             // getaddrmaninfo
             rpc_addrmaninfo,
+
+            // getchaintxstats
+            rpc_chaintxstats_tx_count,
+            rpc_chaintxstats_window_final_block_height,
+            rpc_chaintxstats_window_block_count,
+            rpc_chaintxstats_window_tx_count,
+            rpc_chaintxstats_window_interval,
+            rpc_chaintxstats_tx_rate,
 
             // p2p-extractor
             p2pextractor_ping_duration_nanoseconds,

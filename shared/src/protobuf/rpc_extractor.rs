@@ -2,6 +2,7 @@ use corepc_client::types::v17::{
     GetMemoryInfoStats as RPCGetMemoryInfoStats, GetNetTotals as RPCGetNetTotals,
     UploadTarget as RPCUploadTarget,
 };
+use corepc_client::types::v19::GetChainTxStats as RPCGetChainTxStats;
 use corepc_client::types::v26::{
     AddrManInfoNetwork as RPCAddrManInfoNetwork, GetAddrManInfo as RPCGetAddrManInfo,
     GetMempoolInfo, GetPeerInfo as RPCGetPeerInfo, PeerInfo as RPCPeerInfo,
@@ -41,6 +42,7 @@ impl fmt::Display for rpc::RpcEvent {
             rpc::RpcEvent::NetTotals(totals) => write!(f, "{}", totals),
             rpc::RpcEvent::MemoryInfo(info) => write!(f, "{}", info),
             rpc::RpcEvent::AddrmanInfo(info) => write!(f, "{}", info),
+            rpc::RpcEvent::ChainTxStats(stats) => write!(f, "{}", stats),
         }
     }
 }
@@ -230,5 +232,30 @@ impl From<RPCAddrManInfoNetwork> for AddrManInfoNetwork {
             tried: network.tried,
             total: network.total,
         }
+    }
+}
+
+impl From<RPCGetChainTxStats> for ChainTxStats {
+    fn from(stats: RPCGetChainTxStats) -> Self {
+        ChainTxStats {
+            time: stats.time,
+            tx_count: stats.tx_count,
+            window_final_block_hash: stats.window_final_block_hash,
+            window_final_block_height: stats.window_final_block_height,
+            window_block_count: stats.window_block_count,
+            window_tx_count: stats.window_tx_count,
+            window_interval: stats.window_interval,
+            tx_rate: stats.tx_rate,
+        }
+    }
+}
+
+impl fmt::Display for ChainTxStats {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "ChainTxStats(tx_count={}, tx_rate={:?})",
+            self.tx_count, self.tx_rate
+        )
     }
 }
