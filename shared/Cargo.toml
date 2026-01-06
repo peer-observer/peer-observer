@@ -26,7 +26,7 @@ regex = "1.12"
 # - cpu_load and inv_to_send in getpeerinfo
 # - addconnection
 # - getorphantxs
-corepc-node = { git = "https://github.com/0xb10c/corepc", rev = "022a23a81e859a5e6f0d8b3774e02f68b2f8a44b", features = ["download", "30_0"] }
+corepc-node = { git = "https://github.com/0xb10c/corepc", rev = "022a23a81e859a5e6f0d8b3774e02f68b2f8a44b", features = ["download", "29_0"] }
 corepc-client = { git = "https://github.com/0xb10c/corepc", rev = "022a23a81e859a5e6f0d8b3774e02f68b2f8a44b", features = ["client-sync"]}
 
 [build-dependencies]
