@@ -618,7 +618,7 @@ mod tests {
         assert_eq!(message.meta.peer_addr(), "209.222.252.40:64809");
         assert_eq!(message.meta.peer_conn_type(), "inbound");
         assert_eq!(message.meta.msg_type(), "ping");
-        assert_eq!(message.meta.msg_inbound, false);
+        assert!(!message.meta.msg_inbound);
         assert_eq!(message.meta.msg_size, 8u64);
         assert_eq!(message.payload, hex::decode("92e4200d3021c21b").unwrap());
 

@@ -58,7 +58,7 @@ fn setup() -> u16 {
         .get()
         .unwrap()
         .fetch_add(1, Ordering::SeqCst);
-    return websocket_port;
+    websocket_port
 }
 
 fn make_test_args(nats_port: u16, websocket_port: u16) -> Args {
@@ -154,7 +154,7 @@ async fn publish_and_check(
         for expected in expected.iter() {
             if let Some(msg) = client.next().await {
                 let msg = msg.unwrap();
-                println!("data: {}", msg.to_string());
+                println!("data: {}", msg);
                 assert_eq!(*expected, msg.to_string());
             }
         }
@@ -183,9 +183,7 @@ async fn test_integration_websocket_conn_inbound() {
             )),
         }))
     }))
-    .unwrap()], Subject::NetConn, &vec![
-        r#"{"EbpfExtractor":{"ebpf_event":{"Connection":{"event":{"Inbound":{"conn":{"peer_id":7,"addr":"127.0.0.1:8333","conn_type":1,"network":2},"existing_connections":123}}}}}}"#,
-    ],1, None).await;
+    .unwrap()], Subject::NetConn, &[r#"{"EbpfExtractor":{"ebpf_event":{"Connection":{"event":{"Inbound":{"conn":{"peer_id":7,"addr":"127.0.0.1:8333","conn_type":1,"network":2},"existing_connections":123}}}}}}"#],1, None).await;
 }
 
 #[tokio::test]
@@ -224,10 +222,8 @@ async fn test_integration_websocket_p2p_message_ping() {
             .unwrap(),
         ],
         Subject::NetMsg,
-        &vec![
-            r#"{"EbpfExtractor":{"ebpf_event":{"Message":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"ping","inbound":true,"size":8},"msg":{"Ping":{"value":1}}}}}}"#,
-            r#"{"EbpfExtractor":{"ebpf_event":{"Message":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"pong","inbound":false,"size":8},"msg":{"Pong":{"value":1}}}}}}"#,
-        ],
+        &[r#"{"EbpfExtractor":{"ebpf_event":{"Message":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"ping","inbound":true,"size":8},"msg":{"Ping":{"value":1}}}}}}"#,
+            r#"{"EbpfExtractor":{"ebpf_event":{"Message":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"pong","inbound":false,"size":8},"msg":{"Pong":{"value":1}}}}}}"#],
         1,
         None
     )
@@ -270,10 +266,8 @@ async fn test_integration_websocket_multi_client() {
             .unwrap(),
         ],
         Subject::NetMsg,
-        &vec![
-            r#"{"EbpfExtractor":{"ebpf_event":{"Message":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"ping","inbound":true,"size":8},"msg":{"Ping":{"value":1}}}}}}"#,
-            r#"{"EbpfExtractor":{"ebpf_event":{"Message":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"pong","inbound":false,"size":8},"msg":{"Pong":{"value":1}}}}}}"#,
-        ],
+        &[r#"{"EbpfExtractor":{"ebpf_event":{"Message":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"ping","inbound":true,"size":8},"msg":{"Ping":{"value":1}}}}}}"#,
+            r#"{"EbpfExtractor":{"ebpf_event":{"Message":{"meta":{"peer_id":0,"addr":"127.0.0.1:8333","conn_type":1,"command":"pong","inbound":false,"size":8},"msg":{"Pong":{"value":1}}}}}}"#],
         12,
         None
     )
@@ -304,9 +298,7 @@ async fn test_integration_websocket_closed_client() {
         }))
         .unwrap()],
         Subject::NetConn,
-        &vec![
-            r#"{"EbpfExtractor":{"ebpf_event":{"Connection":{"event":{"Outbound":{"conn":{"peer_id":11,"addr":"1.1.1.1:48333","conn_type":2,"network":3},"existing_connections":321}}}}}}"#,
-        ],
+        &[r#"{"EbpfExtractor":{"ebpf_event":{"Connection":{"event":{"Outbound":{"conn":{"peer_id":11,"addr":"1.1.1.1:48333","conn_type":2,"network":3},"existing_connections":321}}}}}}"#],
         4,
         Some(2)
     )

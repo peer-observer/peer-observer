@@ -24,7 +24,7 @@ static INIT: Once = Once::new();
 // 1 second query interval for fast tests
 const QUERY_INTERVAL_SECONDS: u64 = 1;
 
-fn setup() -> () {
+fn setup() {
     INIT.call_once(|| {
         SimpleLogger::new()
             .with_level(log::LevelFilter::Trace)
@@ -33,6 +33,7 @@ fn setup() -> () {
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn make_test_args(
     nats_port: u16,
     rpc_url: String,
@@ -71,7 +72,7 @@ fn setup_node(conf: corepc_node::Conf) -> corepc_node::Node {
     }
 
     info!("Trying to download a bitcoind..");
-    return corepc_node::Node::from_downloaded_with_conf(&conf).unwrap();
+    corepc_node::Node::from_downloaded_with_conf(&conf).unwrap()
 }
 
 fn setup_two_connected_nodes() -> (corepc_node::Node, corepc_node::Node) {
@@ -88,6 +89,7 @@ fn setup_two_connected_nodes() -> (corepc_node::Node, corepc_node::Node) {
     (node1, node2)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn check(
     disable_getpeerinfo: bool,
     disable_getmempoolinfo: bool,
@@ -152,8 +154,6 @@ async fn test_integration_rpc_getpeerinfo() {
                             assert_eq!(p.infos.len(), 1);
                             let peer = p.infos.first().expect("we have expactly one peer here");
                             assert_eq!(peer.connection_type, "inbound");
-
-                            return;
                         }
                         _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }
@@ -182,7 +182,7 @@ async fn test_integration_rpc_getmempoolinfo() {
                 if let Some(ref e) = r.rpc_event {
                     match e {
                         MempoolInfo(info) => {
-                            assert_eq!(info.loaded, true);
+                            assert!(info.loaded);
                             assert_eq!(info.size, 0);
                             assert_eq!(info.usage, 0);
                             assert_eq!(info.bytes, 0);
@@ -194,8 +194,7 @@ async fn test_integration_rpc_getmempoolinfo() {
                             assert!(info.incrementalrelayfee > 0.0);
 
                             assert_eq!(info.unbroadcastcount, 0);
-                            assert_eq!(info.fullrbf, true);
-                            return;
+                            assert!(info.fullrbf);
                         }
                         _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }
@@ -226,7 +225,6 @@ async fn test_integration_rpc_uptime() {
                         Uptime(uptime_seconds) => {
                             // Uptime should be a positive number
                             assert!(*uptime_seconds > 0);
-                            return;
                         }
                         _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }
@@ -258,7 +256,6 @@ async fn test_integration_rpc_getnettotals() {
                             assert!(net_totals.time_millis > 0);
                             assert!(net_totals.total_bytes_received > 0);
                             assert!(net_totals.total_bytes_sent > 0);
-                            return;
                         }
                         _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }
@@ -290,7 +287,6 @@ async fn test_integration_rpc_getmemoryinfo() {
                             assert!(info.total > 0);
                             assert!(info.used <= info.total);
                             assert!(info.locked <= info.total);
-                            return;
                         }
                         _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }
@@ -337,8 +333,6 @@ async fn test_integration_rpc_getaddrmaninfo() {
                                     network
                                 );
                             }
-
-                            return;
                         }
                         _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }
@@ -375,7 +369,6 @@ async fn test_integration_rpc_getchaintxstats() {
                             // Note: window_tx_count, window_interval, and tx_rate
                             // are only present when window_block_count > 0, which
                             // requires mined blocks. Fresh regtest has 0 blocks.
-                            return;
                         }
                         _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }

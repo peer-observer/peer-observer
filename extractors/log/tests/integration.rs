@@ -26,7 +26,7 @@ use std::sync::Once;
 
 static INIT: Once = Once::new();
 
-fn setup() -> () {
+fn setup() {
     INIT.call_once(|| {
         SimpleLogger::new()
             .with_level(LevelFilter::Trace)
@@ -35,7 +35,7 @@ fn setup() -> () {
     });
 }
 
-fn spawn_pipe(log_path: String, pipe_path: String) -> () {
+fn spawn_pipe(log_path: String, pipe_path: String) {
     // Create pipe
     std::process::Command::new("mkfifo")
         .arg(&pipe_path)
@@ -70,7 +70,7 @@ fn setup_node(conf: corepc_node::Conf) -> corepc_node::Node {
     }
 
     info!("Trying to download a bitcoind..");
-    return corepc_node::Node::from_downloaded_with_conf(&conf).unwrap();
+    corepc_node::Node::from_downloaded_with_conf(&conf).unwrap()
 }
 
 fn setup_two_connected_nodes(node1_args: Vec<&str>) -> (corepc_node::Node, corepc_node::Node) {
@@ -125,10 +125,10 @@ async fn check(
 
     while let Some(msg) = sub.next().await {
         let unwrapped = Event::decode(msg.payload).unwrap();
-        if let Some(event) = unwrapped.peer_observer_event {
-            if check_event(event) {
-                break;
-            }
+        if let Some(event) = unwrapped.peer_observer_event
+            && check_event(event)
+        {
+            break;
         }
     }
 
@@ -136,13 +136,13 @@ async fn check(
     log_extractor_handle.await.unwrap();
 }
 
-pub fn update_merkle_root(block: &mut Block) -> () {
+pub fn update_merkle_root(block: &mut Block) {
     block.header.merkle_root = block.compute_merkle_root().unwrap();
 }
 
 pub fn mine_block(block: &mut Block) {
     let target = block.header.target();
-    while !block.header.validate_pow(target).is_ok() {
+    while block.header.validate_pow(target).is_err() {
         block.header.nonce += 1;
     }
 }
@@ -154,21 +154,9 @@ async fn test_integration_logextractor_log_events() {
     check(
         vec![],
         |_node1| (),
-        |event| {
-            match event {
-                PeerObserverEvent::LogExtractor(r) => {
-                    if let Some(ref e) = r.log_event {
-                        match e {
-                            _ => {
-                                return true;
-                            }
-                        }
-                    }
-                }
-                _ => panic!("unexpected event {:?}", event),
-            };
-
-            false
+        |event| match event {
+            PeerObserverEvent::LogExtractor(r) => r.log_event.is_some(),
+            _ => panic!("unexpected event {:?}", event),
         },
     )
     .await;
@@ -184,15 +172,12 @@ async fn test_integration_logextractor_unknown_log_events() {
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(r) => {
-                    if let Some(ref e) = r.log_event {
-                        match e {
-                            log::LogEvent::UnknownLogMessage(unknown_log_message) => {
-                                assert!(unknown_log_message.raw_message.len() > 0);
-                                info!("UnknownLogMessage {:?}", unknown_log_message);
-                                return true;
-                            }
-                            _ => (),
-                        }
+                    if let Some(ref e) = r.log_event
+                        && let log::LogEvent::UnknownLogMessage(unknown_log_message) = e
+                    {
+                        assert!(!unknown_log_message.raw_message.is_empty());
+                        info!("UnknownLogMessage {:?}", unknown_log_message);
+                        return true;
                     }
                 }
                 _ => panic!("unexpected event {:?}", event),
@@ -220,15 +205,12 @@ async fn test_integration_logextractor_block_connected() {
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(r) => {
-                    if let Some(ref e) = r.log_event {
-                        match e {
-                            log::LogEvent::BlockConnectedLog(block_connected) => {
-                                assert!(block_connected.block_height > 0);
-                                info!("BlockConnectedLog event {}", block_connected);
-                                return true;
-                            }
-                            _ => {}
-                        }
+                    if let Some(ref e) = r.log_event
+                        && let log::LogEvent::BlockConnectedLog(block_connected) = e
+                    {
+                        assert!(block_connected.block_height > 0);
+                        info!("BlockConnectedLog event {}", block_connected);
+                        return true;
                     }
                 }
                 _ => panic!("unexpected event {:?}", event),
@@ -252,10 +234,10 @@ async fn test_integration_logextractor_logtimemicros() {
                     // When using -logtimemicros=1, the timestamp % 1000 should
                     // (most of the time) be != 0 (or >0). 1 in 1000 cases, it will
                     // be 0, but we test multiple messages.
-                    return r.log_timestamp % 1000 > 0;
+                    r.log_timestamp % 1000 > 0
                 }
                 _ => panic!("unexpected event {:?}", event),
-            };
+            }
         },
     )
     .await;
@@ -284,15 +266,12 @@ async fn test_integration_logextractor_extralogging() {
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(r) => {
-                    if let Some(ref e) = r.log_event {
-                        match e {
-                            log::LogEvent::BlockConnectedLog(block_connected) => {
-                                assert!(block_connected.block_height > 0);
-                                info!("BlockConnectedLog event {}", block_connected);
-                                return true;
-                            }
-                            _ => {}
-                        }
+                    if let Some(ref e) = r.log_event
+                        && let log::LogEvent::BlockConnectedLog(block_connected) = e
+                    {
+                        assert!(block_connected.block_height > 0);
+                        info!("BlockConnectedLog event {}", block_connected);
+                        return true;
                     }
                 }
                 _ => panic!("unexpected event {:?}", event),
@@ -320,16 +299,11 @@ async fn test_integration_logextractor_block_checked() {
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(r) => {
-                    if let Some(ref e) = r.log_event {
-                        match e {
-                            log::LogEvent::BlockCheckedLog(block_checked) => {
-                                assert!(block_checked.block_hash.len() > 0);
-                                assert_eq!(block_checked.state, "Valid");
-                                info!("BlockCheckedLog event {}", block_checked);
-                                return true;
-                            }
-                            _ => {}
-                        }
+                    if let Some(log::LogEvent::BlockCheckedLog(block_checked)) = r.log_event {
+                        assert!(!block_checked.block_hash.is_empty());
+                        assert_eq!(block_checked.state, "Valid");
+                        info!("BlockCheckedLog event {}", block_checked);
+                        return true;
                     }
                 }
                 _ => panic!("unexpected event {:?}", event),
@@ -366,27 +340,24 @@ async fn test_integration_logextractor_mutated_block_bad_witness_nonce_size() {
             update_merkle_root(&mut block);
             mine_block(&mut block);
 
-            if let Err(_) = node1.submit_block(&block) {
-                return;
-            }
-            panic!("expected block submission to fail")
+            assert!(
+                node1.submit_block(&block).is_err(),
+                "expected block submission to fail"
+            );
         },
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(r) => {
-                    if let Some(ref e) = r.log_event {
-                        match e {
-                            log::LogEvent::BlockCheckedLog(block_checked) => {
-                                assert_eq!(block_checked.state, "bad-witness-nonce-size");
-                                assert_eq!(
-                                    block_checked.debug_message,
-                                    "CheckWitnessMalleation : invalid witness reserved value size"
-                                );
-                                info!("BlockCheckedLog event {}", block_checked);
-                                return true;
-                            }
-                            _ => {}
-                        }
+                    if let Some(ref e) = r.log_event
+                        && let log::LogEvent::BlockCheckedLog(block_checked) = e
+                    {
+                        assert_eq!(block_checked.state, "bad-witness-nonce-size");
+                        assert_eq!(
+                            block_checked.debug_message,
+                            "CheckWitnessMalleation : invalid witness reserved value size"
+                        );
+                        info!("BlockCheckedLog event {}", block_checked);
+                        return true;
                     }
                 }
                 _ => panic!("unexpected event {:?}", event),
@@ -417,31 +388,28 @@ async fn test_integration_logextractor_mutated_block_bad_txnmrklroot() {
             let block_bytes: Vec<u8> = FromHex::from_hex(&block_hex).unwrap();
             let mut block = Block::consensus_decode(&mut block_bytes.as_slice()).unwrap();
 
-            let merkle_root = block.header.merkle_root.clone();
+            let merkle_root = block.header.merkle_root;
             let mut bytes = *merkle_root.as_raw_hash().as_byte_array();
             bytes[0] ^= 0x55;
             block.header.merkle_root = Hash::from_byte_array(bytes);
 
             mine_block(&mut block);
 
-            if let Err(_) = node1.submit_block(&block) {
-                return;
-            }
-            panic!("expected block submission to fail")
+            assert!(
+                node1.submit_block(&block).is_err(),
+                "expected block submission to fail"
+            );
         },
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(l) => {
-                    if let Some(ref e) = l.log_event {
-                        match e {
-                            log::LogEvent::BlockCheckedLog(block_checked) => {
-                                assert_eq!(block_checked.state, "bad-txnmrklroot");
-                                assert_eq!(block_checked.debug_message, "hashMerkleRoot mismatch");
-                                info!("BlockCheckedLog event {}", block_checked);
-                                return true;
-                            }
-                            _ => {}
-                        }
+                    if let Some(ref e) = l.log_event
+                        && let log::LogEvent::BlockCheckedLog(block_checked) = e
+                    {
+                        assert_eq!(block_checked.state, "bad-txnmrklroot");
+                        assert_eq!(block_checked.debug_message, "hashMerkleRoot mismatch");
+                        info!("BlockCheckedLog event {}", block_checked);
+                        return true;
                     }
                 }
                 _ => panic!("unexpected event {:?}", event),
@@ -462,17 +430,14 @@ async fn test_integration_logextractor_unknown_with_threadname() {
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(r) => {
-                    if let Some(ref e) = r.log_event {
-                        match e {
-                            log::LogEvent::UnknownLogMessage(unknown_log_message) => {
-                                assert!(unknown_log_message.raw_message.len() > 0);
-                                assert!(!r.threadname.is_empty(), "threadname should not be empty");
-                                assert_eq!(r.category, LogDebugCategory::Unknown as i32);
-                                info!("UnknownLogMessage with threadname: {}", r.threadname);
-                                return true;
-                            }
-                            _ => {}
-                        }
+                    if let Some(ref e) = r.log_event
+                        && let log::LogEvent::UnknownLogMessage(unknown_log_message) = e
+                    {
+                        assert!(!unknown_log_message.raw_message.is_empty());
+                        assert!(!r.threadname.is_empty(), "threadname should not be empty");
+                        assert_eq!(r.category, LogDebugCategory::Unknown as i32);
+                        info!("UnknownLogMessage with threadname: {}", r.threadname);
+                        return true;
                     }
                 }
                 _ => panic!("unexpected event {:?}", event),
@@ -493,16 +458,13 @@ async fn test_integration_logextractor_unknown_with_category() {
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(r) => {
-                    if let Some(ref e) = r.log_event {
-                        match e {
-                            log::LogEvent::UnknownLogMessage(unknown_log_message) => {
-                                assert!(unknown_log_message.raw_message.len() > 0);
-                                assert_eq!(r.category, LogDebugCategory::Net as i32);
-                                info!("UnknownLogMessage with category Net");
-                                return true;
-                            }
-                            _ => {}
-                        }
+                    if let Some(ref e) = r.log_event
+                        && let log::LogEvent::UnknownLogMessage(unknown_log_message) = e
+                    {
+                        assert!(!unknown_log_message.raw_message.is_empty());
+                        assert_eq!(r.category, LogDebugCategory::Net as i32);
+                        info!("UnknownLogMessage with category Net");
+                        return true;
                     }
                 }
                 _ => panic!("unexpected event {:?}", event),
@@ -523,20 +485,17 @@ async fn test_integration_logextractor_unknown_with_threadname_and_category() {
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(r) => {
-                    if let Some(ref e) = r.log_event {
-                        match e {
-                            log::LogEvent::UnknownLogMessage(unknown_log_message) => {
-                                assert!(unknown_log_message.raw_message.len() > 0);
-                                assert!(!r.threadname.is_empty(), "threadname should not be empty");
-                                assert_eq!(r.category, LogDebugCategory::Net as i32);
-                                info!(
-                                    "UnknownLogMessage with threadname {} and category Net",
-                                    r.threadname
-                                );
-                                return true;
-                            }
-                            _ => {}
-                        }
+                    if let Some(ref e) = r.log_event
+                        && let log::LogEvent::UnknownLogMessage(unknown_log_message) = e
+                    {
+                        assert!(!unknown_log_message.raw_message.is_empty());
+                        assert!(!r.threadname.is_empty(), "threadname should not be empty");
+                        assert_eq!(r.category, LogDebugCategory::Net as i32);
+                        info!(
+                            "UnknownLogMessage with threadname {} and category Net",
+                            r.threadname
+                        );
+                        return true;
                     }
                 }
                 _ => panic!("unexpected event {:?}", event),
@@ -557,20 +516,17 @@ async fn test_integration_logextractor_unknown_with_all_metadata() {
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(r) => {
-                    if let Some(ref e) = r.log_event {
-                        match e {
-                            log::LogEvent::UnknownLogMessage(unknown_log_message) => {
-                                assert!(unknown_log_message.raw_message.len() > 0);
-                                assert!(!r.threadname.is_empty(), "threadname should not be empty");
-                                assert_eq!(r.category, LogDebugCategory::Net as i32);
-                                info!(
-                                    "UnknownLogMessage with threadname {} and category Net",
-                                    r.threadname
-                                );
-                                return true;
-                            }
-                            _ => {}
-                        }
+                    if let Some(ref e) = r.log_event
+                        && let log::LogEvent::UnknownLogMessage(unknown_log_message) = e
+                    {
+                        assert!(!unknown_log_message.raw_message.is_empty());
+                        assert!(!r.threadname.is_empty(), "threadname should not be empty");
+                        assert_eq!(r.category, LogDebugCategory::Net as i32);
+                        info!(
+                            "UnknownLogMessage with threadname {} and category Net",
+                            r.threadname
+                        );
+                        return true;
                     }
                 }
                 _ => panic!("unexpected event {:?}", event),

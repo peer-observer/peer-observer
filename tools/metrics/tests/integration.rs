@@ -79,7 +79,7 @@ fn setup() -> u16 {
         .get()
         .unwrap()
         .fetch_add(1, Ordering::SeqCst);
-    return metrics_port;
+    metrics_port
 }
 
 fn make_test_args(nats_port: u16, metrics_port: u16) -> Args {
@@ -131,7 +131,7 @@ fn check_metrics(port: u16, expected: &[&str]) -> Result<bool, std::io::Error> {
     let mut no_lines_missing = true;
     for line in expected {
         let line = line.trim();
-        if line == "" {
+        if line.is_empty() {
             continue;
         }
         if !metrics_raw.contains(line) {
@@ -139,7 +139,7 @@ fn check_metrics(port: u16, expected: &[&str]) -> Result<bool, std::io::Error> {
             no_lines_missing = false;
         }
     }
-    return Ok(no_lines_missing);
+    Ok(no_lines_missing)
 }
 
 async fn publish_and_check(events: &[Event], subject: Subject, expected: &str) {
@@ -1354,8 +1354,8 @@ async fn test_integration_metrics_p2p_ping_value() {
         u32::MAX as u64 - 1, // => u32
         u32::MAX as u64,     // => u32
         u32::MAX as u64 + 1, // => u64
-        u64::MAX as u64 - 1, // => u64
-        u64::MAX as u64,     // => u64
+        u64::MAX - 1,        // => u64
+        u64::MAX,            // => u64
     ];
 
     let events: Vec<Event> = values

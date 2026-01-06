@@ -54,11 +54,11 @@ fn setup() -> u16 {
             .set(AtomicU16::new(p2p_extractor_start))
             .unwrap();
     });
-    let p2p_extractor_port = NEXT_P2PEXTRACTOR_PORT
+
+    NEXT_P2PEXTRACTOR_PORT
         .get()
         .unwrap()
-        .fetch_add(1, Ordering::SeqCst);
-    p2p_extractor_port
+        .fetch_add(1, Ordering::SeqCst)
 }
 
 fn make_test_args(
@@ -92,7 +92,7 @@ fn setup_node(conf: corepc_node::Conf) -> corepc_node::Node {
     }
 
     info!("Trying to download a bitcoind..");
-    return corepc_node::Node::from_downloaded_with_conf(&conf).unwrap();
+    corepc_node::Node::from_downloaded_with_conf(&conf).unwrap()
 }
 
 fn configure_node() -> corepc_node::Node {
@@ -111,9 +111,8 @@ fn configure_node() -> corepc_node::Node {
     // be quite spammy.
     node_conf.view_stdout = false;
     node_conf.p2p = corepc_node::P2P::Yes;
-    let node = setup_node(node_conf);
 
-    node
+    setup_node(node_conf)
 }
 
 async fn check(
@@ -167,12 +166,10 @@ async fn check(
     let mut connected = false;
     for i in 0..100 {
         let peers = node.client.get_peer_info().unwrap().0;
-        if peers.len() == 1 {
-            if peers[0].transport_protocol_type == "v1" {
-                log::info!("p2p-extractor and node are connected: {:?}", peers[0]);
-                connected = true;
-                break;
-            }
+        if peers.len() == 1 && peers[0].transport_protocol_type == "v1" {
+            log::info!("p2p-extractor and node are connected: {:?}", peers[0]);
+            connected = true;
+            break;
         }
         log::warn!(
             "p2p-extractor and node are not yet connected: attempt {}",
@@ -188,10 +185,10 @@ async fn check(
 
     while let Some(msg) = sub.next().await {
         let unwrapped = Event::decode(msg.payload).unwrap();
-        if let Some(event) = unwrapped.peer_observer_event {
-            if check_expected(event) {
-                break;
-            }
+        if let Some(event) = unwrapped.peer_observer_event
+            && check_expected(event)
+        {
+            break;
         }
     }
 
@@ -228,7 +225,7 @@ async fn test_integration_p2pextractor_ping_measurements() {
                 }
                 _ => panic!("unexpected event {:?}", event),
             }
-            return false;
+            false
         },
     )
     .await;
@@ -252,9 +249,9 @@ async fn test_integration_p2pextractor_addr_annoucement() {
                     .require_network(bitcoin::Network::Regtest)
                     .unwrap();
             node.client.generate_to_address(1, &address).unwrap();
-            assert_eq!(
-                false,
-                node.client
+            assert!(
+                !node
+                    .client
                     .get_blockchain_info()
                     .unwrap()
                     .initial_block_download
@@ -279,7 +276,7 @@ async fn test_integration_p2pextractor_addr_annoucement() {
                     if let Some(ref e) = p.p2p_event {
                         match e {
                             AddressAnnouncement(a) => {
-                                assert!(a.addresses.len() > 0);
+                                assert!(!a.addresses.is_empty());
                                 assert_eq!(a.addresses[0].port, 8333);
                                 log::info!("{}", a);
                                 return true;
@@ -290,7 +287,7 @@ async fn test_integration_p2pextractor_addr_annoucement() {
                 }
                 _ => panic!("unexpected event {:?}", event),
             }
-            return false;
+            false
         },
     )
     .await;
@@ -347,7 +344,7 @@ async fn test_integration_p2pextractor_inv_annoucement() {
                 }
                 _ => panic!("unexpected event {:?}", event),
             }
-            return false;
+            false
         },
     )
     .await;
@@ -381,7 +378,7 @@ async fn test_integration_p2pextractor_feefilter_annoucement() {
                 }
                 _ => panic!("unexpected event {:?}", event),
             }
-            return false;
+            false
         },
     )
     .await;

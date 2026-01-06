@@ -65,6 +65,7 @@ pub fn get_logged_messages() -> Vec<String> {
     LOGS.lock().unwrap().clone()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn make_test_args(
     nats_port: u16,
     messages: bool,
@@ -96,7 +97,7 @@ fn check_logs(expected: &[&str]) -> Result<bool, std::io::Error> {
     let mut no_lines_missing = true;
     for line in expected {
         let line = line.trim();
-        if line == "" {
+        if line.is_empty() {
             continue;
         }
         if !logs.contains(&String::from(line)) {
@@ -104,7 +105,7 @@ fn check_logs(expected: &[&str]) -> Result<bool, std::io::Error> {
             no_lines_missing = false;
         }
     }
-    return Ok(no_lines_missing);
+    Ok(no_lines_missing)
 }
 
 async fn publish_and_check(events: &[Event], subject: Subject, expected: &str) {
