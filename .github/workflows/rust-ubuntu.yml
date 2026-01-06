@@ -26,19 +26,50 @@ jobs:
           zstd \
           binutils-dev \
           elfutils \
-          gcc-multilib \
-    - name: Install integration test dependecies
-      run: |
-        sudo apt-get install -y \
-          nats-server
+          gcc-multilib
     - uses: actions/checkout@v6
     - name: Build
       run: cargo build --all-features
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install build dependecies
+      run: |
+        sudo apt update -y
+        sudo apt-get install -y \
+          protobuf-compiler \
+          libelf-dev \
+          clang \
+          llvm \
+          llvm-14 \
+          zstd \
+          binutils-dev \
+          elfutils \
+          gcc-multilib
+    - name: Install integration test dependecies
+      run: sudo apt-get install -y nats-server
+    - uses: actions/checkout@v6
     - name: Run tests and integration tests
       run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features
-    - name: Run cargo fmt
-      run: cargo fmt --all -- --check
 
+  docs-tools:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install build dependecies
+      run: |
+        sudo apt update -y
+        sudo apt-get install -y \
+          protobuf-compiler \
+          libelf-dev \
+          clang \
+          llvm \
+          llvm-14 \
+          zstd \
+          binutils-dev \
+          elfutils \
+          gcc-multilib
+    - uses: actions/checkout@v6
     - name: Check help output of each tool (auto-detected)
       run: |
         set -e
@@ -90,7 +121,23 @@ jobs:
           echo "✅ All help outputs are documented correctly."
         fi
 
-
+  docs-extractors:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install build dependecies
+      run: |
+        sudo apt update -y
+        sudo apt-get install -y \
+          protobuf-compiler \
+          libelf-dev \
+          clang \
+          llvm \
+          llvm-14 \
+          zstd \
+          binutils-dev \
+          elfutils \
+          gcc-multilib
+    - uses: actions/checkout@v6
     - name: Check help output of each extractor (auto-detected)
       run: |
         set -e
@@ -141,3 +188,25 @@ jobs:
         else
           echo "✅ All help outputs are documented correctly."
         fi
+
+  check-and-fmt:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install build dependecies
+      run: |
+        sudo apt update -y
+        sudo apt-get install -y \
+          protobuf-compiler \
+          libelf-dev \
+          clang \
+          llvm \
+          llvm-14 \
+          zstd \
+          binutils-dev \
+          elfutils \
+          gcc-multilib
+    - uses: actions/checkout@v6
+    - name: Build
+      run: cargo check --all-features
+    - name: Run cargo fmt
+      run: cargo fmt --all -- --check
