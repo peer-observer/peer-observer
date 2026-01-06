@@ -9,6 +9,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
 
 jobs:
   build:
@@ -210,3 +211,23 @@ jobs:
       run: cargo check --all-features
     - name: Run cargo fmt
       run: cargo fmt --all -- --check
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install build dependecies
+      run: |
+        sudo apt update -y
+        sudo apt-get install -y \
+          protobuf-compiler \
+          libelf-dev \
+          clang \
+          llvm \
+          llvm-14 \
+          zstd \
+          binutils-dev \
+          elfutils \
+          gcc-multilib
+    - uses: actions/checkout@v6
+    - name: cargo clippy
+      run: cargo clippy --all-targets --all-features
