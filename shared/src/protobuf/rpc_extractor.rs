@@ -5,11 +5,13 @@ use corepc_client::types::v17::{
 use corepc_client::types::v19::GetChainTxStats as RPCGetChainTxStats;
 use corepc_client::types::v26::{
     AddrManInfoNetwork as RPCAddrManInfoNetwork, GetAddrManInfo as RPCGetAddrManInfo,
-    GetMempoolInfo, GetPeerInfo as RPCGetPeerInfo, PeerInfo as RPCPeerInfo,
+    GetPeerInfo as RPCGetPeerInfo, PeerInfo as RPCPeerInfo,
 };
 use corepc_client::types::v28::{GetNetworkInfo, GetNetworkInfoAddress, GetNetworkInfoNetwork};
 use corepc_client::types::v29::GetBlockchainInfo;
+use corepc_client::types::v30::GetMempoolInfo;
 
+// TODO: Ideally, all type imports should use the generic mtype types.
 use corepc_node::mtype::{GetOrphanTxsVerboseTwo, GetOrphanTxsVerboseTwoEntry};
 
 use std::fmt;

@@ -7,8 +7,7 @@ use std::fmt;
 use std::io;
 use std::time::SystemTimeError;
 
-// When upgrading to a newer corepc_client node version, we need to upgrade this from v29->v30 as well.
-use shared::corepc_client::types::v29::GetOrphanTxsVerboseTwoEntryError;
+use shared::corepc_client::types::v30::GetOrphanTxsVerboseTwoEntryError;
 
 #[derive(Debug)]
 pub enum FetchOrPublishError {

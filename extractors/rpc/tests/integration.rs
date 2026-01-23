@@ -2,7 +2,12 @@
 #![cfg(feature = "node_integration_tests")]
 
 use shared::{
-    async_nats, corepc_node,
+    async_nats,
+    bitcoin::{
+        Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid, Witness, absolute,
+        consensus, hashes::Hash, hex::DisplayHex, transaction,
+    },
+    corepc_node,
     futures::StreamExt,
     log::{self, info},
     nats_util::NatsArgs,
@@ -16,9 +21,14 @@ use shared::{
     },
     simple_logger::SimpleLogger,
     testing::nats_server::NatsServerForTesting,
-    tokio::{self, sync::watch},
+    tokio::{
+        self,
+        sync::watch,
+        time::{Duration, sleep},
+    },
 };
 
+use std::collections::HashMap;
 use std::sync::Once;
 
 use rpc_extractor::Args;
@@ -109,19 +119,25 @@ fn setup_two_connected_nodes() -> (corepc_node::Node, corepc_node::Node) {
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn check(rpcs: EnabledRPCsInTest, check_expected: fn(PeerObserverEvent) -> ()) {
+async fn check(
+    rpcs: EnabledRPCsInTest,
+    test_setup: fn(&corepc_node::Node, &corepc_node::Node),
+    check_expected: fn(PeerObserverEvent) -> (),
+) {
     setup();
-    let (node1, _node2) = setup_two_connected_nodes();
+    let (node1, node2) = setup_two_connected_nodes();
     let nats_server = NatsServerForTesting::new(&[]).await;
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
+    let url = node1.rpc_url().replace("http://", "");
+    let cookie_file_path = node1.params.cookie_file.display().to_string();
+
+    sleep(Duration::from_secs(1)).await;
+    test_setup(&node1, &node2);
+    sleep(Duration::from_secs(1)).await;
+
     let rpc_extractor_handle = tokio::spawn(async move {
-        let args = make_test_args(
-            nats_server.port,
-            node1.rpc_url().replace("http://", ""),
-            node1.params.cookie_file.display().to_string(),
-            rpcs,
-        );
+        let args = make_test_args(nats_server.port, url, cookie_file_path, rpcs);
         rpc_extractor::run(args, shutdown_rx.clone())
             .await
             .expect("rpc extractor failed");
@@ -153,6 +169,7 @@ async fn test_integration_rpc_getpeerinfo() {
             getpeerinfo: true,
             ..Default::default()
         },
+        |_, _| (),
         |event| {
             match event {
                 PeerObserverEvent::RpcExtractor(r) => {
@@ -184,6 +201,7 @@ async fn test_integration_rpc_getmempoolinfo() {
             getmempoolinfo: true,
             ..Default::default()
         },
+        |_, _| (),
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -222,6 +240,7 @@ async fn test_integration_rpc_uptime() {
             uptime: true,
             ..Default::default()
         },
+        |_, _| (),
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -249,6 +268,7 @@ async fn test_integration_rpc_getnettotals() {
             getnettotals: true,
             ..Default::default()
         },
+        |_, _| (),
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -277,6 +297,7 @@ async fn test_integration_rpc_getmemoryinfo() {
             getmemoryinfo: true,
             ..Default::default()
         },
+        |_, _| (),
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -305,6 +326,7 @@ async fn test_integration_rpc_getaddrmaninfo() {
             getaddrmaninfo: true,
             ..Default::default()
         },
+        |_, _| (),
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -348,6 +370,7 @@ async fn test_integration_rpc_getchaintxstats() {
             getchaintxstats: true,
             ..Default::default()
         },
+        |_, _| (),
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -381,6 +404,7 @@ async fn test_integration_rpc_getnetworkinfo() {
             getnetworkinfo: true,
             ..Default::default()
         },
+        |_, _| (),
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -433,6 +457,7 @@ async fn test_integration_rpc_getblockchaininfo() {
             getblockchaininfo: true,
             ..Default::default()
         },
+        |_, _| (),
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -483,12 +508,64 @@ async fn test_integration_rpc_getorphantxs() {
             getorphantxs: true,
             ..Default::default()
         },
+        |node1, node2| {
+            // Generate a couple of orphan transactions by spending from non-existing UTXOs.
+            const NUM_ORPHANS: u8 = 3;
+            let address = node2
+                .client
+                .new_address()
+                .expect("failed to get new address");
+            let orphans: Vec<Transaction> = (0..NUM_ORPHANS)
+                .map(|i| Transaction {
+                    version: transaction::Version::ONE,
+                    lock_time: absolute::LockTime::ZERO,
+                    input: vec![TxIn {
+                        previous_output: OutPoint {
+                            txid: Txid::from_raw_hash(Txid::from_byte_array([i; 32]).into()),
+                            vout: 0,
+                        },
+                        script_sig: ScriptBuf::new(),
+                        sequence: Sequence::MAX,
+                        witness: Witness::new(),
+                    }],
+                    output: vec![TxOut {
+                        value: Amount::from_sat(100_000),
+                        script_pubkey: address.script_pubkey(),
+                    }],
+                })
+                .collect();
+
+            // The receiving node needs to be out of IBD to start accepting transactions.
+            let address = node1
+                .client
+                .new_address()
+                .expect("failed to get new address");
+            node1
+                .client
+                .generate_to_address(1, &address)
+                .expect("failed to generate to address");
+
+            // node1 is peer=0 of node2
+            const PEER_ID: u64 = 0;
+            for orphan in orphans.iter() {
+                let tx_bytes = consensus::encode::serialize(orphan);
+                let tx_hex: String = tx_bytes.as_hex().to_string();
+                // HACK: We should use sendmsgtopeer directly but it's not implemented yet.
+                node2
+                    .client
+                    .call::<HashMap<String, String>>(
+                        "sendmsgtopeer",
+                        &[PEER_ID.into(), "tx".into(), tx_hex.into()],
+                    )
+                    .unwrap();
+            }
+        },
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
                     match e {
                         OrphanTxs(result) => {
-                            assert!(result.orphans.is_empty());
+                            assert_eq!(result.orphans.len(), 3);
                         }
                         _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }

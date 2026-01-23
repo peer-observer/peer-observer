@@ -1,6 +1,6 @@
 use shared::clap::{ArgGroup, Parser};
 use shared::corepc_client::client_sync::Auth;
-use shared::corepc_client::client_sync::v29::Client;
+use shared::corepc_client::client_sync::v30::Client;
 use shared::log;
 use shared::nats_subjects::Subject;
 use shared::nats_util::{self, NatsArgs};
