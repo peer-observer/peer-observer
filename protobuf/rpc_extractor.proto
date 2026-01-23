@@ -2,6 +2,8 @@ syntax = "proto2";
 
 package rpc_extractor;
 
+import "bitcoin_primitives.proto";
+
 message rpc {
   oneof rpc_event {
     PeerInfos peer_infos = 1;
@@ -13,6 +15,7 @@ message rpc {
     ChainTxStats chain_tx_stats = 7;
     NetworkInfo network_info = 8;
     BlockchainInfo blockchain_info = 9;
+    OrphanTxs orphan_txs = 10;
   }
 }
 
@@ -196,3 +199,21 @@ message BlockchainInfo {
   required uint64 prune_target_size = 14;                // Target size used by pruning (only if automatic pruning enabled)
   repeated string warnings = 15;                         // Any network and blockchain warnings
 }
+
+// A getpeerinfo RPC response from Bitcoin Core.
+message OrphanTxs {
+  repeated OrphanTx orphans = 1;
+}
+
+// A getorphantxs RPC entry.
+message OrphanTx {
+  required string txid = 1;                                 // The transaction hash
+  required string wtxid = 2;                                // The transaction witness hash
+  required uint64 bytes = 3;                                // The serialized transaction size in bytes
+  required uint64 vsize = 4;                                // The virtual transaction size as defined in BIP 141. This is different from actual serialized size for witness transactions as witness data is discounted.
+  required uint64 weight = 5;                               // The transaction weight as defined in BIP 141.
+  repeated uint64 from = 6;                                 // List of peer ids that we store this transaction for.
+  required bitcoin_primitives.Transaction transaction = 7;  // The orphan transaction.
+}
+
+

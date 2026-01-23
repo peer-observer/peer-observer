@@ -172,6 +172,7 @@ fn handle_rpc_event(e: &rpc::RpcEvent, metrics: metrics::Metrics) {
                 .rpc_nettotals_total_bytes_sent
                 .set(net_totals.total_bytes_sent as i64);
         }
+        rpc::RpcEvent::OrphanTxs(_orphans) => (),
         rpc::RpcEvent::MemoryInfo(info) => {
             metrics.rpc_memoryinfo_locked_used.set(info.used as i64);
             metrics.rpc_memoryinfo_locked_free.set(info.free as i64);

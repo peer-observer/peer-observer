@@ -91,6 +91,10 @@ pub struct Args {
     /// Disable querying and publishing of `getblockchaininfo` data.
     #[arg(long, default_value_t = false)]
     pub disable_getblockchaininfo: bool,
+
+    /// Disable querying and publishing of `getorphantxs` data.
+    #[arg(long, default_value_t = false)]
+    pub disable_getorphantxs: bool,
 }
 
 impl Args {
@@ -110,6 +114,7 @@ impl Args {
         disable_getchaintxstats: bool,
         disable_getnetworkinfo: bool,
         disable_getblockchaininfo: bool,
+        disable_getorphantxs: bool,
     ) -> Args {
         Self {
             nats,
@@ -128,6 +133,7 @@ impl Args {
             disable_getchaintxstats,
             disable_getnetworkinfo,
             disable_getblockchaininfo,
+            disable_getorphantxs,
             // when adding more disable_* args, make sure to update the disable_all below
         }
     }
@@ -191,6 +197,10 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         "Querying getblockchaininfo enabled: {}",
         !args.disable_getblockchaininfo
     );
+    log::info!(
+        "Querying getorphantxs enabled: {}",
+        !args.disable_getorphantxs
+    );
     // check if we have at least one RPC to query
     let disable_all = args.disable_getpeerinfo
         && args.disable_getmempoolinfo
@@ -200,7 +210,8 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         && args.disable_getaddrmaninfo
         && args.disable_getchaintxstats
         && args.disable_getnetworkinfo
-        && args.disable_getblockchaininfo;
+        && args.disable_getblockchaininfo
+        && args.disable_getorphantxs;
     if disable_all {
         log::warn!("No RPC configured to be queried!");
     }
@@ -235,6 +246,10 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
                 if !args.disable_getnetworkinfo
                     && let Err(e) = getnetworkinfo(&rpc_client, &nats_client).await {
                         log::error!("Could not fetch and publish 'getnetworkinfo': {}", e)
+                }
+                if !args.disable_getorphantxs
+                    && let Err(e) = getorphantxs(&rpc_client, &nats_client).await {
+                        log::error!("Could not fetch and publish 'getorphantxs': {}", e)
                 }
             }
             _ = less_frequent_interval.tick() => {
@@ -413,6 +428,24 @@ async fn getblockchaininfo(
         rpc_event: Some(rpc_extractor::rpc::RpcEvent::BlockchainInfo(
             blockchain_info.into(),
         )),
+    }))?;
+
+    nats_client
+        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
+        .await?;
+    Ok(())
+}
+
+async fn getorphantxs(
+    rpc_client: &Client,
+    nats_client: &async_nats::Client,
+) -> Result<(), FetchOrPublishError> {
+    use shared::corepc_node::mtype::GetOrphanTxsVerboseTwo;
+
+    let orphans: GetOrphanTxsVerboseTwo = rpc_client.get_orphan_txs_verbosity_2()?.into_model()?;
+
+    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+        rpc_event: Some(rpc_extractor::rpc::RpcEvent::OrphanTxs(orphans.into())),
     }))?;
 
     nats_client

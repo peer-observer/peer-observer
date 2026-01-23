@@ -61,6 +61,8 @@ Options:
           Disable querying and publishing of `getnetworkinfo` data
       --disable-getblockchaininfo
           Disable querying and publishing of `getblockchaininfo` data
+      --disable-getorphantxs
+          Disable querying and publishing of `getorphantxs` data
   -h, --help
           Print help
   -V, --version

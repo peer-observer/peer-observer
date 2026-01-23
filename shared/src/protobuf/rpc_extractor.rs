@@ -9,6 +9,9 @@ use corepc_client::types::v26::{
 };
 use corepc_client::types::v28::{GetNetworkInfo, GetNetworkInfoAddress, GetNetworkInfoNetwork};
 use corepc_client::types::v29::GetBlockchainInfo;
+
+use corepc_node::mtype::{GetOrphanTxsVerboseTwo, GetOrphanTxsVerboseTwoEntry};
+
 use std::fmt;
 
 // structs are generated via the rpc_extractor.proto file
@@ -47,6 +50,7 @@ impl fmt::Display for rpc::RpcEvent {
             rpc::RpcEvent::ChainTxStats(stats) => write!(f, "{}", stats),
             rpc::RpcEvent::NetworkInfo(info) => write!(f, "{}", info),
             rpc::RpcEvent::BlockchainInfo(info) => write!(f, "{}", info),
+            rpc::RpcEvent::OrphanTxs(orphans) => write!(f, "{}", orphans),
         }
     }
 }
@@ -323,6 +327,7 @@ impl fmt::Display for ChainTxStats {
         )
     }
 }
+
 impl fmt::Display for NetworkInfoNetwork {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
@@ -373,5 +378,44 @@ impl fmt::Display for BlockchainInfo {
             "BlockchainInfo(chain={}, blocks={}, ibd={}, warnings={})",
             self.chain, self.blocks, self.initialblockdownload, warnings_display
         )
+    }
+}
+
+impl fmt::Display for OrphanTxs {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let txs_strs: Vec<String> = self.orphans.iter().map(|i| i.to_string()).collect();
+        write!(f, "OrphanTxs([{}])", txs_strs.join(", "))
+    }
+}
+
+impl fmt::Display for OrphanTx {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "OrphanTx(txid={}, bytes={}, vsize={}, weight={}, from={:?})",
+            self.txid, self.bytes, self.vsize, self.weight, self.from,
+        )
+    }
+}
+
+impl From<GetOrphanTxsVerboseTwoEntry> for OrphanTx {
+    fn from(orphan: GetOrphanTxsVerboseTwoEntry) -> Self {
+        OrphanTx {
+            txid: orphan.txid.to_string(),
+            wtxid: orphan.wtxid.to_string(),
+            bytes: orphan.bytes,
+            vsize: orphan.vsize,
+            weight: orphan.weight,
+            from: orphan.from,
+            transaction: orphan.transaction.into(),
+        }
+    }
+}
+
+impl From<GetOrphanTxsVerboseTwo> for OrphanTxs {
+    fn from(orphans: GetOrphanTxsVerboseTwo) -> Self {
+        OrphanTxs {
+            orphans: orphans.0.iter().map(|i| i.clone().into()).collect(),
+        }
     }
 }

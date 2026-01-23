@@ -11,7 +11,7 @@ use shared::{
         event::{Event, event::PeerObserverEvent},
         rpc_extractor::rpc::RpcEvent::{
             AddrmanInfo, BlockchainInfo, ChainTxStats, MemoryInfo, MempoolInfo, NetTotals,
-            NetworkInfo, PeerInfos, Uptime,
+            NetworkInfo, OrphanTxs, PeerInfos, Uptime,
         },
     },
     simple_logger::SimpleLogger,
@@ -51,6 +51,7 @@ fn make_test_args(
     disable_getchaintxstats: bool,
     disable_getnetworkinfo: bool,
     disable_getblockchaininfo: bool,
+    disable_getorphantxs: bool,
 ) -> Args {
     Args::new(
         NatsArgs {
@@ -72,6 +73,7 @@ fn make_test_args(
         disable_getchaintxstats,
         disable_getnetworkinfo,
         disable_getblockchaininfo,
+        disable_getorphantxs,
     )
 }
 
@@ -113,6 +115,7 @@ async fn check(
     disable_getchaintxstats: bool,
     disable_getnetworkinfo: bool,
     disable_getblockchaininfo: bool,
+    disable_getorphantxs: bool,
     check_expected: fn(PeerObserverEvent) -> (),
 ) {
     setup();
@@ -134,6 +137,7 @@ async fn check(
             disable_getchaintxstats,
             disable_getnetworkinfo,
             disable_getblockchaininfo,
+            disable_getorphantxs,
         );
         rpc_extractor::run(args, shutdown_rx.clone())
             .await
@@ -171,6 +175,7 @@ async fn test_integration_rpc_getpeerinfo() {
         true,
         true,
         true,
+        true,
         |event| {
             match event {
                 PeerObserverEvent::RpcExtractor(r) => {
@@ -200,6 +205,7 @@ async fn test_integration_rpc_getmempoolinfo() {
     check(
         true,
         false,
+        true,
         true,
         true,
         true,
@@ -250,6 +256,7 @@ async fn test_integration_rpc_uptime() {
         true,
         true,
         true,
+        true,
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -277,6 +284,7 @@ async fn test_integration_rpc_getnettotals() {
         true,
         true,
         false,
+        true,
         true,
         true,
         true,
@@ -315,6 +323,7 @@ async fn test_integration_rpc_getmemoryinfo() {
         true,
         true,
         true,
+        true,
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -345,6 +354,7 @@ async fn test_integration_rpc_getaddrmaninfo() {
         true,
         true,
         false,
+        true,
         true,
         true,
         true,
@@ -396,6 +406,7 @@ async fn test_integration_rpc_getchaintxstats() {
         false,
         true,
         true,
+        true,
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -433,6 +444,7 @@ async fn test_integration_rpc_getnetworkinfo() {
         true,
         true,
         false,
+        true,
         true,
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
@@ -491,6 +503,7 @@ async fn test_integration_rpc_getblockchaininfo() {
         true,
         true,
         false,
+        true,
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -521,6 +534,38 @@ async fn test_integration_rpc_getblockchaininfo() {
 
                             // In regtest, pruned should be false by default
                             assert!(!info.pruned, "Regtest should not be pruned by default");
+                        }
+                        _ => panic!("unexpected RPC data {:?}", r.rpc_event),
+                    }
+                }
+            }
+            _ => panic!("unexpected event {:?}", event),
+        },
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_rpc_getoprhantxs() {
+    println!("test that we receive getoprhantxs RPC events");
+
+    check(
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        |event| match event {
+            PeerObserverEvent::RpcExtractor(r) => {
+                if let Some(ref e) = r.rpc_event {
+                    match e {
+                        OrphanTxs(result) => {
+                            assert!(result.orphans.is_empty());
                         }
                         _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }

@@ -7,11 +7,15 @@ use std::fmt;
 use std::io;
 use std::time::SystemTimeError;
 
+// When upgrading to a newer corepc_client node version, we need to upgrade this from v29->v30 as well.
+use shared::corepc_client::types::v29::GetOrphanTxsVerboseTwoEntryError;
+
 #[derive(Debug)]
 pub enum FetchOrPublishError {
     Rpc(RPCError),
     SystemTime(SystemTimeError),
     NatsPublish(async_nats::error::Error<async_nats::client::PublishErrorKind>),
+    OrphanTxsModel(GetOrphanTxsVerboseTwoEntryError),
 }
 
 impl fmt::Display for FetchOrPublishError {
@@ -20,6 +24,9 @@ impl fmt::Display for FetchOrPublishError {
             FetchOrPublishError::Rpc(e) => write!(f, "RPC error: {}", e),
             FetchOrPublishError::SystemTime(e) => write!(f, "system time error {}", e),
             FetchOrPublishError::NatsPublish(e) => write!(f, "NATS publish error {}", e),
+            FetchOrPublishError::OrphanTxsModel(e) => {
+                write!(f, "model error for `getorphantxs` RPC: {}", e)
+            }
         }
     }
 }
@@ -30,6 +37,7 @@ impl error::Error for FetchOrPublishError {
             FetchOrPublishError::Rpc(ref e) => Some(e),
             FetchOrPublishError::SystemTime(ref e) => Some(e),
             FetchOrPublishError::NatsPublish(ref e) => Some(e),
+            FetchOrPublishError::OrphanTxsModel(ref e) => Some(e),
         }
     }
 }
@@ -49,6 +57,12 @@ impl From<SystemTimeError> for FetchOrPublishError {
 impl From<async_nats::error::Error<async_nats::client::PublishErrorKind>> for FetchOrPublishError {
     fn from(e: async_nats::error::Error<async_nats::client::PublishErrorKind>) -> Self {
         FetchOrPublishError::NatsPublish(e)
+    }
+}
+
+impl From<GetOrphanTxsVerboseTwoEntryError> for FetchOrPublishError {
+    fn from(e: GetOrphanTxsVerboseTwoEntryError) -> Self {
+        FetchOrPublishError::OrphanTxsModel(e)
     }
 }
 
