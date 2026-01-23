@@ -37,21 +37,25 @@ fn setup() {
     });
 }
 
-#[allow(clippy::too_many_arguments)]
+#[derive(Default)]
+struct EnabledRPCsInTest {
+    getpeerinfo: bool,
+    getmempoolinfo: bool,
+    uptime: bool,
+    getnettotals: bool,
+    getmemoryinfo: bool,
+    getaddrmaninfo: bool,
+    getchaintxstats: bool,
+    getnetworkinfo: bool,
+    getblockchaininfo: bool,
+    getorphantxs: bool,
+}
+
 fn make_test_args(
     nats_port: u16,
     rpc_url: String,
     cookie_file: String,
-    disable_getpeerinfo: bool,
-    disable_getmempoolinfo: bool,
-    disable_uptime: bool,
-    disable_getnettotals: bool,
-    disable_getmemoryinfo: bool,
-    disable_getaddrmaninfo: bool,
-    disable_getchaintxstats: bool,
-    disable_getnetworkinfo: bool,
-    disable_getblockchaininfo: bool,
-    disable_getorphantxs: bool,
+    rpcs: EnabledRPCsInTest,
 ) -> Args {
     Args::new(
         NatsArgs {
@@ -64,16 +68,16 @@ fn make_test_args(
         rpc_url,
         cookie_file,
         QUERY_INTERVAL_SECONDS,
-        disable_getpeerinfo,
-        disable_getmempoolinfo,
-        disable_uptime,
-        disable_getnettotals,
-        disable_getmemoryinfo,
-        disable_getaddrmaninfo,
-        disable_getchaintxstats,
-        disable_getnetworkinfo,
-        disable_getblockchaininfo,
-        disable_getorphantxs,
+        !rpcs.getpeerinfo,
+        !rpcs.getmempoolinfo,
+        !rpcs.uptime,
+        !rpcs.getnettotals,
+        !rpcs.getmemoryinfo,
+        !rpcs.getaddrmaninfo,
+        !rpcs.getchaintxstats,
+        !rpcs.getnetworkinfo,
+        !rpcs.getblockchaininfo,
+        !rpcs.getorphantxs,
     )
 }
 
@@ -105,19 +109,7 @@ fn setup_two_connected_nodes() -> (corepc_node::Node, corepc_node::Node) {
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn check(
-    disable_getpeerinfo: bool,
-    disable_getmempoolinfo: bool,
-    disable_uptime: bool,
-    disable_getnettotals: bool,
-    disable_getmemoryinfo: bool,
-    disable_getaddrmaninfo: bool,
-    disable_getchaintxstats: bool,
-    disable_getnetworkinfo: bool,
-    disable_getblockchaininfo: bool,
-    disable_getorphantxs: bool,
-    check_expected: fn(PeerObserverEvent) -> (),
-) {
+async fn check(rpcs: EnabledRPCsInTest, check_expected: fn(PeerObserverEvent) -> ()) {
     setup();
     let (node1, _node2) = setup_two_connected_nodes();
     let nats_server = NatsServerForTesting::new(&[]).await;
@@ -128,16 +120,7 @@ async fn check(
             nats_server.port,
             node1.rpc_url().replace("http://", ""),
             node1.params.cookie_file.display().to_string(),
-            disable_getpeerinfo,
-            disable_getmempoolinfo,
-            disable_uptime,
-            disable_getnettotals,
-            disable_getmemoryinfo,
-            disable_getaddrmaninfo,
-            disable_getchaintxstats,
-            disable_getnetworkinfo,
-            disable_getblockchaininfo,
-            disable_getorphantxs,
+            rpcs,
         );
         rpc_extractor::run(args, shutdown_rx.clone())
             .await
@@ -166,16 +149,10 @@ async fn test_integration_rpc_getpeerinfo() {
     println!("test that we receive getpeerinfo RPC events");
 
     check(
-        false,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
+        EnabledRPCsInTest {
+            getpeerinfo: true,
+            ..Default::default()
+        },
         |event| {
             match event {
                 PeerObserverEvent::RpcExtractor(r) => {
@@ -203,16 +180,10 @@ async fn test_integration_rpc_getmempoolinfo() {
     println!("test that we receive getmempoolinfo RPC events");
 
     check(
-        true,
-        false,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
+        EnabledRPCsInTest {
+            getmempoolinfo: true,
+            ..Default::default()
+        },
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -247,16 +218,10 @@ async fn test_integration_rpc_uptime() {
     println!("test that we receive uptime RPC events");
 
     check(
-        true,
-        true,
-        false,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
+        EnabledRPCsInTest {
+            uptime: true,
+            ..Default::default()
+        },
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -280,16 +245,10 @@ async fn test_integration_rpc_getnettotals() {
     println!("test that we receive getnettotals RPC events");
 
     check(
-        true,
-        true,
-        true,
-        false,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
+        EnabledRPCsInTest {
+            getnettotals: true,
+            ..Default::default()
+        },
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -314,16 +273,10 @@ async fn test_integration_rpc_getmemoryinfo() {
     println!("test that we receive getmemoryinfo RPC events");
 
     check(
-        true,
-        true,
-        true,
-        true,
-        false,
-        true,
-        true,
-        true,
-        true,
-        true,
+        EnabledRPCsInTest {
+            getmemoryinfo: true,
+            ..Default::default()
+        },
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -348,16 +301,10 @@ async fn test_integration_rpc_getaddrmaninfo() {
     println!("test that we receive getaddrmaninfo RPC events");
 
     check(
-        true,
-        true,
-        true,
-        true,
-        true,
-        false,
-        true,
-        true,
-        true,
-        true,
+        EnabledRPCsInTest {
+            getaddrmaninfo: true,
+            ..Default::default()
+        },
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -397,16 +344,10 @@ async fn test_integration_rpc_getchaintxstats() {
     println!("test that we receive getchaintxstats RPC events");
 
     check(
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        false,
-        true,
-        true,
-        true,
+        EnabledRPCsInTest {
+            getchaintxstats: true,
+            ..Default::default()
+        },
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -436,16 +377,10 @@ async fn test_integration_rpc_getnetworkinfo() {
     println!("test that we receive getnetworkinfo RPC events");
 
     check(
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        false,
-        true,
-        true,
+        EnabledRPCsInTest {
+            getnetworkinfo: true,
+            ..Default::default()
+        },
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -494,16 +429,10 @@ async fn test_integration_rpc_getblockchaininfo() {
     println!("test that we receive getblockchaininfo RPC events");
 
     check(
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        false,
-        true,
+        EnabledRPCsInTest {
+            getblockchaininfo: true,
+            ..Default::default()
+        },
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
@@ -546,20 +475,14 @@ async fn test_integration_rpc_getblockchaininfo() {
 }
 
 #[tokio::test]
-async fn test_integration_rpc_getoprhantxs() {
-    println!("test that we receive getoprhantxs RPC events");
+async fn test_integration_rpc_getorphantxs() {
+    println!("test that we receive getorphantxs RPC events");
 
     check(
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        false,
+        EnabledRPCsInTest {
+            getorphantxs: true,
+            ..Default::default()
+        },
         |event| match event {
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(ref e) = r.rpc_event {
