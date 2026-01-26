@@ -27,6 +27,7 @@ use shared::protobuf::{
 use shared::tokio::sync::watch;
 use shared::util::{self, is_on_linkinglion_banlist};
 use shared::{async_nats, clap};
+use std::cmp::{max, min};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 
@@ -188,6 +189,9 @@ fn handle_rpc_event(e: &rpc::RpcEvent, state_arc: Arc<Mutex<State>>, metrics: me
             let mut bytes = 0;
             let mut vsize = 0;
             let mut weight = 0;
+            let mut from_min = i64::MAX;
+            let mut from_max = 0;
+            let mut from_sum = 0;
 
             let mut orphanage_state_new = HashMap::new();
 
@@ -200,6 +204,10 @@ fn handle_rpc_event(e: &rpc::RpcEvent, state_arc: Arc<Mutex<State>>, metrics: me
                 bytes += o.bytes;
                 vsize += o.vsize;
                 weight += o.weight;
+
+                from_min = min(from_min, o.from.len() as i64);
+                from_max = max(from_max, o.from.len() as i64);
+                from_sum += o.from.len();
 
                 orphanage_state_new.insert(o.wtxid.clone(), o.bytes);
 
@@ -228,6 +236,11 @@ fn handle_rpc_event(e: &rpc::RpcEvent, state_arc: Arc<Mutex<State>>, metrics: me
             metrics.rpc_getorphantxs_bytes.set(bytes as i64);
             metrics.rpc_getorphantxs_vsize.set(vsize as i64);
             metrics.rpc_getorphantxs_weight.set(weight as i64);
+            metrics.rpc_getorphantxs_from_max.set(from_max);
+            metrics.rpc_getorphantxs_from_min.set(from_min);
+            metrics
+                .rpc_getorphantxs_from_mean
+                .set((from_sum as f64) / (orphan_txs.orphans.len() as f64));
 
             metrics.rpc_getorphantxs_added_bytes.inc_by(added_bytes);
             metrics.rpc_getorphantxs_removed_bytes.inc_by(removed_bytes);

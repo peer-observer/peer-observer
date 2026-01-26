@@ -3473,7 +3473,7 @@ async fn test_integration_metrics_rpc_getorphantxs() {
                             vsize: 2,
                             bytes: 4000,
                             weight: 8,
-                            from: vec![2, 3, 4],
+                            from: vec![2],
                             transaction: Transaction {
                                 txid: vec![],
                                 wtxid: vec![],
@@ -3512,6 +3512,9 @@ async fn test_integration_metrics_rpc_getorphantxs() {
             peerobserver_rpc_getorphantxs_removed_count 1
             peerobserver_rpc_getorphantxs_vsize 4
             peerobserver_rpc_getorphantxs_weight 16
+            peerobserver_rpc_getorphantxs_from_min 1
+            peerobserver_rpc_getorphantxs_from_max 2
+            peerobserver_rpc_getorphantxs_from_mean 1.5
         "#,
     )
     .await;

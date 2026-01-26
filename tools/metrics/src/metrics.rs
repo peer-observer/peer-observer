@@ -330,6 +330,9 @@ pub struct Metrics {
     pub rpc_getorphantxs_bytes: IntGauge,
     pub rpc_getorphantxs_vsize: IntGauge,
     pub rpc_getorphantxs_weight: IntGauge,
+    pub rpc_getorphantxs_from_mean: Gauge,
+    pub rpc_getorphantxs_from_min: IntGauge,
+    pub rpc_getorphantxs_from_max: IntGauge,
     pub rpc_getorphantxs_added_count: IntCounter,
     pub rpc_getorphantxs_added_bytes: IntCounter,
     pub rpc_getorphantxs_removed_count: IntCounter,
@@ -530,6 +533,9 @@ impl Metrics {
         ic!(rpc_getorphantxs_added_count, "Transactions added to the orphanage since polling it the last time. Note: This will under-report due to missing transactions only in the orphanage for a short.", registry);
         ic!(rpc_getorphantxs_removed_bytes, "Transaction bytes removed to the orphanage since polling it the last time. Note: This will under-report due to missing transactions only in the orphanage for a short.", registry);
         ic!(rpc_getorphantxs_removed_count, "Transactions removed to the orphanage since polling it the last time. Note: This will under-report due to missing transactions only in the orphanage for a short.", registry);
+        g!(rpc_getorphantxs_from_mean, "The mean of peers the transactions were received from.", registry);
+        ig!(rpc_getorphantxs_from_min, "The min of peers a transaction was received from.", registry);
+        ig!(rpc_getorphantxs_from_max, "The max of peers a transaction was received from.", registry);
 
         // P2P-extractor
         ig!(p2pextractor_ping_duration_nanoseconds, "The time it takes for a connected Bitcoin node to respond to a ping with a pong in nanoseconds.", registry);
@@ -719,6 +725,9 @@ impl Metrics {
             rpc_getorphantxs_bytes,
             rpc_getorphantxs_vsize,
             rpc_getorphantxs_weight,
+            rpc_getorphantxs_from_mean,
+            rpc_getorphantxs_from_min,
+            rpc_getorphantxs_from_max,
             rpc_getorphantxs_added_count,
             rpc_getorphantxs_added_bytes,
             rpc_getorphantxs_removed_count,
