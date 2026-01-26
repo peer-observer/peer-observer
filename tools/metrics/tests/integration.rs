@@ -3424,13 +3424,13 @@ async fn test_integration_metrics_rpc_getorphantxs() {
                     orphans: vec![
                         OrphanTx {
                             txid:
-                                "0000000000000000000123456789abcdef0123456789abcdef0123456789abcd"
+                                "0000000000000000000123456789abcdef0123456789abcdef0123456789aaaa"
                                     .to_string(),
                             wtxid:
-                                "0000000000000000000123456789abcdef0123456789abcdef0123456789abcd"
+                                "0000000000000000000123456789abcdef0123456789abcdef0123456789aaaa"
                                     .to_string(),
                             vsize: 2,
-                            bytes: 4,
+                            bytes: 100,
                             weight: 8,
                             from: vec![2, 3, 4],
                             transaction: Transaction {
@@ -3441,10 +3441,51 @@ async fn test_integration_metrics_rpc_getorphantxs() {
                         },
                         OrphanTx {
                             txid:
-                                "0000000000000000000123456789abcdef0123456789abcdef0123456789abcd"
+                                "0000000000000000000123456789abcdef0123456789abcdef0123456789bbbb"
                                     .to_string(),
                             wtxid:
-                                "0000000000000000000123456789abcdef0123456789abcdef0123456789abcd"
+                                "0000000000000000000123456789abcdef0123456789abcdef0123456789bbbb"
+                                    .to_string(),
+                            vsize: 2,
+                            bytes: 4,
+                            weight: 8,
+                            from: vec![2, 3],
+                            transaction: Transaction {
+                                txid: vec![],
+                                wtxid: vec![],
+                                raw: None,
+                            },
+                        },
+                    ],
+                })),
+            }))
+            .unwrap(),
+            Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+                rpc_event: Some(rpc_extractor::rpc::RpcEvent::OrphanTxs(OrphanTxs {
+                    orphans: vec![
+                        OrphanTx {
+                            txid:
+                                "0000000000000000000123456789abcdef0123456789abcdef0123456789cccc"
+                                    .to_string(),
+                            wtxid:
+                                "0000000000000000000123456789abcdef0123456789abcdef0123456789cccc"
+                                    .to_string(),
+                            vsize: 2,
+                            bytes: 4000,
+                            weight: 8,
+                            from: vec![2, 3, 4],
+                            transaction: Transaction {
+                                txid: vec![],
+                                wtxid: vec![],
+                                raw: None,
+                            },
+                        },
+                        OrphanTx {
+                            txid:
+                                "0000000000000000000123456789abcdef0123456789abcdef0123456789bbbb"
+                                    .to_string(),
+                            wtxid:
+                                "0000000000000000000123456789abcdef0123456789abcdef0123456789bbbb"
                                     .to_string(),
                             vsize: 2,
                             bytes: 4,
@@ -3463,8 +3504,12 @@ async fn test_integration_metrics_rpc_getorphantxs() {
         ],
         Subject::Rpc,
         r#"
-            peerobserver_rpc_getorphantxs_bytes 8
+            peerobserver_rpc_getorphantxs_added_bytes 4104
+            peerobserver_rpc_getorphantxs_added_count 3
+            peerobserver_rpc_getorphantxs_bytes 4004
             peerobserver_rpc_getorphantxs_count 2
+            peerobserver_rpc_getorphantxs_removed_bytes 100
+            peerobserver_rpc_getorphantxs_removed_count 1
             peerobserver_rpc_getorphantxs_vsize 4
             peerobserver_rpc_getorphantxs_weight 16
         "#,

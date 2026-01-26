@@ -27,9 +27,8 @@ use shared::protobuf::{
 use shared::tokio::sync::watch;
 use shared::util::{self, is_on_linkinglion_banlist};
 use shared::{async_nats, clap};
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::{Arc, Mutex};
 
 pub mod error;
 mod metrics;
@@ -64,6 +63,14 @@ impl Args {
     }
 }
 
+/// State that's between processing events.
+/// This allows tracking differences between two statefull events.
+#[derive(Default, Debug)]
+struct State {
+    // Map of wtxid to bytes
+    orphanage: HashMap<String, u64>,
+}
+
 /// runs the metrics tool
 /// Expects that a logger has been initialized already.
 pub async fn run(
@@ -86,11 +93,13 @@ pub async fn run(
         .runtime_start_timestamp
         .set(util::current_timestamp() as i64);
 
+    let state_arc: Arc<Mutex<State>> = Arc::new(Mutex::new(State::default()));
+
     loop {
         shared::tokio::select! {
             maybe_msg = sub.next() => {
                 if let Some(msg) = maybe_msg {
-                    handle_event(msg, metrics.clone())?;
+                    handle_event(msg, state_arc.clone(), metrics.clone())?;
                 } else {
                     break; // subscription ended
                 }
@@ -118,6 +127,7 @@ pub async fn run(
 
 fn handle_event(
     msg: async_nats::Message,
+    state_arc: Arc<Mutex<State>>,
     metrics: metrics::Metrics,
 ) -> Result<(), error::RuntimeError> {
     let unwrapped = Event::decode(msg.payload)?;
@@ -142,7 +152,7 @@ fn handle_event(
             },
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(e) = r.rpc_event {
-                    handle_rpc_event(&e, metrics);
+                    handle_rpc_event(&e, state_arc, metrics);
                 }
             }
             PeerObserverEvent::P2pExtractor(p) => {
@@ -159,7 +169,7 @@ fn handle_event(
     Ok(())
 }
 
-fn handle_rpc_event(e: &rpc::RpcEvent, metrics: metrics::Metrics) {
+fn handle_rpc_event(e: &rpc::RpcEvent, state_arc: Arc<Mutex<State>>, metrics: metrics::Metrics) {
     match e {
         rpc::RpcEvent::Uptime(uptime_seconds) => {
             metrics.rpc_uptime.set(*uptime_seconds as i64);
@@ -173,15 +183,44 @@ fn handle_rpc_event(e: &rpc::RpcEvent, metrics: metrics::Metrics) {
                 .set(net_totals.total_bytes_sent as i64);
         }
         rpc::RpcEvent::OrphanTxs(orphan_txs) => {
+            let mut state = state_arc.lock().expect("should be able to lock state_arc");
+
             let mut bytes = 0;
             let mut vsize = 0;
             let mut weight = 0;
+
+            let mut orphanage_state_new = HashMap::new();
+
+            let mut added_count = 0;
+            let mut added_bytes = 0;
+            let mut removed_count = 0;
+            let mut removed_bytes = 0;
 
             for o in orphan_txs.orphans.iter() {
                 bytes += o.bytes;
                 vsize += o.vsize;
                 weight += o.weight;
+
+                orphanage_state_new.insert(o.wtxid.clone(), o.bytes);
+
+                // Tx that are not in the previous getorphantxs reponse and are now
+                // are ones that were added.
+                if !state.orphanage.contains_key(&o.wtxid.clone()) {
+                    added_count += 1;
+                    added_bytes += o.bytes;
+                }
             }
+
+            for (wtxid, bytes) in state.orphanage.iter() {
+                // Tx that were in the previous getorphantxs response and are not now
+                // are ones that are were removed.
+                if !orphanage_state_new.contains_key(&wtxid.clone()) {
+                    removed_count += 1;
+                    removed_bytes += bytes;
+                }
+            }
+
+            state.orphanage = orphanage_state_new;
 
             metrics
                 .rpc_getorphantxs_count
@@ -189,6 +228,11 @@ fn handle_rpc_event(e: &rpc::RpcEvent, metrics: metrics::Metrics) {
             metrics.rpc_getorphantxs_bytes.set(bytes as i64);
             metrics.rpc_getorphantxs_vsize.set(vsize as i64);
             metrics.rpc_getorphantxs_weight.set(weight as i64);
+
+            metrics.rpc_getorphantxs_added_bytes.inc_by(added_bytes);
+            metrics.rpc_getorphantxs_removed_bytes.inc_by(removed_bytes);
+            metrics.rpc_getorphantxs_added_count.inc_by(added_count);
+            metrics.rpc_getorphantxs_removed_count.inc_by(removed_count);
         }
         rpc::RpcEvent::MemoryInfo(info) => {
             metrics.rpc_memoryinfo_locked_used.set(info.used as i64);

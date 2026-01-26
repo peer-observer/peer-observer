@@ -330,6 +330,10 @@ pub struct Metrics {
     pub rpc_getorphantxs_bytes: IntGauge,
     pub rpc_getorphantxs_vsize: IntGauge,
     pub rpc_getorphantxs_weight: IntGauge,
+    pub rpc_getorphantxs_added_count: IntCounter,
+    pub rpc_getorphantxs_added_bytes: IntCounter,
+    pub rpc_getorphantxs_removed_count: IntCounter,
+    pub rpc_getorphantxs_removed_bytes: IntCounter,
 
     // P2P-extractor
     pub p2pextractor_ping_duration_nanoseconds: IntGauge,
@@ -522,6 +526,10 @@ impl Metrics {
         ig!(rpc_getorphantxs_bytes, "The serialized transaction size in bytes in the orphanage.", registry);
         ig!(rpc_getorphantxs_vsize, "The virtual transaction size in bytes in the orphanage.", registry);
         ig!(rpc_getorphantxs_weight, "The virtual transaction size in bytes in the orphanage.", registry);
+        ic!(rpc_getorphantxs_added_bytes, "Transaction bytes added to the orphanage since polling it the last time. Note: This will under-report due to missing transactions only in the orphanage for a short.", registry);
+        ic!(rpc_getorphantxs_added_count, "Transactions added to the orphanage since polling it the last time. Note: This will under-report due to missing transactions only in the orphanage for a short.", registry);
+        ic!(rpc_getorphantxs_removed_bytes, "Transaction bytes removed to the orphanage since polling it the last time. Note: This will under-report due to missing transactions only in the orphanage for a short.", registry);
+        ic!(rpc_getorphantxs_removed_count, "Transactions removed to the orphanage since polling it the last time. Note: This will under-report due to missing transactions only in the orphanage for a short.", registry);
 
         // P2P-extractor
         ig!(p2pextractor_ping_duration_nanoseconds, "The time it takes for a connected Bitcoin node to respond to a ping with a pong in nanoseconds.", registry);
@@ -711,6 +719,10 @@ impl Metrics {
             rpc_getorphantxs_bytes,
             rpc_getorphantxs_vsize,
             rpc_getorphantxs_weight,
+            rpc_getorphantxs_added_count,
+            rpc_getorphantxs_added_bytes,
+            rpc_getorphantxs_removed_count,
+            rpc_getorphantxs_removed_bytes,
 
             // p2p-extractor
             p2pextractor_ping_duration_nanoseconds,
