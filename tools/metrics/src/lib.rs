@@ -172,7 +172,24 @@ fn handle_rpc_event(e: &rpc::RpcEvent, metrics: metrics::Metrics) {
                 .rpc_nettotals_total_bytes_sent
                 .set(net_totals.total_bytes_sent as i64);
         }
-        rpc::RpcEvent::OrphanTxs(_orphans) => (),
+        rpc::RpcEvent::OrphanTxs(orphan_txs) => {
+            let mut bytes = 0;
+            let mut vsize = 0;
+            let mut weight = 0;
+
+            for o in orphan_txs.orphans.iter() {
+                bytes += o.bytes;
+                vsize += o.vsize;
+                weight += o.weight;
+            }
+
+            metrics
+                .rpc_getorphantxs_count
+                .set(orphan_txs.orphans.len() as i64);
+            metrics.rpc_getorphantxs_bytes.set(bytes as i64);
+            metrics.rpc_getorphantxs_vsize.set(vsize as i64);
+            metrics.rpc_getorphantxs_weight.set(weight as i64);
+        }
         rpc::RpcEvent::MemoryInfo(info) => {
             metrics.rpc_memoryinfo_locked_used.set(info.used as i64);
             metrics.rpc_memoryinfo_locked_free.set(info.free as i64);

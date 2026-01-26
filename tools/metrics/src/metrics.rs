@@ -325,6 +325,12 @@ pub struct Metrics {
     pub rpc_blockchaininfo_prune_target_size: IntGauge,
     pub rpc_blockchaininfo_warnings: IntGauge,
 
+    // getorphantxs
+    pub rpc_getorphantxs_count: IntGauge,
+    pub rpc_getorphantxs_bytes: IntGauge,
+    pub rpc_getorphantxs_vsize: IntGauge,
+    pub rpc_getorphantxs_weight: IntGauge,
+
     // P2P-extractor
     pub p2pextractor_ping_duration_nanoseconds: IntGauge,
     pub p2pextractor_addrv2relay_addresses: IntCounterVec,
@@ -512,6 +518,11 @@ impl Metrics {
         ig!(rpc_blockchaininfo_prune_target_size, "The target size used by pruning (set to 0 if automatic pruning is disabled).", registry);
         ig!(rpc_blockchaininfo_warnings, "Number of warnings from getblockchaininfo.", registry);
 
+        ig!(rpc_getorphantxs_count, "Number of transactions in the orphanage.", registry);
+        ig!(rpc_getorphantxs_bytes, "The serialized transaction size in bytes in the orphanage.", registry);
+        ig!(rpc_getorphantxs_vsize, "The virtual transaction size in bytes in the orphanage.", registry);
+        ig!(rpc_getorphantxs_weight, "The virtual transaction size in bytes in the orphanage.", registry);
+
         // P2P-extractor
         ig!(p2pextractor_ping_duration_nanoseconds, "The time it takes for a connected Bitcoin node to respond to a ping with a pong in nanoseconds.", registry);
         icv!(p2pextractor_addrv2relay_addresses, "The total number of addresses relayed to the p2p-extractor by the node, per network", ["network"], registry);
@@ -694,6 +705,12 @@ impl Metrics {
             rpc_blockchaininfo_prune_height,
             rpc_blockchaininfo_prune_target_size,
             rpc_blockchaininfo_warnings,
+
+            // getorphantxs
+            rpc_getorphantxs_count,
+            rpc_getorphantxs_bytes,
+            rpc_getorphantxs_vsize,
+            rpc_getorphantxs_weight,
 
             // p2p-extractor
             p2pextractor_ping_duration_nanoseconds,

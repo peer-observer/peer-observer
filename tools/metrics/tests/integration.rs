@@ -9,7 +9,7 @@ use shared::{
     nats_util::NatsArgs,
     prost::Message,
     protobuf::{
-        bitcoin_primitives::{self, inventory_item::Item, Address, InventoryItem},
+        bitcoin_primitives::{self, inventory_item::Item, Address, InventoryItem, Transaction},
         ebpf_extractor::{
             addrman::{self, InsertNew, InsertTried},
             connection::{
@@ -30,8 +30,8 @@ use shared::{
         p2p_extractor,
         rpc_extractor::{
             self, AddrManInfo, AddrManInfoNetwork, BlockchainInfo, ChainTxStats, MemoryInfo,
-            MempoolInfo, NetTotals, NetworkInfo, NetworkInfoNetwork, PeerInfo, PeerInfos,
-            UploadTarget,
+            MempoolInfo, NetTotals, NetworkInfo, NetworkInfoNetwork, OrphanTx, OrphanTxs, PeerInfo,
+            PeerInfos, UploadTarget,
         },
     },
     rand::{self, Rng},
@@ -3408,6 +3408,65 @@ async fn test_integration_metrics_rpc_getblockchaininfo() {
         peerobserver_rpc_blockchaininfo_prune_height 850000
         peerobserver_rpc_blockchaininfo_prune_target_size 1000
         peerobserver_rpc_blockchaininfo_warnings 2
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_rpc_getorphantxs() {
+    println!("test that the getorphantxs metrics work");
+
+    publish_and_check(
+        &[
+            Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+                rpc_event: Some(rpc_extractor::rpc::RpcEvent::OrphanTxs(OrphanTxs {
+                    orphans: vec![
+                        OrphanTx {
+                            txid:
+                                "0000000000000000000123456789abcdef0123456789abcdef0123456789abcd"
+                                    .to_string(),
+                            wtxid:
+                                "0000000000000000000123456789abcdef0123456789abcdef0123456789abcd"
+                                    .to_string(),
+                            vsize: 2,
+                            bytes: 4,
+                            weight: 8,
+                            from: vec![2, 3, 4],
+                            transaction: Transaction {
+                                txid: vec![],
+                                wtxid: vec![],
+                                raw: None,
+                            },
+                        },
+                        OrphanTx {
+                            txid:
+                                "0000000000000000000123456789abcdef0123456789abcdef0123456789abcd"
+                                    .to_string(),
+                            wtxid:
+                                "0000000000000000000123456789abcdef0123456789abcdef0123456789abcd"
+                                    .to_string(),
+                            vsize: 2,
+                            bytes: 4,
+                            weight: 8,
+                            from: vec![2, 3],
+                            transaction: Transaction {
+                                txid: vec![],
+                                wtxid: vec![],
+                                raw: None,
+                            },
+                        },
+                    ],
+                })),
+            }))
+            .unwrap(),
+        ],
+        Subject::Rpc,
+        r#"
+            peerobserver_rpc_getorphantxs_bytes 8
+            peerobserver_rpc_getorphantxs_count 2
+            peerobserver_rpc_getorphantxs_vsize 4
+            peerobserver_rpc_getorphantxs_weight 16
         "#,
     )
     .await;
