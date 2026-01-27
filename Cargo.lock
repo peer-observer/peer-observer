@@ -94,9 +94,9 @@ checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 
 [[package]]
 name = "async-nats"
-version = "0.44.1"
+version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58f1564b878e64608a4fc8ab74c0b499b566400b9ab6e5097f21ba1945dab5bb"
+checksum = "df5af9ebfb0a14481d3eaf6101e6391261e4f30d25b26a7635ade8a39482ded0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -111,7 +111,7 @@ dependencies = [
  "regex",
  "ring",
  "rustls-native-certs",
- "rustls-pemfile",
+ "rustls-pki-types",
  "rustls-webpki 0.102.8",
  "serde",
  "serde_json",
