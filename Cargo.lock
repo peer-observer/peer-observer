@@ -244,8 +244,8 @@ checksum = "b4682ae6287fcf752ecaabbfcc7b6f9b72aa33933dc23a554d853aea8eea8635"
 
 [[package]]
 name = "bitreq"
-version = "0.2.0"
-source = "git+https://github.com/0xb10c/corepc?rev=022a23a81e859a5e6f0d8b3774e02f68b2f8a44b#022a23a81e859a5e6f0d8b3774e02f68b2f8a44b"
+version = "0.3.1"
+source = "git+https://github.com/0xb10c/corepc?rev=b20f2c34f2f8baafa41a7d809349913d2ef95750#b20f2c34f2f8baafa41a7d809349913d2ef95750"
 dependencies = [
  "rustls 0.21.12",
  "rustls-webpki 0.101.7",
@@ -461,7 +461,7 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 [[package]]
 name = "corepc-client"
 version = "0.11.0"
-source = "git+https://github.com/0xb10c/corepc?rev=022a23a81e859a5e6f0d8b3774e02f68b2f8a44b#022a23a81e859a5e6f0d8b3774e02f68b2f8a44b"
+source = "git+https://github.com/0xb10c/corepc?rev=b20f2c34f2f8baafa41a7d809349913d2ef95750#b20f2c34f2f8baafa41a7d809349913d2ef95750"
 dependencies = [
  "bitcoin",
  "corepc-types",
@@ -474,7 +474,7 @@ dependencies = [
 [[package]]
 name = "corepc-node"
 version = "0.11.0"
-source = "git+https://github.com/0xb10c/corepc?rev=022a23a81e859a5e6f0d8b3774e02f68b2f8a44b#022a23a81e859a5e6f0d8b3774e02f68b2f8a44b"
+source = "git+https://github.com/0xb10c/corepc?rev=b20f2c34f2f8baafa41a7d809349913d2ef95750#b20f2c34f2f8baafa41a7d809349913d2ef95750"
 dependencies = [
  "anyhow",
  "bitcoin_hashes",
@@ -492,7 +492,7 @@ dependencies = [
 [[package]]
 name = "corepc-types"
 version = "0.11.0"
-source = "git+https://github.com/0xb10c/corepc?rev=022a23a81e859a5e6f0d8b3774e02f68b2f8a44b#022a23a81e859a5e6f0d8b3774e02f68b2f8a44b"
+source = "git+https://github.com/0xb10c/corepc?rev=b20f2c34f2f8baafa41a7d809349913d2ef95750#b20f2c34f2f8baafa41a7d809349913d2ef95750"
 dependencies = [
  "bitcoin",
  "serde",
@@ -1158,8 +1158,8 @@ dependencies = [
 
 [[package]]
 name = "jsonrpc"
-version = "0.18.0"
-source = "git+https://github.com/0xb10c/corepc?rev=022a23a81e859a5e6f0d8b3774e02f68b2f8a44b#022a23a81e859a5e6f0d8b3774e02f68b2f8a44b"
+version = "0.19.0"
+source = "git+https://github.com/0xb10c/corepc?rev=b20f2c34f2f8baafa41a7d809349913d2ef95750#b20f2c34f2f8baafa41a7d809349913d2ef95750"
 dependencies = [
  "base64 0.22.1",
  "bitreq",
@@ -1821,7 +1821,6 @@ version = "0.21.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f56a14d1f48b391359b22f731fd4bd7e43c97f3c50eee276f3aa09c94784d3e"
 dependencies = [
- "log",
  "ring",
  "rustls-webpki 0.101.7",
  "sct",

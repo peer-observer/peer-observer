@@ -24,10 +24,9 @@ regex = "1.12"
 
 # Use custom commit to support:
 # - cpu_load and inv_to_send in getpeerinfo
-# - addconnection
-# - getorphantxs
-corepc-node = { git = "https://github.com/0xb10c/corepc", rev = "022a23a81e859a5e6f0d8b3774e02f68b2f8a44b", features = ["download", "29_0"] }
-corepc-client = { git = "https://github.com/0xb10c/corepc", rev = "022a23a81e859a5e6f0d8b3774e02f68b2f8a44b", features = ["client-sync"]}
+# (branch 2026-01-v0.11-peer-observer-custom)
+corepc-node = { git = "https://github.com/0xb10c/corepc", rev = "b20f2c34f2f8baafa41a7d809349913d2ef95750", features = ["download", "29_0"] }
+corepc-client = { git = "https://github.com/0xb10c/corepc", rev = "b20f2c34f2f8baafa41a7d809349913d2ef95750", features = ["client-sync"]}
 
 [build-dependencies]
 prost-build = "0.14"
