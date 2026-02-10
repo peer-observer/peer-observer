@@ -11,7 +11,7 @@ shared = { path = "../../shared" }
 libbpf-rs = "0.25"
 
 [build-dependencies]
-libbpf-cargo = "0.25"
+libbpf-cargo = "0.26"
 
 [features]
 # Treat warnings as a build error.
