@@ -25,7 +25,7 @@ use shared::{
     tokio::{
         io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader},
         net::{TcpListener, TcpStream, tcp::WriteHalf},
-        sync::watch,
+        sync::{oneshot, watch},
         time::{self, Duration},
     },
     util,
@@ -157,7 +157,11 @@ impl Args {
     }
 }
 
-pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(), RuntimeError> {
+pub async fn run(
+    args: Args,
+    mut shutdown_rx: watch::Receiver<bool>,
+    bound_addr_tx: Option<oneshot::Sender<SocketAddr>>,
+) -> Result<(), RuntimeError> {
     log::info!("Using network magic for: {}", args.p2p_network);
     let network: BitcoinNetwork = args.p2p_network.clone().into();
     log::info!("Ping measurements enabled: {}", !args.disable_ping);
@@ -181,6 +185,11 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
     let listener = TcpListener::bind(args.p2p_address.clone()).await?;
     let local_addr = listener.local_addr()?;
     log::info!("P2P-extractor listening on {}", local_addr);
+
+    // Notify the caller of the actual bound address (used in tests with port 0).
+    if let Some(tx) = bound_addr_tx {
+        let _ = tx.send(local_addr);
+    }
 
     loop {
         shared::tokio::select! {

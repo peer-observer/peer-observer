@@ -16,26 +16,21 @@ use shared::{
             AddressAnnouncement, FeefilterAnnouncement, InventoryAnnouncement, PingDuration,
         },
     },
-    rand::{self, Rng},
     simple_logger::SimpleLogger,
     testing::nats_server::NatsServerForTesting,
     tokio::{
         self, select,
-        sync::watch,
+        sync::{oneshot, watch},
         time::{Duration, sleep},
     },
     util,
 };
 use std::str::FromStr;
-use std::sync::{
-    Once, OnceLock,
-    atomic::{AtomicU16, Ordering},
-};
+use std::sync::Once;
 
 use p2p_extractor::{Args, Network};
 
 static INIT: Once = Once::new();
-static NEXT_P2PEXTRACTOR_PORT: OnceLock<AtomicU16> = OnceLock::new();
 
 // 1 second ping interval for fast tests
 const PING_INTERVAL_SECONDS: u64 = 1;
@@ -43,26 +38,13 @@ const PING_INTERVAL_SECONDS: u64 = 1;
 // 10 second check() timeout.
 const TEST_TIMEOUT_SECONDS: u64 = 10;
 
-fn setup() -> u16 {
+fn setup() {
     INIT.call_once(|| {
         SimpleLogger::new()
             .with_level(log::LevelFilter::Trace)
             .init()
             .unwrap();
-
-        let mut rng = rand::rng();
-
-        // choose start ports from the ephemeral port range
-        let p2p_extractor_start = rng.random_range(49152..65500);
-        NEXT_P2PEXTRACTOR_PORT
-            .set(AtomicU16::new(p2p_extractor_start))
-            .unwrap();
     });
-
-    NEXT_P2PEXTRACTOR_PORT
-        .get()
-        .unwrap()
-        .fetch_add(1, Ordering::SeqCst)
 }
 
 fn make_test_args(
@@ -132,26 +114,36 @@ async fn check(
     test_setup: fn(&corepc_node::Node),
     check_expected: fn(PeerObserverEvent) -> bool,
 ) {
-    let p2p_extractor_port = setup();
+    setup();
     let nats_server = NatsServerForTesting::new(&[]).await;
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
+    let (addr_tx, addr_rx) = oneshot::channel();
 
-    let p2p_extractor_handle = tokio::spawn(async move {
+    let mut p2p_extractor_handle = tokio::spawn(async move {
         let args = make_test_args(
             nats_server.port,
-            format!("127.0.0.1:{}", p2p_extractor_port),
+            "127.0.0.1:0".to_string(),
             disable_ping,
             disable_addrv2,
             disable_invs,
             disable_feefilter,
         );
-        p2p_extractor::run(args, shutdown_rx.clone())
+        p2p_extractor::run(args, shutdown_rx.clone(), Some(addr_tx))
             .await
             .expect("p2p-extractor failed");
     });
 
-    // allow the p2p-extractor to start
-    sleep(Duration::from_secs(2)).await;
+    // Wait for the p2p-extractor to bind and report its actual port.
+    // We race against the task handle so that if the extractor fails
+    // before binding (e.g. NATS connection error), we surface the
+    // real error instead of a generic "channel closed" panic.
+    let p2p_extractor_port = select! {
+        addr = addr_rx => addr.expect("p2p-extractor should send bound address").port(),
+        result = &mut p2p_extractor_handle => {
+            result.unwrap();  // propagates the task's panic (with its message)
+            unreachable!("p2p-extractor task exited before sending bound address");
+        }
+    };
 
     // only start the node after the P2P extractor to make sure the
     // extractor is ready to accept connections
