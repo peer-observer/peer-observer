@@ -112,7 +112,7 @@ async fn check(
     disable_invs: bool,
     disable_feefilter: bool,
     test_setup: fn(&corepc_node::Node),
-    check_expected: fn(PeerObserverEvent) -> bool,
+    mut check_expected: impl FnMut(PeerObserverEvent) -> bool,
 ) {
     setup();
     let nats_server = NatsServerForTesting::new(&[]).await;
@@ -325,31 +325,42 @@ async fn test_integration_p2pextractor_inv_annoucement() {
                     .unwrap();
             }
         },
-        |event| {
-            match event {
-                PeerObserverEvent::P2pExtractor(p) => {
-                    if let Some(ref e) = p.p2p_event {
-                        match e {
-                            InventoryAnnouncement(i) => {
-                                log::info!("{}", i);
-                                // we expect an inv with NUM_TX from the node, however the node
-                                // will also send invs for blocks. So ignore all other invs and
-                                // only pass the test on the inv with the size of NUM_TX
-                                if i.inventory.len() == NUM_TX {
-                                    assert!(i.inventory.iter().all(|inventory| matches!(
-                                        inventory.item.clone().unwrap(),
-                                        Item::Wtx(_)
-                                    )));
-                                    return true;
+        {
+            let mut wtx_count = 0usize;
+            move |event| {
+                match event {
+                    PeerObserverEvent::P2pExtractor(p) => {
+                        if let Some(ref e) = p.p2p_event {
+                            match e {
+                                InventoryAnnouncement(i) => {
+                                    log::info!("{}", i);
+                                    // Count Wtx items in this inv message. Bitcoin Core's
+                                    // trickle relay may split transaction invs across
+                                    // multiple messages, so we accumulate across all of
+                                    // them rather than expecting a single batch.
+                                    let new_wtx = i
+                                        .inventory
+                                        .iter()
+                                        .filter(|inv| {
+                                            matches!(inv.item.clone().unwrap(), Item::Wtx(_))
+                                        })
+                                        .count();
+                                    if new_wtx > 0 {
+                                        wtx_count += new_wtx;
+                                        log::info!("accumulated {wtx_count}/{NUM_TX} Wtx items");
+                                        if wtx_count == NUM_TX {
+                                            return true;
+                                        }
+                                    }
                                 }
+                                _ => log::info!("unhandled P2P extractor event {:?}", p.p2p_event),
                             }
-                            _ => log::info!("unhandled P2P extractor event {:?}", p.p2p_event),
                         }
                     }
+                    _ => panic!("unexpected event {:?}", event),
                 }
-                _ => panic!("unexpected event {:?}", event),
+                false
             }
-            false
         },
     )
     .await;
