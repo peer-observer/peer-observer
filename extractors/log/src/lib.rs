@@ -13,7 +13,7 @@ use shared::tokio::{
     self,
     fs::{File, OpenOptions},
     io::{AsyncBufReadExt, BufReader},
-    sync::watch,
+    sync::{oneshot, watch},
     time,
 };
 
@@ -58,7 +58,11 @@ impl Args {
     }
 }
 
-pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(), RuntimeError> {
+pub async fn run(
+    args: Args,
+    mut shutdown_rx: watch::Receiver<bool>,
+    ready_tx: Option<oneshot::Sender<()>>,
+) -> Result<(), RuntimeError> {
     let nats_client = nats_util::prepare_connection(&args.nats)?
         .connect(&args.nats.address)
         .await?;
@@ -69,6 +73,10 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
     log::info!("Opened bitcoind log pipe at {}", &args.bitcoind_pipe);
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
+
+    if let Some(tx) = ready_tx {
+        let _ = tx.send(());
+    }
 
     log::info!(
         "Started reading lines from bitcoind log pipe at {}",

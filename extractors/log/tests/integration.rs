@@ -18,7 +18,7 @@ use shared::{
     testing::nats_server::NatsServerForTesting,
     tokio::{
         self, select,
-        sync::watch,
+        sync::{oneshot, watch},
         time::{Duration, sleep},
     },
 };
@@ -125,15 +125,19 @@ fn setup_two_connected_nodes(node1_args: Vec<&str>) -> (corepc_node::Node, corep
 /// 2. Starts a throwaway NATS server and launches the log extractor, which
 ///    reads node1's `debug.log` via a named pipe (`mkfifo` + `tail -f`) and
 ///    publishes protobuf-encoded events to NATS.
-/// 3. Calls `test_setup` against node1's RPC client so the test can trigger
+/// 3. Waits for the log extractor to signal readiness (pipe opened, reading
+///    loop entered) before proceeding—this prevents the startup race where
+///    `test_setup` could trigger log output before the `tail -f` bridge is
+///    live.
+/// 4. Calls `test_setup` against node1's RPC client so the test can trigger
 ///    the specific node behaviour it wants to observe (mine a block, submit a
 ///    transaction, etc.).
-/// 4. Subscribes to all NATS subjects and polls incoming messages, decoding
+/// 5. Subscribes to all NATS subjects and polls incoming messages, decoding
 ///    each into a `PeerObserverEvent` and passing it to `check_event`. The
 ///    loop breaks as soon as `check_event` returns `true`, signalling that the
 ///    expected event was received.
-/// 5. Panics if the expected event is not seen within `TEST_TIMEOUT_SECONDS`.
-/// 6. Sends a shutdown signal to the log extractor task and awaits its clean
+/// 6. Panics if the expected event is not seen within `TEST_TIMEOUT_SECONDS`.
+/// 7. Sends a shutdown signal to the log extractor task and awaits its clean
 ///    exit before returning.
 async fn check(
     args: Vec<&str>,
@@ -143,22 +147,36 @@ async fn check(
     setup();
     let (node1, _node2) = setup_two_connected_nodes(args);
     let nats_server = NatsServerForTesting::new(&[]).await;
+    let nats_port = nats_server.port;
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
+    let (ready_tx, ready_rx) = oneshot::channel();
 
     let node1_workdir = node1.workdir().to_str().unwrap().to_string();
-    let log_extractor_handle = tokio::spawn(async move {
+    let mut log_extractor_handle = tokio::spawn(async move {
         let log_path = format!("{}/regtest/debug.log", node1_workdir);
         let pipe_path = format!("{}/bitcoind_pipe", node1_workdir);
         spawn_pipe(log_path, pipe_path.clone());
 
         let args = make_test_args(nats_server.port, pipe_path.to_string());
 
-        log_extractor::run(args, shutdown_rx.clone())
+        log_extractor::run(args, shutdown_rx.clone(), Some(ready_tx))
             .await
             .expect("log extractor failed");
     });
 
-    let nc = async_nats::connect(format!("127.0.0.1:{}", nats_server.port))
+    // Wait for the log extractor to open the pipe and enter its read loop.
+    // We race against the task handle so that if the extractor fails before
+    // signalling readiness, we surface the real error instead of a generic
+    // "channel closed" panic.
+    select! {
+        res = ready_rx => { res.expect("log extractor should signal readiness"); }
+        result = &mut log_extractor_handle => {
+            result.unwrap(); // propagates the task's panic (with its message)
+            unreachable!("log extractor task exited before signalling readiness");
+        }
+    }
+
+    let nc = async_nats::connect(format!("127.0.0.1:{}", nats_port))
         .await
         .unwrap();
     let mut sub = nc.subscribe("*").await.unwrap();

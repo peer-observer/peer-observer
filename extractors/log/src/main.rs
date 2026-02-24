@@ -12,7 +12,7 @@ async fn main() {
     }
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
-    let log_handle = tokio::spawn(log_extractor::run(args, shutdown_rx));
+    let log_handle = tokio::spawn(log_extractor::run(args, shutdown_rx, None));
 
     tokio::select! {
         _ = signal::ctrl_c() => {
