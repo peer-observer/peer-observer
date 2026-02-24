@@ -24,31 +24,31 @@ selected P2P measurements as events into a NATS pub-sub queue.
 
 The `log-extractor` publishes them parsed `debug.log` log messages as events to NATS.
 
-The tools are written in Python or Rust (or any other language that supports NATS
-and protobuf). They subscribe to the NATS server. For example, the `logger` tool
-simply prints out all messages that it receives, the `metrics` tool produces prometheus
-metrics, and the `addr-connectivity` tool tests received addresses if they are reachable.
-Python tools can make use of the `protobuf/python-types` to deserialize the Protobuf
-messages while Rust tools can use the types from the `shared` Rust module.
+The tools are written in Rust (or any other language that supports NATS 
+and protobuf). They subscribe to the NATS server. For example, the `logger` tool 
+simply prints out all messages that it receives, the `metrics` tool produces prometheus 
+metrics, and the `connectivity-check` tool tests received addresses if they are reachable. 
+Rust tools can use the types from the `shared` Rust module to deserialize the Protobuf 
+messages. For other languages, types can be generated directly from the Protobuf definitions.
 
 ```
                                            protobuf
                                            messages
-┌─────────────┐    ┌───────────────┐     ┌─────────┐      ┌────────────────────┐
-│             ├────► ebpf-extractor├─────┤         │      │                    │
-│             │    └───────────────┘     │         │      │ Tools              │
-│             │                          │         │      │                    │
-│             │    ┌───────────────┐     │         ├──────┼──►logger           │
-│             ├────► rpc-extractor │─────┤         │      │                    │
-│   Bitcoin   │    └───────────────┘     │ NATS.io ├──────┼──►metrics          │
-│             │                          │         │      │                    │
-│     Node    │    ┌───────────────┐     │ PUB-SUB ├──────┼──►websocket        │
-│             ├────► p2p-extractor │─────┤         │      │                    │
-│             │    └───────────────┘     │         ├──────┼──►addr-connectivty │
-│             │                          │         │      │                    │
-│             │    ┌───────────────┐     │         │      │   ...              │
-│             ├────► log-extractor │─────┤         │      │                    │
-└─────────────┘    └───────────────┘     └─────────┘      └────────────────────┘
+┌─────────────┐    ┌───────────────┐     ┌─────────┐      ┌──────────────────────┐
+│             ├────► ebpf-extractor├─────┤         │      │                      │
+│             │    └───────────────┘     │         │      │ Tools                │
+│             │                          │         │      │                      │
+│             │    ┌───────────────┐     │         ├──────┼──►logger             │
+│             ├────► rpc-extractor │─────┤         │      │                      │
+│   Bitcoin   │    └───────────────┘     │ NATS.io ├──────┼──►metrics            │
+│             │                          │         │      │                      │
+│     Node    │    ┌───────────────┐     │ PUB-SUB ├──────┼──►websocket          │
+│             ├────► p2p-extractor │─────┤         │      │                      │
+│             │    └───────────────┘     │         ├──────┼──►connectivity-check │
+│             │                          │         │      │                      │
+│             │    ┌───────────────┐     │         │      │   ...                │
+│             ├────► log-extractor │─────┤         │      │                      │
+└─────────────┘    └───────────────┘     └─────────┘      └──────────────────────┘
 
  (edit on asciiflow.com)
 ```
@@ -81,7 +81,6 @@ tool uses the events differently:
 | metrics               | produces prometheus metrics from events.                                         | `rust`       | [tools/metrics/](tools/metrics)         |
 | websocket             | publishes events into a websocket as JSON                                        | `rust`       | [tools/websocket/](tools/websocket)     |
 | connectivity-check    | connects to IP addresses received via `addr(v2)` messages and records the result | `rust`       | [tools/connectivity-check/](tools/connectivity-check)    |
-| record-getblocktxn-py | records sent and received `getblocktxn` messages                                 | `python`     | [tools/record-getblocktxn-py/](tools/record-getblocktxn-py) |
 
 ## Real-world usage
 
