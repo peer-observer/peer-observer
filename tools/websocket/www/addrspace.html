@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="css/bootstrap.min.css" rel="stylesheet">
+  <title>Address Space</title>
+</head>
+
+<body class="container-fluid">
+  <header class="py-3">
+    <h1 class="h3 mb-1">Address Space</h1>
+    <p class="text-muted mb-2">
+      Shows the top IP ranges and ASNs by peer count in addrman and active connections.
+      Useful for detecting Eclipse/Sybil attacks.
+    </p>
+    <div id="websocket-picker" class="mb-3"></div>
+    <div class="row">
+      <div class="col-auto">
+        <span class="badge bg-secondary" id="last-update"></span>
+      </div>
+    </div>
+  </header>
+
+  <h2 class="h4 mt-4">Active Connections</h2>
+  <hr>
+  <div class="row mb-3">
+    <div class="col-md-3">
+      <h3>by Network</h3>
+      <div id="connections-summary"></div>
+    </div>
+    <div class="col-md-3">
+      <h3>IPv4 /24</h3>
+      <div id="ipv4-24-table"></div>
+    </div>
+    <div class="col-md-3">
+      <h3>IPv6 /32</h3>
+      <div id="ipv6-32-table"></div>
+    </div>
+    <div class="col-md-3">
+      <h3>ASN</h3>
+      <div id="asn-connections-table"></div>
+    </div>
+  </div>
+
+  <h2 class="h4 mt-4">Addrman</h2>
+  <hr>
+
+  <ul class="nav nav-tabs mb-3" id="addrman-tabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="addrman-new-tab" data-bs-toggle="tab" data-bs-target="#addrman-new-content" type="button" role="tab">New</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="addrman-tried-tab" data-bs-toggle="tab" data-bs-target="#addrman-tried-content" type="button" role="tab">Tried</button>
+    </li>
+  </ul>
+
+  <div class="tab-content" id="addrman-tab-content">
+    <div class="tab-pane fade show active" id="addrman-new-content" role="tabpanel">
+      <div class="row mb-3">
+        <div class="col-md-3">
+          <h3>by Network</h3>
+          <div id="addrman-new-summary"></div>
+        </div>
+        <div class="col-md-3">
+          <h3>IPv4 /24</h3>
+          <div id="addrman-new-ipv4-24-table"></div>
+        </div>
+        <div class="col-md-3">
+          <h3>IPv6 /32</h3>
+          <div id="addrman-new-ipv6-32-table"></div>
+        </div>
+        <div class="col-md-3">
+          <h3>ASN</h3>
+          <div id="addrman-new-asn-table"></div>
+        </div>
+      </div>
+    </div>
+    <div class="tab-pane fade" id="addrman-tried-content" role="tabpanel">
+      <div class="row mb-3">
+        <div class="col-md-3">
+          <h3>by Network</h3>
+          <div id="addrman-tried-summary"></div>
+        </div>
+        <div class="col-md-3">
+          <h3>IPv4 /24</h3>
+          <div id="addrman-tried-ipv4-24-table"></div>
+        </div>
+        <div class="col-md-3">
+          <h3>IPv6 /32</h3>
+          <div id="addrman-tried-ipv6-32-table"></div>
+        </div>
+        <div class="col-md-3">
+          <h3>ASN</h3>
+          <div id="addrman-tried-asn-table"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+
+<script src="js/bootstrap.min.js" integrity="sha384-0pUGZvbkm6XF6gxjEnlmuGrJXVbNuzT9qBBavbLwCsOGabYfZo0T0to5eqruptLy"
+  crossorigin="anonymous"></script>
+<script src="js/websocket-picker.js"></script>
+<script src="js/lib.js"></script>
+
+<script>
+  const MAX_ITEMS = 15;
+  let addrmanData = { new: {}, tried: {} };
+  let peersData = [];
+  let ipv4_24_counts = {};
+  let ipv6_32_counts = {};
+  let asn_connection_counts = {};
+
+  // Addrman New counters
+  let addrman_new_network_counts = { IPv4: 0, IPv6: 0, Tor: 0, I2P: 0, CJDNS: 0, Unknown: 0 };
+  let addrman_new_ipv4_24_counts = {};
+  let addrman_new_ipv6_32_counts = {};
+  let addrman_new_asn_counts = {};
+
+  // Addrman Tried counters
+  let addrman_tried_network_counts = { IPv4: 0, IPv6: 0, Tor: 0, I2P: 0, CJDNS: 0, Unknown: 0 };
+  let addrman_tried_ipv4_24_counts = {};
+  let addrman_tried_ipv6_32_counts = {};
+  let addrman_tried_asn_counts = {};
+
+  let connection_network_counts = { IPv4: 0, IPv6: 0, Tor: 0, I2P: 0, CJDNS: 0, Unknown: 0 };
+
+  function networkTypeToString(networkType) {
+    switch (networkType) {
+      case NETWORK_IPV4: return "IPv4";
+      case NETWORK_IPV6: return "IPv6";
+      case NETWORK_ONION: return "Tor";
+      case NETWORK_I2P: return "I2P";
+      case NETWORK_CJDNS: return "CJDNS";
+      default: return "Unknown";
+    }
+  }
+
+  function getIpv4Subnet24(ip) {
+    const parts = ip.split(".");
+    if (parts.length !== 4) return null;
+    return parts.slice(0, 3).join(".") + ".0/24";
+  }
+
+  function getIpv6Subnet32(ip) {
+    ip = ip.replace("[", "").replace("]", "");
+    const parts = ip.split(":");
+    if (parts.length < 4) return null;
+    return parts.slice(0, 2).join(":") + "::/32";
+  }
+
+  function updateConnectionCounters() {
+    ipv4_24_counts = {};
+    ipv6_32_counts = {};
+    asn_connection_counts = {};
+    connection_network_counts = { IPv4: 0, IPv6: 0, Tor: 0, I2P: 0, CJDNS: 0, Unknown: 0 };
+
+    for (const peer of peersData) {
+      const ip = removePortFromIPPort(peer.address);
+      const network = networkFromAddress(ip);
+      const asn = peer.mapped_as;
+      const networkName = networkTypeToString(network);
+
+      if (networkName in connection_network_counts) {
+        connection_network_counts[networkName]++;
+      } else {
+        connection_network_counts["Unknown"]++;
+      }
+
+      if (network === NETWORK_IPV4) {
+        const subnet = getIpv4Subnet24(ip);
+        if (subnet) {
+          ipv4_24_counts[subnet] = (ipv4_24_counts[subnet] || 0) + 1;
+        }
+      } else if (network === NETWORK_IPV6) {
+        const subnet = getIpv6Subnet32(ip);
+        if (subnet) {
+          ipv6_32_counts[subnet] = (ipv6_32_counts[subnet] || 0) + 1;
+        }
+      }
+
+      if (asn && asn > 0) {
+        asn_connection_counts[asn] = (asn_connection_counts[asn] || 0) + 1;
+      }
+    }
+
+    renderSummary("connections-summary", connection_network_counts);
+    renderTable("ipv4-24-table", ipv4_24_counts, "Subnet", "Peers");
+    renderTable("ipv6-32-table", ipv6_32_counts, "Subnet", "Peers");
+    renderTable("asn-connections-table", asn_connection_counts, "ASN", "Connections");
+
+    document.getElementById("last-update").textContent = "Updated: " + new Date().toLocaleTimeString();
+  }
+
+  function updateAddrmanCounters() {
+    // Reset Addrman New counters
+    addrman_new_network_counts = { IPv4: 0, IPv6: 0, Tor: 0, I2P: 0, CJDNS: 0, Unknown: 0 };
+    addrman_new_ipv4_24_counts = {};
+    addrman_new_ipv6_32_counts = {};
+    addrman_new_asn_counts = {};
+
+    // Reset Addrman Tried counters
+    addrman_tried_network_counts = { IPv4: 0, IPv6: 0, Tor: 0, I2P: 0, CJDNS: 0, Unknown: 0 };
+    addrman_tried_ipv4_24_counts = {};
+    addrman_tried_ipv6_32_counts = {};
+    addrman_tried_asn_counts = {};
+
+    for (const bucketType of ['new', 'tried']) {
+      const buckets = addrmanData[bucketType];
+      if (!buckets) continue;
+
+      for (const [bucketId, bucket] of Object.entries(buckets)) {
+        for (const [entryId, entry] of Object.entries(bucket.entries || {})) {
+          const ip = removePortFromIPPort(entry.address);
+          const network = networkFromAddress(ip);
+          const asn = entry.mapped_as;
+          const networkName = networkTypeToString(network);
+
+          const networkCounts = bucketType === 'new' ? addrman_new_network_counts : addrman_tried_network_counts;
+          if (networkName in networkCounts) {
+            networkCounts[networkName]++;
+          } else {
+            networkCounts["Unknown"]++;
+          }
+
+          if (network === NETWORK_IPV4) {
+            const subnet = getIpv4Subnet24(ip);
+            if (subnet) {
+              if (bucketType === 'new') {
+                addrman_new_ipv4_24_counts[subnet] = (addrman_new_ipv4_24_counts[subnet] || 0) + 1;
+              } else {
+                addrman_tried_ipv4_24_counts[subnet] = (addrman_tried_ipv4_24_counts[subnet] || 0) + 1;
+              }
+            }
+          } else if (network === NETWORK_IPV6) {
+            const subnet = getIpv6Subnet32(ip);
+            if (subnet) {
+              if (bucketType === 'new') {
+                addrman_new_ipv6_32_counts[subnet] = (addrman_new_ipv6_32_counts[subnet] || 0) + 1;
+              } else {
+                addrman_tried_ipv6_32_counts[subnet] = (addrman_tried_ipv6_32_counts[subnet] || 0) + 1;
+              }
+            }
+          }
+
+          if (asn && asn > 0) {
+            if (bucketType === 'new') {
+              addrman_new_asn_counts[asn] = (addrman_new_asn_counts[asn] || 0) + 1;
+            } else {
+              addrman_tried_asn_counts[asn] = (addrman_tried_asn_counts[asn] || 0) + 1;
+            }
+          }
+        }
+      }
+    }
+
+    // Render Addrman New
+    renderSummary("addrman-new-summary", addrman_new_network_counts);
+    renderTable("addrman-new-ipv4-24-table", addrman_new_ipv4_24_counts, "Subnet", "Addresses");
+    renderTable("addrman-new-ipv6-32-table", addrman_new_ipv6_32_counts, "Subnet", "Addresses");
+    renderTable("addrman-new-asn-table", addrman_new_asn_counts, "ASN", "Addresses");
+
+    // Render Addrman Tried
+    renderSummary("addrman-tried-summary", addrman_tried_network_counts);
+    renderTable("addrman-tried-ipv4-24-table", addrman_tried_ipv4_24_counts, "Subnet", "Addresses");
+    renderTable("addrman-tried-ipv6-32-table", addrman_tried_ipv6_32_counts, "Subnet", "Addresses");
+    renderTable("addrman-tried-asn-table", addrman_tried_asn_counts, "ASN", "Addresses");
+  }
+
+  function renderTable(elementId, counts, keyLabel, valueLabel) {
+    const container = document.getElementById(elementId);
+    
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, MAX_ITEMS);
+
+    if (sorted.length === 0) {
+      container.innerHTML = '<p class="text-muted">No data available</p>';
+      return;
+    }
+
+    let html = '<table class="table table-sm table-striped"><thead><tr>';
+    html += `<th>${keyLabel}</th>`;
+    html += `<th>${valueLabel}</th>`;
+    html += '</tr></thead><tbody>';
+
+    const maxCount = sorted[0][1];
+
+    for (const [key, count] of sorted) {
+      const percentage = (count / maxCount * 100).toFixed(1);
+      const isAsn = /^\d+$/.test(key);
+      const keyCell = isAsn
+        ? `<a href="https://ipinfo.io/AS${key}" target="_blank" rel="noopener noreferrer" class="text-decoration-none"><code>${key}</code></a>`
+        : `<code>${key}</code>`;
+      html += '<tr>';
+      html += `<td>${keyCell}</td>`;
+      html += `<td><span style="min-width: 5ch; display: inline-block; text-align: center;">${count}</span></td>`;
+      html += '</tr>';
+    }
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  }
+
+  function renderSummary(elementId, counts) {
+    const container = document.getElementById(elementId);
+    const order = ["IPv4", "IPv6", "Tor", "I2P", "CJDNS", "Unknown"];
+    
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    if (total === 0) {
+      container.innerHTML = '<p class="text-muted">No data available</p>';
+      return;
+    }
+
+    let html = '<table class="table table-sm"><tbody>';
+    for (const network of order) {
+      const count = counts[network] || 0;
+      if (count > 0) {
+        const percentage = (count / total * 100).toFixed(1);
+        html += '<tr>';
+        html += `<td>${network}</td>`;
+        html += `<td><span style="min-width: 5ch; display: inline-block; text-align: right;">${count}</span> <span style="display:inline-block; width:60px; height:6px; background:#e9ecef; border-radius:3px; vertical-align:middle; margin-left:4px;"><span style="display:block; width:${percentage}%; height:100%; background:#0d6efd; border-radius:3px;"></span></span></td>`;
+        html += `<td class="text-muted">${percentage}%</td>`;
+        html += '</tr>';
+      }
+    }
+    html += '<tr><td><strong>Total</strong></td><td><span style="min-width: 5ch; display: inline-block; text-align: right;"><strong>' + total + '</strong></span></td><td></td></tr>';
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  }
+
+  function handle_rpc_extractor_peerinfo(infos) {
+    peersData = infos || [];
+    updateConnectionCounters();
+  }
+
+  function handle_rpc_extractor_addrman(addrman) {
+    addrmanData = addrman || { new: {}, tried: {} };
+    updateAddrmanCounters();
+  }
+
+  function showSpinners() {
+    const spinnerHtml = '<div class="text-muted"><span class="spinner-border spinner-border-sm" role="status"></span> Waiting for data...</div>';
+    document.getElementById("connections-summary").innerHTML = spinnerHtml;
+    document.getElementById("ipv4-24-table").innerHTML = spinnerHtml;
+    document.getElementById("ipv6-32-table").innerHTML = spinnerHtml;
+    document.getElementById("asn-connections-table").innerHTML = spinnerHtml;
+
+    // Addrman New
+    document.getElementById("addrman-new-summary").innerHTML = spinnerHtml;
+    document.getElementById("addrman-new-ipv4-24-table").innerHTML = spinnerHtml;
+    document.getElementById("addrman-new-ipv6-32-table").innerHTML = spinnerHtml;
+    document.getElementById("addrman-new-asn-table").innerHTML = spinnerHtml;
+
+    // Addrman Tried
+    document.getElementById("addrman-tried-summary").innerHTML = spinnerHtml;
+    document.getElementById("addrman-tried-ipv4-24-table").innerHTML = spinnerHtml;
+    document.getElementById("addrman-tried-ipv6-32-table").innerHTML = spinnerHtml;
+    document.getElementById("addrman-tried-asn-table").innerHTML = spinnerHtml;
+  }
+
+  function handleWebsocketReset() {
+    addrmanData = { new: {}, tried: {} };
+    peersData = [];
+    ipv4_24_counts = {};
+    ipv6_32_counts = {};
+    asn_connection_counts = {};
+    addrman_new_network_counts = { IPv4: 0, IPv6: 0, Tor: 0, I2P: 0, CJDNS: 0, Unknown: 0 };
+    addrman_new_ipv4_24_counts = {};
+    addrman_new_ipv6_32_counts = {};
+    addrman_new_asn_counts = {};
+    addrman_tried_network_counts = { IPv4: 0, IPv6: 0, Tor: 0, I2P: 0, CJDNS: 0, Unknown: 0 };
+    addrman_tried_ipv4_24_counts = {};
+    addrman_tried_ipv6_32_counts = {};
+    addrman_tried_asn_counts = {};
+    connection_network_counts = { IPv4: 0, IPv6: 0, Tor: 0, I2P: 0, CJDNS: 0, Unknown: 0 };
+    showSpinners();
+  }
+
+  window.onload = (event) => {
+    runUnitTests();
+    updateSubscriptions({ rpc: true })
+    initWebsocketPicker("websockets.json", "websocket-picker", processWebsocketMessage, handleWebsocketReset);
+
+    // Manual tab switching for Addrman New/Tried
+    document.querySelectorAll('#addrman-tabs button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#addrman-tabs button').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('#addrman-tab-content .tab-pane').forEach(p => p.classList.remove('show','active'));
+        btn.classList.add('active');
+        document.querySelector(btn.dataset.bsTarget).classList.add('show','active');
+      });
+    });
+  };
+</script>
+
+</html>

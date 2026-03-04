@@ -181,6 +181,7 @@ function handle_rpc_extractor_peerinfo(e) {};
 function handle_rpc_extractor_mempoolinfo(e) {};
 function handle_rpc_extractor_nettotals(e) {};
 function handle_rpc_extractor_uptime(e) {};
+function handle_rpc_extractor_addrman(e) {};
 // p2p-extractor
 function handle_p2p_extractor_pingduration(e) {};
 function handle_p2p_extractor_inventoryannouncement(e) {};
@@ -216,6 +217,8 @@ function processWebsocketMessage(e) {
       handle_rpc_extractor_nettotals(rpc_event.NetTotals)
     } else if (rpc_event.hasOwnProperty("Uptime")) {
       handle_rpc_extractor_uptime(rpc_event.Uptime)
+    } else if (rpc_event.hasOwnProperty("Addrman")) {
+      handle_rpc_extractor_addrman(rpc_event.Addrman)
     } else {
       console.warn("Unhandled RPC-extractor event", rpc_event);
     }
