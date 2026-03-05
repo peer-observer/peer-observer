@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 shared = { path = "../../shared" }
 
-libbpf-rs = "0.25"
+libbpf-rs = "0.26"
 
 [build-dependencies]
 libbpf-cargo = "0.26"

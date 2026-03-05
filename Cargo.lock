@@ -624,7 +624,7 @@ name = "ebpf-extractor"
 version = "0.1.0"
 dependencies = [
  "libbpf-cargo",
- "libbpf-rs 0.25.0",
+ "libbpf-rs",
  "shared",
 ]
 
@@ -1095,7 +1095,7 @@ dependencies = [
  "anyhow",
  "cargo_metadata",
  "clap",
- "libbpf-rs 0.26.1",
+ "libbpf-rs",
  "libbpf-sys",
  "memmap2",
  "serde",
@@ -1103,18 +1103,6 @@ dependencies = [
  "tempfile",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "libbpf-rs"
-version = "0.25.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e23d252d93e246c8787198369f06806c99c5077b5295be29505295f4e5426dc4"
-dependencies = [
- "bitflags 2.4.0",
- "libbpf-sys",
- "libc",
- "vsprintf",
 ]
 
 [[package]]
