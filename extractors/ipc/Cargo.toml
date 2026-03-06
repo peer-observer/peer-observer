@@ -1,0 +1,17 @@
+[package]
+name = "ipc-extractor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+shared = { path = "../../shared" }
+
+[features]
+# Treat warnings as a build error.
+strict = []
+
+# Run integration tests needing a NATS server.
+nats_integration_tests = []
+
+# Run integration tests needing a Bitcoin Core node.
+node_integration_tests = []
