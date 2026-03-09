@@ -20,7 +20,7 @@ use shared::protobuf::{
         validation::validation_event,
     },
     event::{event::PeerObserverEvent, Event},
-    log_extractor::{log, Log, LogDebugCategory},
+    log_extractor::{log, Log, LogDebugCategory, LogLevel},
     p2p_extractor::p2p,
     rpc_extractor::{rpc, Addrman, AddrmanBucket},
 };
@@ -1443,7 +1443,21 @@ fn handle_log_event(log: &Log, metrics: metrics::Metrics) {
         .as_str_name()
         .to_lowercase();
 
-    metrics.log_events.with_label_values(&[&category]).inc();
+    let level = LogLevel::try_from(log.log_level)
+        .unwrap_or(LogLevel::Info)
+        .as_str_name()
+        .to_lowercase();
+
+    metrics
+        .log_events
+        .with_label_values(&[&category, &level])
+        .inc();
+
+    let bytes = log.log_line_bytes;
+    metrics
+        .log_bytes
+        .with_label_values(&[&category, &level])
+        .inc_by(bytes);
 
     let Some(e) = &log.log_event else { return };
     match e {
