@@ -691,3 +691,30 @@ async fn test_integration_logextractor_testsshouldtimeout() {
     )
     .await;
 }
+
+#[tokio::test]
+async fn test_integration_logextractor_log_bytes() {
+    println!("test that we can parse log line bytes");
+
+    check(
+        vec!["-debug=net"],
+        |_node1| {},
+        |event| match event {
+            PeerObserverEvent::LogExtractor(r) => {
+                if let Some(log::LogEvent::UnknownLogMessage(_)) = r.log_event
+                    && r.category == LogDebugCategory::Net as i32
+                {
+                    assert!(r.log_line_bytes > 0, "log_line_bytes should be > 0");
+                    info!(
+                        "Received log event with log_line_bytes={}",
+                        r.log_line_bytes
+                    );
+                    return true;
+                }
+                false
+            }
+            _ => panic!("unexpected event {:?}", event),
+        },
+    )
+    .await;
+}

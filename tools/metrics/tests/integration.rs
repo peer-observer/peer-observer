@@ -3730,3 +3730,44 @@ async fn test_integration_metrics_rpc_getorphantxs() {
     )
     .await;
 }
+
+#[tokio::test]
+async fn test_integration_metrics_log_line_bytes() {
+    println!("test that log-extractor log line bytes metric work");
+
+    publish_and_check(
+        &[
+            Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
+                category: LogDebugCategory::Unknown.into(),
+                log_timestamp: 1234,
+                threadname: String::new(),
+                log_level: log_extractor::LogLevel::Info.into(),
+                log_line_bytes: 4,
+                log_event: Some(log_extractor::log::LogEvent::UnknownLogMessage(
+                    log_extractor::UnknownLogMessage {
+                        raw_message: "test".to_string(),
+                    },
+                )),
+            }))
+            .unwrap(),
+            Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
+                category: LogDebugCategory::Unknown.into(),
+                log_timestamp: 1234,
+                threadname: String::new(),
+                log_level: log_extractor::LogLevel::Info.into(),
+                log_line_bytes: 8,
+                log_event: Some(log_extractor::log::LogEvent::UnknownLogMessage(
+                    log_extractor::UnknownLogMessage {
+                        raw_message: "testtest".to_string(),
+                    },
+                )),
+            }))
+            .unwrap(),
+        ],
+        Subject::LogExtractor,
+        r#"
+        peerobserver_log_bytes{category="unknown",level="info"} 12
+        "#,
+    )
+    .await;
+}
