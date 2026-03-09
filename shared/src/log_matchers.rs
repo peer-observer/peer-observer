@@ -1,6 +1,6 @@
 use crate::protobuf::log_extractor::log::LogEvent;
 use crate::protobuf::log_extractor::{
-    BlockCheckedLog, BlockConnectedLog, Log, LogDebugCategory, UnknownLogMessage,
+    BlockCheckedLog, BlockConnectedLog, Log, LogDebugCategory, LogLevel, UnknownLogMessage,
 };
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -140,6 +140,7 @@ pub fn parse_log_event(line: &str) -> Log {
         timestamp_micro,
         category,
         threadname,
+        level,
         message,
     } = parse_common_log_data(line);
 
@@ -151,6 +152,8 @@ pub fn parse_log_event(line: &str) -> Log {
                 log_timestamp: timestamp_micro,
                 category: category.into(),
                 threadname,
+                log_level: level.into(),
+                log_line_bytes: line.len() as u64,
                 log_event: Some(event),
             };
         }
@@ -161,6 +164,8 @@ pub fn parse_log_event(line: &str) -> Log {
         log_timestamp: timestamp_micro,
         category: category.into(),
         threadname,
+        log_level: level.into(),
+        log_line_bytes: line.len() as u64,
         log_event: UnknownLogMessage::parse_event(&message),
     }
 }
@@ -169,6 +174,7 @@ struct CommonLogData {
     pub timestamp_micro: u64,
     pub category: LogDebugCategory,
     pub threadname: String,
+    pub level: LogLevel,
     pub message: String,
 }
 
@@ -183,11 +189,21 @@ fn is_standalone_log_level(s: &str) -> bool {
     matches!(s.to_lowercase().as_str(), "error" | "warning")
 }
 
+fn parse_category(item: &str) -> Option<LogDebugCategory> {
+    let base = item.strip_suffix(":trace").unwrap_or(item);
+    LogDebugCategory::from_str_name(&base.to_uppercase())
+}
+
+fn is_trace(item: &str) -> bool {
+    item.ends_with(":trace")
+}
+
 fn parse_common_log_data(line: &str) -> CommonLogData {
     let caps = LOG_LINE_REGEX.captures(line);
     if caps.is_none() {
         return CommonLogData {
             timestamp_micro: 0,
+            level: LogLevel::Info,
             category: LogDebugCategory::Unknown,
             threadname: String::new(),
             message: String::new(),
@@ -212,18 +228,41 @@ fn parse_common_log_data(line: &str) -> CommonLogData {
         .map(|cap| cap[1].to_string())
         .collect();
 
+    let mut level = metadata_items
+        .iter()
+        .find_map(|item| match item.to_lowercase().as_str() {
+            "error" => Some(LogLevel::Error),
+            "warning" => Some(LogLevel::Warning),
+            _ => None,
+        })
+        .unwrap_or(LogLevel::Info);
+
     // Filter out log level markers. Bitcoin Core uses LogError(), LogWarning(),
     // etc. which emit [error], [warning], etc. These are log LEVELS, not
     // threadnames or debug categories.
     metadata_items.retain(|item| !is_standalone_log_level(item));
 
-    // if exists, category is usually the last metadata item
     let mut category = LogDebugCategory::Unknown;
+    let mut is_trace_log = false;
+
+    // If exists, category is usually the last metadata item.
+    // LogDebug(cat, ..) emits [category], LogTrace(cat, ..) emits [category:trace].
     if let Some(last_item) = metadata_items.last() {
-        if let Some(cat) = LogDebugCategory::from_str_name(&last_item.to_uppercase()) {
-            category = cat;
+        if let Some(parsed_category) = parse_category(last_item) {
+            category = parsed_category;
+            is_trace_log = is_trace(last_item);
             metadata_items.pop();
         }
+    }
+
+    // LogInfo() emits no category bracket, so a category bracket implies
+    // LogDebug or LogTrace. Don't override error/warning.
+    if level == LogLevel::Info {
+        level = match (category, is_trace_log) {
+            (_, true) => LogLevel::Trace,
+            (LogDebugCategory::Unknown, _) => LogLevel::Info,
+            _ => LogLevel::Debug,
+        };
     }
 
     // if exists, threadname is usually the first metadata item
@@ -233,6 +272,7 @@ fn parse_common_log_data(line: &str) -> CommonLogData {
         timestamp_micro,
         category,
         threadname,
+        level,
         message: caps["message"].to_string(),
     }
 }
@@ -532,5 +572,90 @@ mod tests {
         assert!(!is_standalone_log_level("validation"));
         assert!(!is_standalone_log_level("msghand"));
         assert!(!is_standalone_log_level("dnsseed"));
+    }
+
+    #[test]
+    fn test_parse_category() {
+        assert_eq!(parse_category("net"), Some(LogDebugCategory::Net));
+        assert_eq!(parse_category("net:trace"), Some(LogDebugCategory::Net));
+        assert_eq!(
+            parse_category("validation"),
+            Some(LogDebugCategory::Validation)
+        );
+        assert_eq!(
+            parse_category("validation:trace"),
+            Some(LogDebugCategory::Validation)
+        );
+        assert_eq!(parse_category("This-Is-N0t-a-valid-category"), None);
+    }
+
+    #[test]
+    fn test_is_trace() {
+        assert!(is_trace("net:trace"));
+        assert!(is_trace("validation:trace"));
+        assert!(!is_trace("net"));
+        assert!(!is_trace("validation"));
+        assert!(!is_trace("error"));
+    }
+
+    #[test]
+    fn test_log_level_info_no_category() {
+        // LogInfo() emits no bracket and no category — should be INFO
+        let log = "2025-10-02T02:31:14Z Verification progress: 50%";
+        let log_event = parse_log_event(log);
+        assert_eq!(log_event.log_level, LogLevel::Info as i32);
+    }
+
+    #[test]
+    fn test_log_level_debug_with_category() {
+        // LogDebug(BCLog::NET, ..) emits [net] — should be DEBUG
+        let log = "2025-10-02T02:31:21Z [net] Flushed 0 addresses to peers.dat  2ms";
+        let log_event = parse_log_event(log);
+        assert_eq!(log_event.log_level, LogLevel::Debug as i32);
+        assert_eq!(log_event.category, LogDebugCategory::Net as i32);
+    }
+
+    #[test]
+    fn test_log_level_debug_with_threadname_and_category() {
+        // [threadname] [category] — category implies DEBUG
+        let log = "2026-03-08T00:00:21.563170Z [msghand] [net] sending inv (289 bytes) peer=26148";
+        let log_event = parse_log_event(log);
+        assert_eq!(log_event.log_level, LogLevel::Debug as i32);
+        assert_eq!(log_event.category, LogDebugCategory::Net as i32);
+        assert_eq!(log_event.threadname, "msghand");
+    }
+
+    #[test]
+    fn test_log_level_trace_with_category() {
+        // LogTrace(BCLog::NET, ..) emits [net:trace] — should be TRACE
+        let log = "2026-03-08T00:00:21.563170Z [net:trace] sending inv (289 bytes) peer=26148";
+        let log_event = parse_log_event(log);
+        assert_eq!(log_event.log_level, LogLevel::Trace as i32);
+        assert_eq!(log_event.category, LogDebugCategory::Net as i32);
+    }
+
+    #[test]
+    fn test_log_level_trace_with_threadname_and_category() {
+        // [threadname] [category:trace] — should be TRACE
+        let log =
+            "2026-03-08T00:00:21.563170Z [msghand] [net:trace] sending inv (289 bytes) peer=26148";
+        let log_event = parse_log_event(log);
+        assert_eq!(log_event.log_level, LogLevel::Trace as i32);
+        assert_eq!(log_event.category, LogDebugCategory::Net as i32);
+        assert_eq!(log_event.threadname, "msghand");
+    }
+
+    #[test]
+    fn test_log_level_error() {
+        let log = "2025-10-02T02:31:14Z [error] some error";
+        let log_event = parse_log_event(log);
+        assert_eq!(log_event.log_level, LogLevel::Error as i32);
+    }
+
+    #[test]
+    fn test_log_level_warning() {
+        let log = "2025-10-02T02:31:14Z [warning] some warning";
+        let log_event = parse_log_event(log);
+        assert_eq!(log_event.log_level, LogLevel::Warning as i32);
     }
 }
