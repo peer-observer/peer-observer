@@ -2,10 +2,20 @@ syntax = "proto2";
 
 package log_extractor;
 
+enum LogLevel {
+    INFO = 0;      // no bracket
+    WARNING = 1;   // [warning] bracket
+    ERROR = 2;     // [error] bracket
+    DEBUG = 3;     // [category] bracket
+    TRACE = 4;     // [category:trace] bracket
+}
+
 message log {
   required uint64 log_timestamp = 1; // unix timestamp in microseconds
   required LogDebugCategory category = 2;
   required string threadname = 3;
+  required LogLevel log_level = 7;
+  required uint64 log_line_bytes = 8;
   oneof log_event {
     UnknownLogMessage unknown_log_message = 4;
     BlockConnectedLog block_connected_log = 5;

@@ -534,6 +534,8 @@ async fn test_integration_logger_logextractor_unknown_log() {
                 category: LogDebugCategory::Unknown.into(),
                 log_timestamp: 1234,
                 threadname: String::new(),
+                log_level: log_extractor::LogLevel::Info.into(),
+                log_line_bytes: 4,
                 log_event: Some(log_extractor::log::LogEvent::UnknownLogMessage(
                     log_extractor::UnknownLogMessage {
                         raw_message: "test".to_string(),
@@ -560,6 +562,8 @@ async fn test_integration_logger_logextractor_blockconnected_log() {
                 category: LogDebugCategory::Validation.into(),
                 log_timestamp: 345,
                 threadname: String::new(),
+                log_level: log_extractor::LogLevel::Info.into(),
+                log_line_bytes: 100,
                 log_event: Some(log_extractor::log::LogEvent::BlockConnectedLog(
                     log_extractor::BlockConnectedLog {
                         block_height: 1337,
