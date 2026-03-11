@@ -1,0 +1,14 @@
+syntax = "proto2";
+
+package ipc_extractor;
+
+message ipc {
+  oneof ipc_event {
+    BlockTip block_tip = 1;
+  }
+}
+
+message BlockTip {
+  required int32 height = 1;
+  required bytes hash   = 2;
+}

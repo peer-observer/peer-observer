@@ -1,8 +1,12 @@
 use shared::clap::{self, Parser};
-use shared::log;
+use shared::nats_subjects::Subject;
 use shared::nats_util::{self, NatsArgs};
+use shared::prost::Message;
+use shared::protobuf::event::{Event, event::PeerObserverEvent};
+use shared::protobuf::ipc_extractor::{self, BlockTip};
 use shared::tokio::sync::watch;
 use shared::tokio::time::{self, Duration};
+use shared::{async_nats, log};
 
 mod error;
 
@@ -50,9 +54,9 @@ impl Args {
 }
 
 pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(), RuntimeError> {
-    // let nats_client = nats_util::prepare_connection(&args.nats)?
-    //     .connect(&args.nats.address)
-    //     .await?;
+    let nats_client = nats_util::prepare_connection(&args.nats)?
+        .connect(&args.nats.address)
+        .await?;
     log::info!("Connected to NATS server at {}", &args.nats.address);
 
     let duration_sec = Duration::from_secs(args.query_interval);
@@ -65,8 +69,8 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
     loop {
         shared::tokio::select! {
             _ = interval.tick() => {
-                if let Err(e) = foo(/* &nats_client */).await {
-                        log::error!("Could not fetch and publish 'foo': {}", e)
+                if let Err(e) = get_height(&nats_client).await {
+                        log::error!("Could not fetch and publish 'getHeight': {}", e)
                     }
             }
             res = shutdown_rx.changed() => {
@@ -89,6 +93,19 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
     Ok(())
 }
 
-async fn foo() -> Result<(), RuntimeError> {
+async fn get_height(nats_client: &async_nats::Client) -> Result<(), RuntimeError> {
+    let height = 1; // TODO: replace with IPC fetcher
+    let hash = vec![0x00, 0x00, 0x00, 0x00];
+
+    let proto = Event::new(PeerObserverEvent::IpcExtractor(ipc_extractor::Ipc {
+        ipc_event: Some(ipc_extractor::ipc::IpcEvent::BlockTip(BlockTip {
+            height,
+            hash,
+        })),
+    }))?;
+
+    nats_client
+        .publish(Subject::Ipc.to_string(), proto.encode_to_vec().into())
+        .await?;
     Ok(())
 }
