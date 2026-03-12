@@ -39,9 +39,9 @@ function networkFromAddress(address) {
     return NETWORK_ONION;
   } else if (address.includes(".i2p")) {
     return NETWORK_I2P;
-  } else if (address.includes("[fc")) {
+  } else if (address.match(/^\[?fc/)) {
     return NETWORK_CJDNS;
-  } else if (address.includes("[")) {
+  } else if (address.match(/:[0-9a-fA-F]{0,4}:/)) {
     return NETWORK_IPV6;
   } else if (address.split(".").length == 4) {
     return NETWORK_IPV4;
