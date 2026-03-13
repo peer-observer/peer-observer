@@ -1,11 +1,15 @@
 use ebpf_extractor::Args;
 use shared::log;
 use shared::tokio::{self, signal, sync::watch};
-use shared::clap::Parser;
+use shared::{clap::Parser, simple_logger};
 
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
+
+    if let Err(e) = simple_logger::init_with_level(args.log_level) {
+        eprintln!("ebpf extractor error: {}", e);
+    }
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 

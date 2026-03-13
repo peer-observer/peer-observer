@@ -17,7 +17,6 @@ use shared::protobuf::ebpf_extractor::{
 };
 use shared::protobuf::event::event::PeerObserverEvent;
 use shared::protobuf::event::Event;
-use shared::simple_logger;
 use shared::tokio::sync::watch;
 use shared::{async_nats, clap, nats_util, tokio};
 use std::fs::File;
@@ -199,11 +198,7 @@ pub struct Args {
 }
 
 impl Args {
-    pub fn new(
-        nats: nats_util::NatsArgs,
-        bitcoind_path: String,
-        bitcoind_pid: i32,
-    ) -> Args {
+    pub fn new(nats: nats_util::NatsArgs, bitcoind_path: String, bitcoind_pid: i32) -> Args {
         Self {
             nats,
             bitcoind_path,
@@ -271,8 +266,6 @@ fn bitcoind_pid(args: &Args) -> Result<i32, RuntimeError> {
 }
 
 pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<(), RuntimeError> {
-    simple_logger::init_with_level(args.log_level)?;
-
     let pid = bitcoind_pid(&args)?;
 
     let mut skel_builder = tracing::TracingSkelBuilder::default();
