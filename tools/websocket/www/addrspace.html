@@ -5,48 +5,49 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="css/bootstrap.min.css" rel="stylesheet">
-  <title>Address Space</title>
+  <title>IP-ranges and ASNs</title>
 </head>
 
 <body class="container-fluid">
   <header class="py-3">
-    <h1 class="h3 mb-1">Address Space</h1>
+    <h1 class="h3 mb-1">IP-ranges and ASNs</h1>
     <p class="text-muted mb-2">
-      Shows the top IP ranges and ASNs by peer count in addrman and active connections.
-      Useful for detecting Eclipse/Sybil attacks.
+      Shows the top IP-ranges and ASNs for currently connected peers and in addrman tables.
     </p>
     <div id="websocket-picker" class="mb-3"></div>
-    <div class="row">
-      <div class="col-auto">
-        <span class="badge bg-secondary" id="last-update"></span>
-      </div>
-    </div>
   </header>
 
-  <h2 class="h4 mt-4">Active Connections</h2>
-  <hr>
+  <h2 class="mt-4">Current peers</h2>
+  <p>
+      Shows the top IP addresses and ASNs for the currently connected peers.
+      Data comes from the <code>getpeerinfo</code> RPC and is updated every 10s.
+  </p>
   <div class="row mb-3">
     <div class="col-md-3">
-      <h3>by Network</h3>
+      <label><b>Network</b></label>
       <div id="connections-summary"></div>
     </div>
     <div class="col-md-3">
-      <h3>IPv4 /24</h3>
+      <label><b>IPv4 /24</b></label>
       <div id="ipv4-24-table"></div>
     </div>
     <div class="col-md-3">
-      <h3>IPv6 /32</h3>
+      <label><b>IPv6 /32</b></label>
       <div id="ipv6-32-table"></div>
     </div>
     <div class="col-md-3">
-      <h3>ASN</h3>
+      <label><b>ASN</b></label>
       <div id="asn-connections-table"></div>
     </div>
   </div>
 
-  <h2 class="h4 mt-4">Addrman</h2>
   <hr>
 
+  <h2 class="mt-4">Addrman tables</h2>
+  <p>
+      Shows the top IP addresses and ASNs (if ASMap is enabled) for the address manager (addrman) tables.
+      Uses data from the <code>getrawaddrman</code> RPC and is updated every 120s.
+  </p>
   <ul class="nav nav-tabs mb-3" id="addrman-tabs" role="tablist">
     <li class="nav-item" role="presentation">
       <button class="nav-link active" id="addrman-new-tab" data-bs-toggle="tab" data-bs-target="#addrman-new-content" type="button" role="tab">New</button>
@@ -60,19 +61,19 @@
     <div class="tab-pane fade show active" id="addrman-new-content" role="tabpanel">
       <div class="row mb-3">
         <div class="col-md-3">
-          <h3>by Network</h3>
+          <label><b>Network</b></label>
           <div id="addrman-new-summary"></div>
         </div>
         <div class="col-md-3">
-          <h3>IPv4 /24</h3>
+          <label><b>IPv4 /24</b></label>
           <div id="addrman-new-ipv4-24-table"></div>
         </div>
         <div class="col-md-3">
-          <h3>IPv6 /32</h3>
+          <label><b>IPv6 /32</b></label>
           <div id="addrman-new-ipv6-32-table"></div>
         </div>
         <div class="col-md-3">
-          <h3>ASN</h3>
+          <label><b>ASN</b></label>
           <div id="addrman-new-asn-table"></div>
         </div>
       </div>
@@ -80,24 +81,32 @@
     <div class="tab-pane fade" id="addrman-tried-content" role="tabpanel">
       <div class="row mb-3">
         <div class="col-md-3">
-          <h3>by Network</h3>
+          <label><b>Network</b></label>
           <div id="addrman-tried-summary"></div>
         </div>
         <div class="col-md-3">
-          <h3>IPv4 /24</h3>
+          <label><b>IPv4 /24</b></label>
           <div id="addrman-tried-ipv4-24-table"></div>
         </div>
         <div class="col-md-3">
-          <h3>IPv6 /32</h3>
+          <label><b>IPv6 /32</b></label>
           <div id="addrman-tried-ipv6-32-table"></div>
         </div>
         <div class="col-md-3">
-          <h3>ASN</h3>
+          <label><b>ASN</b></label>
           <div id="addrman-tried-asn-table"></div>
         </div>
       </div>
     </div>
   </div>
+
+  <footer>
+      <div class="row">
+        <div class="col-auto">
+          <span id="last-update"></span>
+        </div>
+      </div>
+  </footer>
 </body>
 
 <script src="js/bootstrap.min.js" integrity="sha384-0pUGZvbkm6XF6gxjEnlmuGrJXVbNuzT9qBBavbLwCsOGabYfZo0T0to5eqruptLy"
