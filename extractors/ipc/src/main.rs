@@ -1,7 +1,9 @@
 use ipc_extractor::Args;
-use shared::log;
-use shared::tokio::{self, signal, sync::watch};
-use shared::{clap::Parser, simple_logger};
+use shared::{
+    clap::Parser,
+    log, simple_logger,
+    tokio::{self, signal, sync::watch, task::LocalSet},
+};
 
 #[tokio::main]
 async fn main() {
@@ -11,19 +13,28 @@ async fn main() {
         eprintln!("ipc extractor error: {}", e);
     }
 
-    let (shutdown_tx, shutdown_rx) = watch::channel(false);
-    let ipc_handle = tokio::spawn(ipc_extractor::run(args, shutdown_rx));
+    LocalSet::new()
+        .run_until(async move {
+            let (shutdown_tx, shutdown_rx) = watch::channel(false);
+            let run_future = ipc_extractor::run(args, shutdown_rx);
+            tokio::pin!(run_future);
 
-    tokio::select! {
-        _ = signal::ctrl_c() => {
-            log::info!("Received Ctrl+C. Stopping...");
-            let _ = shutdown_tx.send(true);
-        }
-        result = ipc_handle => {
-            match result.unwrap() {
-                Ok(_) => log::info!("ipc-extractor task completed."),
-                Err(e) => log::error!("ipc-extractor task failed: {e}"),
+            tokio::select! {
+                _ = signal::ctrl_c() => {
+                    log::info!("Received Ctrl+C. Stopping...");
+                    let _ = shutdown_tx.send(true);
+                    match run_future.await {
+                        Ok(_) => log::info!("ipc-extractor task completed."),
+                        Err(e) => log::error!("ipc-extractor task failed: {e}"),
+                    }
+                }
+                result = &mut run_future => {
+                    match result {
+                        Ok(_) => log::info!("ipc-extractor task completed."),
+                        Err(e) => log::error!("ipc-extractor task failed: {e}"),
+                    }
+                }
             }
-        }
-    }
+        })
+        .await;
 }

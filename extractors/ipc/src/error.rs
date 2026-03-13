@@ -9,6 +9,7 @@ use std::time::SystemTimeError;
 pub enum RuntimeError {
     SetLogger(SetLoggerError),
     Io(io::Error),
+    IpcCall(capnp::Error),
     SystemTime(SystemTimeError),
     NatsConnect(async_nats::error::Error<ConnectErrorKind>),
     NatsPublish(async_nats::error::Error<async_nats::client::PublishErrorKind>),
@@ -19,6 +20,7 @@ impl fmt::Display for RuntimeError {
         match self {
             RuntimeError::SetLogger(e) => write!(f, "set logger error {}", e),
             RuntimeError::Io(e) => write!(f, "IO error {}", e),
+            RuntimeError::IpcCall(e) => write!(f, "IPC error {}", e),
             RuntimeError::SystemTime(e) => write!(f, "system time error {}", e),
             RuntimeError::NatsConnect(e) => write!(f, "NATS connection error {}", e),
             RuntimeError::NatsPublish(e) => write!(f, "NATS publish error {}", e),
@@ -31,10 +33,17 @@ impl error::Error for RuntimeError {
         match *self {
             RuntimeError::SetLogger(ref e) => Some(e),
             RuntimeError::Io(ref e) => Some(e),
+            RuntimeError::IpcCall(ref e) => Some(e),
             RuntimeError::SystemTime(ref e) => Some(e),
             RuntimeError::NatsConnect(ref e) => Some(e),
             RuntimeError::NatsPublish(ref e) => Some(e),
         }
+    }
+}
+
+impl From<capnp::Error> for RuntimeError {
+    fn from(e: capnp::Error) -> Self {
+        RuntimeError::IpcCall(e)
     }
 }
 
