@@ -17,7 +17,9 @@ runs:
           zstd \
           binutils-dev \
           elfutils \
-          gcc-multilib
+          gcc-multilib \
+          libcapnp-dev \
+          capnproto 
     
     - name: Cache cargo
       uses: actions/cache@v3

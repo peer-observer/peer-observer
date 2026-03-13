@@ -21,6 +21,8 @@ pkgs.mkShell {
 
       pkgs.bpftools
 
+      pkgs.capnproto
+
       # libbpf CO-RE pkgs
       #
       # use the unwrapped clang:
