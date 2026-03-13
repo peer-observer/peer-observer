@@ -18,6 +18,7 @@ use shared::protobuf::ebpf_extractor::{
 use shared::protobuf::event::event::PeerObserverEvent;
 use shared::protobuf::event::Event;
 use shared::simple_logger;
+use shared::tokio::sync::watch;
 use shared::{async_nats, clap, nats_util, tokio};
 use std::fs::File;
 use std::io::{BufReader, Read};
@@ -269,7 +270,7 @@ fn bitcoind_pid(args: &Args) -> Result<i32, RuntimeError> {
     Ok(pid)
 }
 
-pub async fn run(args: Args) -> Result<(), RuntimeError> {
+pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<(), RuntimeError> {
     simple_logger::init_with_level(args.log_level)?;
 
     let pid = bitcoind_pid(&args)?;
@@ -393,6 +394,22 @@ pub async fn run(args: Args) -> Result<(), RuntimeError> {
     let mut last_event_timestamp = SystemTime::now();
     let mut has_warned_about_no_events = false;
     loop {
+        // Check for shutdown signal (non-blocking).
+        // Max latency is ~1 second (the poll_raw timeout).
+        // Treat a dropped sender (Err) as shutdown, matching the other extractors'
+        // tokio::select! branches that break on Err(_) from changed().
+        match shutdown_rx.has_changed() {
+            Ok(true) if *shutdown_rx.borrow() => {
+                log::info!("ebpf-extractor received shutdown signal.");
+                return Ok(());
+            }
+            Err(_) => {
+                log::info!("ebpf-extractor shutdown channel closed, exiting.");
+                return Ok(());
+            }
+            _ => {}
+        }
+
         match ring_buffers.poll_raw(Duration::from_secs(1)) {
             RINGBUFF_CALLBACK_OK => (),
             RINGBUFF_CALLBACK_UNABLE_TO_PARSE_P2P_MSG => log::warn!("Could not parse P2P message."),
