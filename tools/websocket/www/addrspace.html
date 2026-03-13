@@ -187,9 +187,9 @@
     }
 
     renderSummary("connections-summary", connection_network_counts);
-    renderTable("ipv4-24-table", ipv4_24_counts, "Subnet", "Peers");
-    renderTable("ipv6-32-table", ipv6_32_counts, "Subnet", "Peers");
-    renderTable("asn-connections-table", asn_connection_counts, "ASN", "Connections");
+    renderTable("ipv4-24-table", ipv4_24_counts, "Subnet", "Peers", "ipv4");
+    renderTable("ipv6-32-table", ipv6_32_counts, "Subnet", "Peers", "ipv6");
+    renderTable("asn-connections-table", asn_connection_counts, "ASN", "Connections", "asn");
 
     document.getElementById("last-update").textContent = "Updated: " + new Date().toLocaleTimeString();
   }
@@ -258,20 +258,20 @@
 
     // Render Addrman New
     renderSummary("addrman-new-summary", addrman_new_network_counts);
-    renderTable("addrman-new-ipv4-24-table", addrman_new_ipv4_24_counts, "Subnet", "Addresses");
-    renderTable("addrman-new-ipv6-32-table", addrman_new_ipv6_32_counts, "Subnet", "Addresses");
-    renderTable("addrman-new-asn-table", addrman_new_asn_counts, "ASN", "Addresses");
+    renderTable("addrman-new-ipv4-24-table", addrman_new_ipv4_24_counts, "Subnet", "Addresses", "ipv4");
+    renderTable("addrman-new-ipv6-32-table", addrman_new_ipv6_32_counts, "Subnet", "Addresses", "ipv6");
+    renderTable("addrman-new-asn-table", addrman_new_asn_counts, "ASN", "Addresses", "asn");
 
     // Render Addrman Tried
     renderSummary("addrman-tried-summary", addrman_tried_network_counts);
-    renderTable("addrman-tried-ipv4-24-table", addrman_tried_ipv4_24_counts, "Subnet", "Addresses");
-    renderTable("addrman-tried-ipv6-32-table", addrman_tried_ipv6_32_counts, "Subnet", "Addresses");
-    renderTable("addrman-tried-asn-table", addrman_tried_asn_counts, "ASN", "Addresses");
+    renderTable("addrman-tried-ipv4-24-table", addrman_tried_ipv4_24_counts, "Subnet", "Addresses", "ipv4");
+    renderTable("addrman-tried-ipv6-32-table", addrman_tried_ipv6_32_counts, "Subnet", "Addresses", "ipv6");
+    renderTable("addrman-tried-asn-table", addrman_tried_asn_counts, "ASN", "Addresses", "asn");
   }
 
-  function renderTable(elementId, counts, keyLabel, valueLabel) {
+  function renderTable(elementId, counts, keyLabel, valueLabel, keyType) {
     const container = document.getElementById(elementId);
-    
+
     const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, MAX_ITEMS);
 
     if (sorted.length === 0) {
@@ -288,10 +288,24 @@
 
     for (const [key, count] of sorted) {
       const percentage = (count / maxCount * 100).toFixed(1);
-      const isAsn = /^\d+$/.test(key);
-      const keyCell = isAsn
-        ? `<a href="https://ipinfo.io/AS${key}" target="_blank" rel="noopener noreferrer" class="text-decoration-none"><code>${key}</code></a>`
-        : `<code>${key}</code>`;
+
+      let keyCell = null;
+      switch (keyType) {
+        case "asn":
+          keyCell = `<a href="https://ipinfo.io/AS${key}" target="_blank" rel="noopener noreferrer" class="text-decoration-none"><code>${key}</code></a>`;
+          break;
+        case "ipv4":
+          keyCell = `<a href="https://ipinfo.io/ips/${key}" target="_blank" rel="noopener noreferrer" class="text-decoration-none"><code>${key}</code></a>`;
+          break;
+        case "ipv6":
+          linkKey = key.replace("/32", "")
+          keyCell = `<a href="https://ipinfo.io/${linkKey}" target="_blank" rel="noopener noreferrer" class="text-decoration-none"><code>${key}</code></a>`;
+          break;
+        default:
+          alert(`keyCell is not implemented for keyType '{keyType}'`)
+      }
+
+
       html += '<tr>';
       html += `<td>${keyCell}</td>`;
       html += `<td><span style="min-width: 5ch; display: inline-block; text-align: center;">${count}</span></td>`;
@@ -305,7 +319,7 @@
   function renderSummary(elementId, counts) {
     const container = document.getElementById(elementId);
     const order = ["IPv4", "IPv6", "Tor", "I2P", "CJDNS", "Unknown"];
-    
+
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
     if (total === 0) {
       container.innerHTML = '<p class="text-muted">No data available</p>';
