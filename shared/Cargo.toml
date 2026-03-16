@@ -10,7 +10,7 @@ prost = "0.14.1"
 bitcoin = "0.32"
 base32 = "0.5.1" # for encoding Tor/Onion addresses
 serde = { version = "1.0.219", features = ["derive"] }
-clap = { version = "4.5.45", features = ["derive"] }
+clap = { version = "4.5.60", features = ["derive"] }
 simple_logger = "5.2.0"
 log = "0.4"
 async-nats = { version = "0.46.0", default-features = false } 
