@@ -25,6 +25,7 @@ use shared::{
             Ebpf,
         },
         event::{event::PeerObserverEvent, Event},
+        ipc_extractor,
         log_extractor::{self, LogDebugCategory},
         p2p_extractor,
         rpc_extractor::{
@@ -3764,6 +3765,30 @@ async fn test_integration_metrics_rpc_estimatesmartfee() {
         r#"
             peerobserver_rpc_estimatesmartfee_feerate{mode="CONSERVATIVE",target_block="6"} 0.777
             peerobserver_rpc_estimatesmartfee_feerate{mode="ECONOMICAL",target_block="144"} 1.08
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_ipc_block_tip() {
+    println!("test that the IPC block tip metric works");
+
+    publish_and_check(
+        &[
+            Event::new(PeerObserverEvent::IpcExtractor(ipc_extractor::Ipc {
+                ipc_event: Some(ipc_extractor::ipc::IpcEvent::BlockTip(
+                    ipc_extractor::BlockTip {
+                        height: 867530,
+                        hash: vec![0x00, 0x01, 0x02, 0x03],
+                    },
+                )),
+            }))
+            .unwrap(),
+        ],
+        Subject::Ipc,
+        r#"
+        peerobserver_ipc_block_tip_height 867530
         "#,
     )
     .await;

@@ -232,6 +232,9 @@ pub struct Metrics {
     pub validation_block_connected_latest_transactions: IntGauge,
     pub validation_block_connected_connection_time: IntCounter,
 
+    // IPC-extractor
+    pub ipc_block_tip_height: IntGauge,
+
     // RPC-extractor
     // getpeeinfo
     pub rpc_peer_info_list_peers_gmax_ban: IntGauge,
@@ -447,6 +450,9 @@ impl Metrics {
         ig!(validation_block_connected_latest_transactions, "Last connected block transactions.", registry);
         ic!(validation_block_connected_connection_time, "Last connected block connection time in µs", registry);
 
+        // IPC-extractor
+        ig!(ipc_block_tip_height, "Tip height from IPC extractor.", registry);
+
         // RPC-extractor
         // getpeerinfo
         ig!(rpc_peer_info_list_peers_gmax_ban, "Number of peers connected to us that are on the 2018 ban list by gmax.", registry);
@@ -658,6 +664,9 @@ impl Metrics {
             validation_block_connected_latest_inputs,
             validation_block_connected_latest_transactions,
             validation_block_connected_connection_time,
+
+            // IPC-extractor
+            ipc_block_tip_height,
 
             // RPC-extractor
             // getpeerinfo

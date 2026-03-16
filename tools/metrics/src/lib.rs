@@ -19,6 +19,7 @@ use shared::protobuf::{
         validation::validation_event,
     },
     event::{event::PeerObserverEvent, Event},
+    ipc_extractor,
     log_extractor::{log, Log, LogDebugCategory, LogLevel},
     p2p_extractor::p2p,
     rpc_extractor::{rpc, Addrman, AddrmanBucket, FeeEstimateMode},
@@ -164,6 +165,11 @@ fn handle_event(
             }
             PeerObserverEvent::LogExtractor(l) => {
                 handle_log_event(&l, metrics);
+            }
+            PeerObserverEvent::IpcExtractor(ipc) => {
+                if let Some(e) = ipc.ipc_event {
+                    handle_ipc_event(&e, metrics);
+                }
             }
         }
     }
@@ -1462,6 +1468,14 @@ fn handle_log_event(log: &Log, metrics: metrics::Metrics) {
                     .with_label_values(&[&block.state])
                     .inc();
             }
+        }
+    }
+}
+
+fn handle_ipc_event(e: &ipc_extractor::ipc::IpcEvent, metrics: metrics::Metrics) {
+    match e {
+        ipc_extractor::ipc::IpcEvent::BlockTip(tip) => {
+            metrics.ipc_block_tip_height.set(tip.height as i64);
         }
     }
 }
