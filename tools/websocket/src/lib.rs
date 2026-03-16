@@ -71,6 +71,7 @@ pub struct ClientSubscriptions {
     pub p2p: bool,
     pub log: bool,
     pub rpc: bool,
+    pub ipc: bool,
 }
 
 struct Client {
@@ -254,6 +255,7 @@ async fn broadcast_to_clients(event: &PeerObserverEvent, clients: &Clients) {
             PeerObserverEvent::RpcExtractor(_) => client.subscriptions.rpc,
             PeerObserverEvent::P2pExtractor(_) => client.subscriptions.p2p,
             PeerObserverEvent::LogExtractor(_) => client.subscriptions.log,
+            PeerObserverEvent::IpcExtractor(_) => client.subscriptions.ipc,
         };
 
         if !is_subscribed {

@@ -41,6 +41,7 @@ const SUBSCRIBE_NONE: ClientSubscriptions = ClientSubscriptions {
     p2p: false,
     log: false,
     rpc: false,
+    ipc: false,
 };
 
 const SUBSCRIBE_ALL: ClientSubscriptions = ClientSubscriptions {
@@ -53,6 +54,7 @@ const SUBSCRIBE_ALL: ClientSubscriptions = ClientSubscriptions {
     p2p: true,
     log: true,
     rpc: true,
+    ipc: true,
 };
 
 #[derive(Debug, Clone)]
