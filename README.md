@@ -110,7 +110,7 @@ I'll do my best to add more documentation.
 
 To run the integration tests, run with the feature `nats_integration_tests` and
 `node_integration_tests`. If you are not using the nix-shell, you need to set the
-`NATS_SERVER_BINARY` to the path to your `nats-server` binary. Addtionally,
+`NATS_SERVER_BINARY` to the path to your `nats-server` binary and `BITCOIN_NODE_EXE` to the path to a `bitcoin-node` binary. Additionally,
 `BITCOIND_EXE` can be set to a custom `bitcoind` binary. By default, a recent
 release will be downloaded and used if `BITCOIND_SKIP_DOWNLOAD` is unset.
 

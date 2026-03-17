@@ -47,6 +47,7 @@ pkgs.mkShell {
       # use the nix one instead
       export BITCOIND_SKIP_DOWNLOAD=1
       export BITCOIND_EXE=${pkgs.bitcoind}/bin/bitcoind
+      export BITCOIN_NODE_EXE=${pkgs.bitcoind}/libexec/bitcoin-node
 
       # set the path of the Linux kernel headers. These are needed in
       # build.rs of the ebpf-extractor on Nix.

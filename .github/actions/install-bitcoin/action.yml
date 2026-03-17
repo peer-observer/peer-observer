@@ -1,0 +1,79 @@
+name: 'Install and Verify Bitcoin Core'
+description: 'Downloads, Verify signatures and installs Bitcoin Core'
+
+inputs:
+  version:
+    description: 'Bitcoin Core version to install'
+    required: true
+    default: '31.0'
+  trusted_keys:
+    description: 'List of GPG fingerprints to validate'
+    required: false
+    # Signatures from the following GPG public keys checked during verification of the source code.
+    # The list can be found at https://github.com/bitcoin-core/guix.sigs/tree/main/builder-keys
+    # 15281230078...: achow101.gpg
+    # 9EDAFF80E08...: Emzy.gpg
+    # D1DBF2C4B96...: hebasto.gpg
+    default: >-
+      152812300785C96444D3334D17565732E08E5E41
+      9EDAFF80E080659604F4A76B2EBB056FD847F8A7
+      D1DBF2C4B96F2DEBF4C16654410108112E7EA81F
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install verification dependencies
+      shell: bash
+      run: sudo apt-get update && sudo apt-get install -y gnupg wget
+
+    - name: Download and Verify Bitcoin Core
+      shell: bash
+      run: |
+        VERSION="${{ inputs.version }}"
+        
+        # 1. Download Binaries & Manifests
+        wget -q "https://bitcoincore.org/bin/bitcoin-core-${VERSION}/bitcoin-${VERSION}-x86_64-linux-gnu.tar.gz"
+        wget -q "https://bitcoincore.org/bin/bitcoin-core-${VERSION}/SHA256SUMS"
+        wget -q "https://bitcoincore.org/bin/bitcoin-core-${VERSION}/SHA256SUMS.asc"
+
+        # 2. Fetch builder keys
+        git clone --depth 1 https://github.com/bitcoin-core/guix.sigs
+        
+        # 3. Setup temporary GPG environment
+        export GNUPGHOME=$(mktemp -d)
+        gpg --batch --import guix.sigs/builder-keys/*.gpg
+
+        # 4. Verify the SHA256SUMS signature
+        gpg --batch --verify --status-fd 1 SHA256SUMS.asc SHA256SUMS > verify.log
+        
+        # 5. Check against trusted fingerprints
+        TRUSTED_KEYS=(${{ inputs.trusted_keys }})
+        MATCH=false
+        for KEY in "${TRUSTED_KEYS[@]}"; do
+          if grep -q "VALIDSIG .* $KEY" verify.log; then
+            echo "Verified signature from trusted developer: $KEY"
+            MATCH=true
+            break
+          fi
+        done
+
+        if [ "$MATCH" != true ]; then
+          echo "No signatures from the trusted key list were found."
+          exit 1
+        fi
+
+        # 6. Verify checksum and extract
+        sha256sum --ignore-missing --check SHA256SUMS
+        tar -xzf bitcoin-${VERSION}-x86_64-linux-gnu.tar.gz
+        
+        # 7. Install to path (core v31.0 lists `bitcoin-node` in libexec/)
+        sudo install -m 0755 -o root -g root -t /usr/local/bin bitcoin-${VERSION}/bin/*
+        sudo install -m 0755 -o root -g root -t /usr/local/bin bitcoin-${VERSION}/libexec/*
+        
+        # Cleanup workspace
+        rm -rf guix.sigs bitcoin-${VERSION}* SHA256SUMS* verify.log
+        echo "Bitcoin Core v${VERSION} installed successfully."
+
+    - name: Verify Installation
+      shell: bash
+      run: bitcoind --version
