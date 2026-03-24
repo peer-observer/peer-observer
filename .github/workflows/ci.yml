@@ -254,6 +254,21 @@ jobs:
         else
           echo "✅ All help outputs are documented correctly."
         fi
+    - name: Check the RPC methods table of rpc-extractor
+      run: |
+        set -e
+
+        EXPECTED_METHODS=$(head -c 100000 extractors/rpc/src/lib.rs | awk 'match($0, /pub disable_([A-Za-z0-9]+)/, m) { print m[1] }' | sort)
+        DOCUMENTED_METHODS=$(head -c 100000 extractors/rpc/README.md | awk '/Supported RPCs/ { state = 1; next } state && match($0, /\[`([a-zA-Z0-9]+)`\]/, m) { print m[1] }' | sort)
+
+        if cmp <(echo "$EXPECTED_METHODS") <(echo "$DOCUMENTED_METHODS"); then
+          echo "✅ All the RPCs are documented."
+        else
+          echo "❌ Not all the supported RPCs are documented."
+          echo "Expected methods:\n$EXPECTED_METHODS"
+          echo "Documented methods:\n$DOCUMENTED_METHODS"
+          exit 1
+        fi
 
   ubuntu-check-and-fmt:
     runs-on: ubuntu-latest
