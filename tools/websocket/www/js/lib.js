@@ -186,6 +186,10 @@ function handle_rpc_extractor_addrman(e) {};
 function handle_p2p_extractor_pingduration(e) {};
 function handle_p2p_extractor_inventoryannouncement(e) {};
 function handle_p2p_extractor_addressannouncement(e) {};
+// log-extractor
+function handle_log_extractor_unknown(e) {};
+function handle_log_extractor_block_connected(e) {};
+function handle_log_extractor_block_checked(e) {};
 // TODO: there are a bunch of handling functions missing here.
 // Feel free to implement them, if you need them.
 
@@ -236,8 +240,17 @@ function processWebsocketMessage(e) {
     }
 
   } else if (event.hasOwnProperty("LogExtractor")) {
-    console.warn("Unhandled log-extractor event", event);
-    // TODO: these aren't implemented yet, but feel free to do so if you need them.
+    let log = event.LogExtractor;
+    let log_event = log.log_event;
+    if (log_event.hasOwnProperty("UnknownLogMessage")) {
+      handle_log_extractor_unknown(log)
+    } else if (log_event.hasOwnProperty("BlockConnectedLog")) {
+      handle_log_extractor_block_connected(log)
+    } else if (log_event.hasOwnProperty("BlockCheckedLog")) {
+      handle_log_extractor_block_checked(log)
+    } else {
+      console.warn("Unhandled log-extractor event", log);
+    }
   } else {
     console.warn("Unhandled event", event);
   }

@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <title>logs</title>
+</head>
+
+<body class="container-fluid">
+  <header class="py-3">
+    <h1 class="h3 mb-1">logs</h1>
+    <p class="text-muted mb-2">
+      Live log messages from Bitcoin Core via the log-extractor. Filter and highlight log messages in real time.
+    </p>
+    <div id="websocket-picker" class="mb-3"></div>
+  </header>
+
+  <div class="row g-2 mb-2 align-items-end">
+    <div class="col-auto">
+      <label for="filter-input" class="form-label small mb-0">Filter (comma-separated, OR)</label>
+      <input type="text" id="filter-input" class="form-control form-control-sm" placeholder="e.g. UpdateTip,block">
+    </div>
+    <div class="col-auto">
+      <label for="highlight-input" class="form-label small mb-0">Highlight (comma-separated)</label>
+      <input type="text" id="highlight-input" class="form-control form-control-sm" placeholder="e.g. error,warning,block">
+    </div>
+    <div class="col-auto">
+      <label for="backlog-input" class="form-label small mb-0">Backlog limit</label>
+      <input type="number" id="backlog-input" class="form-control form-control-sm" value="5000" min="100" step="1000" style="width:100px">
+    </div>
+    <div class="col-auto">
+      <button id="pause-btn" class="btn btn-sm btn-outline-secondary">Pause</button>
+    </div>
+    <div class="col-auto">
+      <button id="clear-btn" class="btn btn-sm btn-outline-danger">Clear</button>
+    </div>
+    <div class="col-auto ms-auto">
+      <span id="line-count" class="small text-muted"></span>
+    </div>
+  </div>
+
+  <div id="highlight-legend" class="mb-2 small"></div>
+
+  <div id="log-container"></div>
+
+  <button id="scroll-btn" class="btn btn-sm btn-primary" style="display:none">Scroll to bottom</button>
+</body>
+
+<script src="js/bootstrap.min.js" integrity="sha384-0pUGZvbkm6XF6gxjEnlmuGrJXVbNuzT9qBBavbLwCsOGabYfZo0T0to5eqruptLy"
+  crossorigin="anonymous"></script>
+<script src="js/websocket-picker.js"></script>
+<script src="js/lib.js"></script>
+
+<style>
+  #log-container {
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    max-height: calc(100vh - 280px);
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 4px;
+  }
+
+  .log-line {
+    white-space: pre;
+    padding: 1px 4px;
+    border-bottom: 1px solid #2a2a2a;
+  }
+
+  .log-line:hover {
+    background: #2a2d2e;
+  }
+
+  .log-ts {
+    color: #6a9955;
+    margin-right: 8px;
+  }
+
+  .log-category {
+    display: inline-block;
+    min-width: 100px;
+    text-align: left;
+    margin-right: 8px;
+    font-weight: bold;
+  }
+
+  .log-level {
+    display: inline-block;
+    min-width: 60px;
+    text-align: left;
+    margin-right: 8px;
+    font-weight: bold;
+  }
+
+  .log-thread {
+    color: #808080;
+    margin-right: 8px;
+    display: inline-block;
+    min-width: 120px;
+  }
+
+  .log-msg {
+    color: #d4d4d4;
+  }
+
+  .log-msg-block-connected {
+    color: #4ec9b0;
+  }
+
+  .log-msg-block-checked {
+    color: #dcdcaa;
+  }
+
+  #scroll-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+  }
+
+  .filter-separator {
+    border-top: 1px dashed #569cd6;
+    margin: 4px 0;
+    padding: 2px 4px;
+    color: #569cd6;
+    font-style: italic;
+    font-size: 11px;
+  }
+
+  .paused-indicator {
+    color: #f44;
+    font-weight: bold;
+    margin-left: 8px;
+  }
+</style>
+
+<script>
+  const logContainer = document.getElementById("log-container");
+  const filterInput = document.getElementById("filter-input");
+  const highlightInput = document.getElementById("highlight-input");
+  const backlogInput = document.getElementById("backlog-input");
+  const pauseBtn = document.getElementById("pause-btn");
+  const clearBtn = document.getElementById("clear-btn");
+  const scrollBtn = document.getElementById("scroll-btn");
+  const lineCountEl = document.getElementById("line-count");
+  const highlightLegend = document.getElementById("highlight-legend");
+
+  const LOG_CATEGORIES = [
+    "unknown", "addrman", "bench", "blockstorage", "cmpctblock",
+    "coindb", "estimatefee", "http", "i2p", "ipc",
+    "leveldb", "libevent", "mempool", "mempoolrej", "net",
+    "proxy", "prune", "qt", "rand", "reindex",
+    "rpc", "scan", "selectcoins", "tor", "txpackages",
+    "txreconciliation", "validation", "walletdb", "zmq"
+  ];
+
+  const CATEGORY_COLORS = {
+    net:              "#7a7a7a",
+    validation:       "#4ec9b0",
+    mempool:          "#c586c0",
+    mempoolrej:       "#d16969",
+    blockstorage:     "#569cd6",
+    cmpctblock:       "#4fc1ff",
+    addrman:          "#dcdcaa",
+    bench:            "#b5cea8",
+    coindb:           "#ce9178",
+    http:             "#9cdcfe",
+    rpc:              "#6a9955",
+    tor:              "#cc5de8",
+    i2p:              "#20c997",
+    txpackages:       "#d7ba7d",
+    txreconciliation: "#f783ac",
+    reindex:          "#ff922b",
+    prune:            "#74c0fc",
+  };
+
+  function categoryName(id) {
+    let name = (typeof id === "string") ? id : (LOG_CATEGORIES[id] || "unknown(" + id + ")");
+    return name;
+  }
+
+  function categoryColor(name) {
+    return CATEGORY_COLORS[name] || "#569cd6";
+  }
+
+  const LOG_LEVELS = ["INFO", "WARNING", "ERROR", "DEBUG", "TRACE"];
+
+  const LEVEL_COLORS = {
+    INFO:    "#569cd6",
+    WARNING: "#ffd93d",
+    ERROR:   "#ff6b6b",
+    DEBUG:   "#d4d4d4",
+    TRACE:   "#808080",
+  };
+
+  function levelName(id) {
+    return (typeof id === "string") ? id : (LOG_LEVELS[id] || "unknown(" + id + ")");
+  }
+
+  function levelColor(name) {
+    return LEVEL_COLORS[name] || "#d4d4d4";
+  }
+
+  const HIGHLIGHT_COLORS = [
+    "#ff6b6b", "#ffd93d", "#6bcb77", "#4d96ff", "#ff922b",
+    "#cc5de8", "#20c997", "#ff8787", "#74c0fc", "#f783ac"
+  ];
+
+  let paused = false;
+  let autoScroll = true;
+  let lineCount = 0;
+  let lineCountDirty = false;
+  let lastFilterValue = "";
+  let backlogLimit = parseInt(backlogInput.value, 10) || 5000;
+  let cachedFilterTerms = [];
+  let cachedHighlightTerms = [];
+
+  backlogInput.addEventListener("change", () => {
+    let val = parseInt(backlogInput.value, 10);
+    backlogLimit = (isNaN(val) || val < 100) ? 5000 : val;
+  });
+
+  filterInput.addEventListener("input", () => {
+    let val = filterInput.value.trim();
+    cachedFilterTerms = val ? val.split(",").map(s => s.trim().toLowerCase()).filter(s => s.length > 0) : [];
+  });
+
+  highlightInput.addEventListener("input", () => {
+    let val = highlightInput.value.trim();
+    cachedHighlightTerms = val ? val.split(",").map(s => s.trim()).filter(s => s.length > 0) : [];
+  });
+
+  function getFilterTerms() {
+    return cachedFilterTerms;
+  }
+
+  function getHighlightTerms() {
+    return cachedHighlightTerms;
+  }
+
+  function updateHighlightLegend() {
+    let terms = getHighlightTerms();
+    if (terms.length === 0) {
+      highlightLegend.innerHTML = "";
+      return;
+    }
+    let html = "";
+    for (let i = 0; i < terms.length; i++) {
+      let color = HIGHLIGHT_COLORS[i % HIGHLIGHT_COLORS.length];
+      html += `<span style="background:${color};color:#000;padding:1px 6px;margin-right:4px;border-radius:3px;">${escapeHtml(terms[i])}</span>`;
+    }
+    highlightLegend.innerHTML = html;
+  }
+
+  function escapeHtml(str) {
+    let div = document.createElement("div");
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
+  function applyHighlights(text) {
+    let terms = getHighlightTerms();
+    if (terms.length === 0) return escapeHtml(text);
+
+    // Build a combined regex for all highlight terms
+    let escapedTerms = terms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    let regex = new RegExp("(" + escapedTerms.join("|") + ")", "gi");
+
+    // Split text by matches, preserving the matches
+    let parts = text.split(regex);
+    let html = "";
+    for (let part of parts) {
+      let lowerPart = part.toLowerCase();
+      let matchIdx = -1;
+      for (let i = 0; i < terms.length; i++) {
+        if (lowerPart === terms[i].toLowerCase()) {
+          matchIdx = i;
+          break;
+        }
+      }
+      if (matchIdx >= 0) {
+        let color = HIGHLIGHT_COLORS[matchIdx % HIGHLIGHT_COLORS.length];
+        html += `<span style="background:${color};color:#000;border-radius:2px;">${escapeHtml(part)}</span>`;
+      } else {
+        html += escapeHtml(part);
+      }
+    }
+    return html;
+  }
+
+  function formatTimestamp(us) {
+    let d = new Date(us / 1000);
+    let h = String(d.getHours()).padStart(2, "0");
+    let m = String(d.getMinutes()).padStart(2, "0");
+    let s = String(d.getSeconds()).padStart(2, "0");
+    let ms = String(d.getMilliseconds()).padStart(3, "0");
+    return h + ":" + m + ":" + s + "." + ms;
+  }
+
+  function formatLogMessage(log) {
+    let logEvent = log.log_event;
+    if (logEvent.hasOwnProperty("UnknownLogMessage")) {
+      return { text: logEvent.UnknownLogMessage.raw_message, cssClass: "" };
+    } else if (logEvent.hasOwnProperty("BlockConnectedLog")) {
+      let bc = logEvent.BlockConnectedLog;
+      return { text: "Block connected: " + bc.block_hash + " at height " + bc.block_height, cssClass: "log-msg-block-connected" };
+    } else if (logEvent.hasOwnProperty("BlockCheckedLog")) {
+      let bc = logEvent.BlockCheckedLog;
+      return { text: "Block checked: " + bc.block_hash + " state=" + bc.state + " " + bc.debug_message, cssClass: "log-msg-block-checked" };
+    }
+    return { text: JSON.stringify(logEvent), cssClass: "" };
+  }
+
+  function matchesFilter(messageText) {
+    let terms = getFilterTerms();
+    if (terms.length === 0) return true;
+    let lower = messageText.toLowerCase();
+    return terms.some(t => lower.includes(t));
+  }
+
+  function addLogLine(log) {
+    if (paused) return;
+
+    let { text: msgText, cssClass } = formatLogMessage(log);
+    let catName = categoryName(log.category);
+    let lvlName = levelName(log.log_level);
+
+    if (!matchesFilter(catName + " " + lvlName + " " + msgText)) return;
+
+    let line = document.createElement("div");
+    line.className = "log-line";
+
+    let ts = `<span class="log-ts">${formatTimestamp(log.log_timestamp)}</span>`;
+    let cat = `<span class="log-category" style="color:${categoryColor(catName)}">${escapeHtml(catName)}</span>`;
+    let lvl = `<span class="log-level" style="color:${levelColor(lvlName)}">${escapeHtml(lvlName)}</span>`;
+    let thread = `<span class="log-thread">${escapeHtml(log.threadname)}</span>`;
+    let msgHtml = applyHighlights(msgText);
+    let msg = `<span class="log-msg ${cssClass}">${msgHtml}</span>`;
+
+    line.innerHTML = ts + lvl + cat + thread + msg;
+    logContainer.appendChild(line);
+    lineCount++;
+    lineCountDirty = true;
+
+    if (autoScroll) {
+      logContainer.scrollTop = logContainer.scrollHeight;
+    }
+  }
+
+  // Batch trim: remove excess lines using a Range for a single DOM reflow
+  function trimBacklog() {
+    let excess = lineCount - backlogLimit;
+    if (excess <= 0) return;
+    let children = logContainer.children;
+    // Count how many DOM children to remove (excess log lines + any separators among them)
+    let domRemoveCount = 0;
+    let logLinesRemoved = 0;
+    for (let i = 0; i < children.length && logLinesRemoved < excess; i++) {
+      domRemoveCount++;
+      if (!children[i].classList.contains("filter-separator")) {
+        logLinesRemoved++;
+      }
+    }
+    if (domRemoveCount > 0) {
+      let range = document.createRange();
+      range.setStartBefore(children[0]);
+      range.setEndAfter(children[domRemoveCount - 1]);
+      range.deleteContents();
+      lineCount -= logLinesRemoved;
+    }
+  }
+
+  // Periodic housekeeping: trim backlog and update line count display
+  setInterval(() => {
+    trimBacklog();
+    if (lineCountDirty) {
+      lineCountEl.textContent = lineCount + " lines";
+      lineCountDirty = false;
+    }
+  }, 500);
+
+  // Auto-scroll detection
+  logContainer.addEventListener("scroll", () => {
+    let atBottom = logContainer.scrollTop + logContainer.clientHeight >= logContainer.scrollHeight - 20;
+    autoScroll = atBottom;
+    scrollBtn.style.display = atBottom ? "none" : "block";
+  });
+
+  scrollBtn.addEventListener("click", () => {
+    logContainer.scrollTo({ top: logContainer.scrollHeight, behavior: "smooth" });
+    autoScroll = true;
+    scrollBtn.style.display = "none";
+  });
+
+  // Pause
+  pauseBtn.addEventListener("click", () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? "Resume" : "Pause";
+    pauseBtn.classList.toggle("btn-outline-secondary", !paused);
+    pauseBtn.classList.toggle("btn-warning", paused);
+  });
+
+  // Clear
+  clearBtn.addEventListener("click", () => {
+    logContainer.replaceChildren();
+    lineCount = 0;
+    lineCountEl.textContent = "0 lines";
+  });
+
+  // Filter change: insert separator when filter changes
+  filterInput.addEventListener("input", () => {
+    let current = filterInput.value.trim();
+    if (current !== lastFilterValue) {
+      lastFilterValue = current;
+      if (current.length > 0) {
+        let sep = document.createElement("div");
+        sep.className = "filter-separator";
+        sep.textContent = "Filter applied: " + current;
+        logContainer.appendChild(sep);
+        if (autoScroll) {
+          logContainer.scrollTop = logContainer.scrollHeight;
+        }
+      }
+    }
+  });
+
+  // Update highlight legend on input change
+  highlightInput.addEventListener("input", updateHighlightLegend);
+
+  // Log-extractor handlers
+  function handle_log_extractor_unknown(log) { addLogLine(log); }
+  function handle_log_extractor_block_connected(log) { addLogLine(log); }
+  function handle_log_extractor_block_checked(log) { addLogLine(log); }
+
+  function handleWebsocketReset() {
+    logContainer.replaceChildren();
+    lineCount = 0;
+    paused = false;
+    pauseBtn.textContent = "Pause";
+    pauseBtn.classList.remove("btn-warning");
+    pauseBtn.classList.add("btn-outline-secondary");
+    lineCountEl.textContent = "0 lines";
+  }
+
+  window.onload = (event) => {
+    runUnitTests();
+    updateSubscriptions({ log: true });
+    initWebsocketPicker("websockets.json", "websocket-picker", processWebsocketMessage, handleWebsocketReset);
+    lineCountEl.textContent = "0 lines";
+  };
+</script>
+
+</html>
