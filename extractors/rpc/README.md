@@ -79,16 +79,16 @@ Options:
 
 The `rpc` extractor currently supports the following Bitcoin Core RPC methods:
 
-| Method | Description |
-| --- | --- |
-| [`getpeerinfo`](https://developer.bitcoin.org/reference/rpc/getpeerinfo.html) | Returns data about each connected node. |
-| [`getmempoolinfo`](https://developer.bitcoin.org/reference/rpc/getmempoolinfo.html) | Returns details on the active state of the TX memory pool. |
-| [`uptime`](https://developer.bitcoin.org/reference/rpc/uptime.html) | Returns the total uptime of the server. |
-| [`getnettotals`](https://developer.bitcoin.org/reference/rpc/getnettotals.html) | Returns information about network traffic, including bytes in, bytes out, and current time. |
-| [`getmemoryinfo`](https://developer.bitcoin.org/reference/rpc/getmemoryinfo.html) | Returns information about memory usage. |
-| [`getaddrmaninfo`](https://github.com/bitcoin/bitcoin/pull/27511) | Returns the number of addresses in the `new` and `tried` tables and their sum for all networks. |
-| [`getchaintxstats`](https://developer.bitcoin.org/reference/rpc/getchaintxstats.html) | Compute statistics about the total number and rate of transactions in the chain. |
-| [`getnetworkinfo`](https://developer.bitcoin.org/reference/rpc/getnetworkinfo.html) | Returns various state info regarding P2P networking. |
-| [`getblockchaininfo`](https://developer.bitcoin.org/reference/rpc/getblockchaininfo.html) | Returns various state info regarding blockchain processing. |
-| [`getorphantxs`](https://github.com/bitcoin/bitcoin/pull/30793) | (EXPERIMENTAL) Shows transactions in the tx orphanage. |
-| [`getrawaddrman`](https://github.com/bitcoin/bitcoin/pull/28523) | (EXPERIMENTAL) Returns information on all address manager entries for the new and tried tables. |
+| Method | Polling frequency | Description |
+| --- | --- | --- |
+| [`getpeerinfo`](https://developer.bitcoin.org/reference/rpc/getpeerinfo.html) | high | Returns data about each connected node. |
+| [`getmempoolinfo`](https://developer.bitcoin.org/reference/rpc/getmempoolinfo.html) | high | Returns details on the active state of the TX memory pool. |
+| [`uptime`](https://developer.bitcoin.org/reference/rpc/uptime.html) | high | Returns the total uptime of the server. |
+| [`getnettotals`](https://developer.bitcoin.org/reference/rpc/getnettotals.html) | high | Returns information about network traffic, including bytes in, bytes out, and current time. |
+| [`getmemoryinfo`](https://developer.bitcoin.org/reference/rpc/getmemoryinfo.html) | high | Returns information about memory usage. |
+| [`getaddrmaninfo`](https://github.com/bitcoin/bitcoin/pull/27511) | high | Returns the number of addresses in the `new` and `tried` tables and their sum for all networks. |
+| [`getchaintxstats`](https://developer.bitcoin.org/reference/rpc/getchaintxstats.html) | low | Compute statistics about the total number and rate of transactions in the chain. |
+| [`getnetworkinfo`](https://developer.bitcoin.org/reference/rpc/getnetworkinfo.html) | high | Returns various state info regarding P2P networking. |
+| [`getblockchaininfo`](https://developer.bitcoin.org/reference/rpc/getblockchaininfo.html) | low | Returns various state info regarding blockchain processing. |
+| [`getorphantxs`](https://github.com/bitcoin/bitcoin/pull/30793) | high | (EXPERIMENTAL) Shows transactions in the tx orphanage. |
+| [`getrawaddrman`](https://github.com/bitcoin/bitcoin/pull/28523) | low | (EXPERIMENTAL) Returns information on all address manager entries for the new and tried tables. |
