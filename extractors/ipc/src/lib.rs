@@ -96,9 +96,14 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
     loop {
         tokio::select! {
             _ = interval.tick() => {
+                 if ipc_session.rpc_task.is_finished() {
+                    log::error!("Lost connection to IPC socket. Exiting.");
+                    break;
+                }
+
                 if let Err(e) = get_tip(&ipc_session, &nats_client).await {
-                        log::error!("Could not fetch and publish 'getHeight': {}", e)
-                    }
+                        log::error!("Could not fetch and publish 'BlockTip': {}", e)
+                }
             }
             res = shutdown_rx.changed() => {
                 match res {
