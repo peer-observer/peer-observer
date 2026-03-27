@@ -17,6 +17,7 @@ message rpc {
     BlockchainInfo blockchain_info = 9;
     OrphanTxs orphan_txs = 10;
     Addrman addrman = 11;
+    EstimateSmartFee estimate_smart_fee = 12;
   }
 }
 
@@ -239,4 +240,18 @@ message AddrmanEntry {
   required string source_network        = 7;    // The network (ipv4, ipv6, onion, i2p, cjdns) of the source address
   optional uint32 mapped_as             = 8;    // Mapped AS (Autonomous System) number at the end of the BGP route to the peer, used for diversifying peer selection (only displayed if the -asmap config option is set)
   optional uint32 source_mapped_as      = 9;    // Mapped AS (Autonomous System) number at the end of the BGP route to the source, used for diversifying peer selection (only displayed if the -asmap config option is set)
+}
+
+enum FeeEstimateMode {
+  UNSET = 0;
+  ECONOMICAL = 1;
+  CONSERVATIVE = 2;
+}
+
+message EstimateSmartFee {
+  optional double fee_rate = 1; // The estimated fee rate in sat/vB, if the estimation succeeded
+  required uint32 blocks = 2; // The target number of blocks for confirmation returned by Bitcoin Core (may differ from the requested target, if not enough data is available for estimation)
+  required uint32 requested_blocks = 3; // The requested target number of blocks for confirmation
+  required FeeEstimateMode mode = 4;
+  repeated string errors = 5; // Errors encountered during processing (if any)
 }

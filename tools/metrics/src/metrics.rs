@@ -1,10 +1,12 @@
 use shared::prometheus::{
-    register_gauge_with_registry, register_histogram_vec_with_registry,
-    register_int_counter_vec_with_registry, register_int_counter_with_registry,
-    register_int_gauge_vec_with_registry, register_int_gauge_with_registry, HistogramOpts, Opts,
-    Registry,
+    register_gauge_vec_with_registry, register_gauge_with_registry,
+    register_histogram_vec_with_registry, register_int_counter_vec_with_registry,
+    register_int_counter_with_registry, register_int_gauge_vec_with_registry,
+    register_int_gauge_with_registry, HistogramOpts, Opts, Registry,
 };
-use shared::prometheus::{Gauge, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
+use shared::prometheus::{
+    Gauge, GaugeVec, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
+};
 
 const NAMESPACE: &str = "peerobserver";
 
@@ -108,6 +110,16 @@ macro_rules! g {
         let $name: Gauge =
             register_gauge_with_registry!(Opts::new(stringify!($name), $desc), $registry)
                 .expect(concat!("Could not create metric '", stringify!($name), "'"));
+    };
+}
+macro_rules! gv {
+    ($name:ident, $desc:expr, $labels:expr, $registry:expr) => {
+        let $name: GaugeVec = register_gauge_vec_with_registry!(
+            Opts::new(stringify!($name), $desc),
+            &$labels,
+            $registry
+        )
+        .expect(concat!("Could not create metric '", stringify!($name), "'"));
     };
 }
 
@@ -354,6 +366,9 @@ pub struct Metrics {
     pub rpc_getrawaddrman_changed_services: IntCounterVec,
     pub rpc_getrawaddrman_changed_timestamps: IntCounterVec,
 
+    // estimatesmartfee
+    pub rpc_estimatesmartfee_feerate: GaugeVec,
+
     // P2P-extractor
     pub p2pextractor_ping_duration_nanoseconds: IntGauge,
     pub p2pextractor_addrv2relay_addresses: IntCounterVec,
@@ -568,6 +583,9 @@ impl Metrics {
         icv!(rpc_getrawaddrman_changed_services, "Number of entries where the services changed since the last fetch to the addrman by table.", ["table"], registry);
         icv!(rpc_getrawaddrman_changed_timestamps, "Number of entries where the timestamp changed since the last fetch to the addrman by table.", ["table"], registry);
 
+        // estimatesmartfee
+        gv!(rpc_estimatesmartfee_feerate, "The feerate estimate in sat/vB by target block and mode.", ["target_block", "mode"], registry);
+
         // P2P-extractor
         ig!(p2pextractor_ping_duration_nanoseconds, "The time it takes for a connected Bitcoin node to respond to a ping with a pong in nanoseconds.", registry);
         icv!(p2pextractor_addrv2relay_addresses, "The total number of addresses relayed to the p2p-extractor by the node, per network", ["network"], registry);
@@ -778,6 +796,9 @@ impl Metrics {
             rpc_getrawaddrman_replaced_entry,
             rpc_getrawaddrman_changed_timestamps,
             rpc_getrawaddrman_changed_services,
+
+            // estimatesmartfee
+            rpc_estimatesmartfee_feerate,
 
             // p2p-extractor
             p2pextractor_ping_duration_nanoseconds,

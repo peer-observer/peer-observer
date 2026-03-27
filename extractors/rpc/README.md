@@ -69,6 +69,8 @@ Options:
           Disable querying and publishing of `getorphantxs` data
       --disable-getrawaddrman
           Disable querying and publishing of `getrawaddrman` data
+      --disable-estimatesmartfee
+          Disable querying and publishing of `estimatesmartfee` data
   -h, --help
           Print help
   -V, --version
@@ -95,3 +97,4 @@ low polling frequency: interval controlled with `--query-interval-less-frequent`
 | [`getblockchaininfo`](https://developer.bitcoin.org/reference/rpc/getblockchaininfo.html) | low | Returns various state info regarding blockchain processing. |
 | [`getorphantxs`](https://github.com/bitcoin/bitcoin/pull/30793) | high | (EXPERIMENTAL) Shows transactions in the tx orphanage. |
 | [`getrawaddrman`](https://github.com/bitcoin/bitcoin/pull/28523) | low | (EXPERIMENTAL) Returns information on all address manager entries for the new and tried tables. |
+| [`estimatesmartfee`](https://developer.bitcoin.org/reference/rpc/estimatesmartfee.html) | high | Returns fee estimates for transactions within a specified number of blocks. |

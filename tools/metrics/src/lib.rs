@@ -22,7 +22,7 @@ use shared::protobuf::{
     event::{event::PeerObserverEvent, Event},
     log_extractor::{log, Log, LogDebugCategory, LogLevel},
     p2p_extractor::p2p,
-    rpc_extractor::{rpc, Addrman, AddrmanBucket},
+    rpc_extractor::{rpc, Addrman, AddrmanBucket, FeeEstimateMode},
 };
 use shared::tokio::sync::watch;
 use shared::util::{self, is_on_linkinglion_banlist};
@@ -980,6 +980,18 @@ fn handle_rpc_event(e: &rpc::RpcEvent, state_arc: Arc<Mutex<State>>, metrics: me
                     .inc_by(tried_changes.changed_timestamp);
             }
             state.addrman = addrman.clone();
+        }
+        rpc::RpcEvent::EstimateSmartFee(estimate) => {
+            if let Some(fee_rate) = estimate.fee_rate {
+                let mode = FeeEstimateMode::try_from(estimate.mode)
+                    .expect("Invalid fee estimate mode")
+                    .to_string();
+
+                metrics
+                    .rpc_estimatesmartfee_feerate
+                    .with_label_values(&[&estimate.requested_blocks.to_string(), &mode])
+                    .set(fee_rate);
+            };
         }
     }
 }

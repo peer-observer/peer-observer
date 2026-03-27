@@ -1,6 +1,7 @@
 use shared::clap::{ArgGroup, Parser};
 use shared::corepc_client::client_sync::Auth;
 use shared::corepc_client::client_sync::v30::Client;
+use shared::corepc_client::types::v30::EstimateSmartFee as RPCEstimateSmartFee;
 use shared::corepc_node::mtype::{
     GetBlockchainInfo, GetChainTxStats, GetNetworkInfo, GetOrphanTxsVerboseTwo,
 };
@@ -9,7 +10,7 @@ use shared::nats_subjects::Subject;
 use shared::nats_util::{self, NatsArgs};
 use shared::prost::Message;
 use shared::protobuf::event::{Event, event::PeerObserverEvent};
-use shared::protobuf::rpc_extractor;
+use shared::protobuf::rpc_extractor::{self, EstimateSmartFee, FeeEstimateMode};
 use shared::tokio::sync::watch;
 use shared::tokio::time::{self, Duration};
 use shared::{async_nats, clap};
@@ -116,6 +117,10 @@ pub struct Args {
     /// Disable querying and publishing of `getrawaddrman` data.
     #[arg(long, default_value_t = false)]
     pub disable_getrawaddrman: bool,
+
+    /// Disable querying and publishing of `estimatesmartfee` data.
+    #[arg(long, default_value_t = false)]
+    pub disable_estimatesmartfee: bool,
 }
 
 impl Args {
@@ -139,6 +144,7 @@ impl Args {
         disable_getblockchaininfo: bool,
         disable_getorphantxs: bool,
         disable_getrawaddrman: bool,
+        disable_getestimatesmartfee: bool,
     ) -> Args {
         Self {
             nats,
@@ -161,6 +167,7 @@ impl Args {
             disable_getblockchaininfo,
             disable_getorphantxs,
             disable_getrawaddrman,
+            disable_estimatesmartfee: disable_getestimatesmartfee,
             // when adding more disable_* args, make sure to update the disable_all below
         }
     }
@@ -243,6 +250,10 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         "Querying getrawaddrman enabled: {}",
         !args.disable_getrawaddrman
     );
+    log::info!(
+        "Querying estimatesmartfee enabled: {}",
+        !args.disable_estimatesmartfee
+    );
     // check if we have at least one RPC to query
     let disable_all = args.disable_getpeerinfo
         && args.disable_getmempoolinfo
@@ -254,7 +265,8 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         && args.disable_getnetworkinfo
         && args.disable_getblockchaininfo
         && args.disable_getorphantxs
-        && args.disable_getrawaddrman;
+        && args.disable_getrawaddrman
+        && args.disable_estimatesmartfee;
     if disable_all {
         log::warn!("No RPC configured to be queried!");
     }
@@ -293,6 +305,10 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
                 if !args.disable_getorphantxs
                     && let Err(e) = getorphantxs(&rpc_client, &nats_client, &metrics).await {
                         log::error!("Could not fetch and publish 'getorphantxs': {}", e)
+                }
+                if !args.disable_estimatesmartfee
+                    && let Err(e) = estimatesmartfee(&rpc_client, &nats_client, &metrics).await {
+                        log::error!("Could not fetch and publish 'estimatesmartfee': {}", e)
                 }
             }
             _ = less_frequent_interval.tick() => {
@@ -629,5 +645,51 @@ async fn getrawaddrman(
                 .with_label_values(&["getrawaddrman"])
                 .inc();
         })?;
+    Ok(())
+}
+
+async fn estimatesmartfee(
+    rpc_client: &Client,
+    nats_client: &async_nats::Client,
+    metrics: &Metrics,
+) -> Result<(), FetchOrPublishError> {
+    const BLOCKS_10MIN: u32 = 1;
+    const BLOCKS_1HOUR: u32 = 6;
+    const BLOCKS_1DAY: u32 = 144;
+    const BLOCK_TARGETS: [u32; 3] = [BLOCKS_10MIN, BLOCKS_1HOUR, BLOCKS_1DAY];
+
+    const MODES: [FeeEstimateMode; 2] =
+        [FeeEstimateMode::Economical, FeeEstimateMode::Conservative];
+
+    for target in BLOCK_TARGETS {
+        for mode in MODES {
+            let estimate: RPCEstimateSmartFee =
+                measure_rpc_call("estimatesmartfee", metrics, || {
+                    // TODO: when https://github.com/rust-bitcoin/corepc/pull/531 gets released
+                    // use estimate_smart_fee_with_mode instead of the generic call
+                    rpc_client.call::<RPCEstimateSmartFee>(
+                        "estimatesmartfee",
+                        &[target.into(), mode.to_string().into()],
+                    )
+                })?;
+
+            let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+                rpc_event: Some(rpc_extractor::rpc::RpcEvent::EstimateSmartFee(
+                    EstimateSmartFee::from_rpc(estimate, target, mode),
+                )),
+            }))?;
+
+            nats_client
+                .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
+                .await
+                .inspect_err(|_| {
+                    metrics
+                        .nats_publish_errors
+                        .with_label_values(&["estimatesmartfee"])
+                        .inc();
+                })?;
+        }
+    }
+
     Ok(())
 }
