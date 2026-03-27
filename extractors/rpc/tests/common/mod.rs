@@ -46,6 +46,7 @@ pub struct EnabledRPCsInTest {
     pub getblockchaininfo: bool,
     pub getorphantxs: bool,
     pub getrawaddrman: bool,
+    pub estimatesmartfee: bool,
 }
 
 #[allow(dead_code)]
@@ -64,6 +65,7 @@ impl EnabledRPCsInTest {
             getblockchaininfo: true,
             getorphantxs: true,
             getrawaddrman: true,
+            estimatesmartfee: true,
         }
     }
 
@@ -104,6 +106,9 @@ impl EnabledRPCsInTest {
         if self.getrawaddrman {
             methods.push("getrawaddrman");
         }
+        if self.estimatesmartfee {
+            methods.push("estimatesmartfee");
+        }
         methods
     }
 }
@@ -139,6 +144,7 @@ pub fn make_test_args(
         !rpcs.getblockchaininfo,
         !rpcs.getorphantxs,
         !rpcs.getrawaddrman,
+        !rpcs.estimatesmartfee,
     )
 }
 

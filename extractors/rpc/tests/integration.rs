@@ -18,9 +18,12 @@ use shared::{
     prost::Message,
     protobuf::{
         event::{Event, event::PeerObserverEvent},
-        rpc_extractor::rpc::RpcEvent::{
-            Addrman, AddrmanInfo, BlockchainInfo, ChainTxStats, MemoryInfo, MempoolInfo, NetTotals,
-            NetworkInfo, OrphanTxs, PeerInfos, Uptime,
+        rpc_extractor::{
+            FeeEstimateMode,
+            rpc::RpcEvent::{
+                Addrman, AddrmanInfo, BlockchainInfo, ChainTxStats, EstimateSmartFee, MemoryInfo,
+                MempoolInfo, NetTotals, NetworkInfo, OrphanTxs, PeerInfos, Uptime,
+            },
         },
     },
     testing::nats_server::NatsServerForTesting,
@@ -39,7 +42,7 @@ const TEST_TIMEOUT_SECONDS: u64 = 5;
 async fn check(
     rpcs: EnabledRPCsInTest,
     test_setup: fn(&corepc_node::Node, &corepc_node::Node),
-    check_expected: fn(PeerObserverEvent) -> (),
+    mut check_expected: impl FnMut(PeerObserverEvent),
 ) {
     setup();
     let (node1, node2) = setup_two_connected_nodes();
@@ -585,6 +588,75 @@ async fn test_integration_rpc_testsshouldtimeout() {
         |event| match event {
             PeerObserverEvent::RpcExtractor(_) => {
                 panic!("We should never receive an event here.")
+            }
+            _ => panic!("unexpected event {:?}", event),
+        },
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_rpc_estimatesmartfee() {
+    println!("test that we receive estimatesmartfee RPC events");
+
+    let expected_combinations = [
+        (1, FeeEstimateMode::Economical as i32),
+        (1, FeeEstimateMode::Conservative as i32),
+        (6, FeeEstimateMode::Economical as i32),
+        (6, FeeEstimateMode::Conservative as i32),
+        (144, FeeEstimateMode::Economical as i32),
+        (144, FeeEstimateMode::Conservative as i32),
+    ];
+
+    check(
+        EnabledRPCsInTest {
+            estimatesmartfee: true,
+            ..Default::default()
+        },
+        |node1, node2| {
+            let miner_address = node1
+                .client
+                .new_address()
+                .expect("failed to get new address");
+            node1
+                .client
+                .generate_to_address(101, &miner_address)
+                .expect("failed to generate to address");
+
+            // generate some transactions to create enough data for fee estimation
+            for _ in 0..20 {
+                let address = node2
+                    .client
+                    .new_address()
+                    .expect("failed to get new address");
+                node1
+                    .client
+                    .call::<String>("sendtoaddress", &[address.to_string().into(), "1".into()])
+                    .expect("failed to send to address");
+
+                node1
+                    .client
+                    .generate_to_address(1, &miner_address)
+                    .expect("failed to generate to address");
+            }
+        },
+        |event| match event {
+            PeerObserverEvent::RpcExtractor(r) => {
+                if let Some(ref e) = r.rpc_event {
+                    match e {
+                        EstimateSmartFee(result) => {
+                            // Fee rate most of the time is 0.0001_0000 on this scenario, but sometimes is greater
+                            assert!(result.fee_rate >= Some(10.0));
+
+                            let found = expected_combinations.iter().any(|(blocks, mode)| {
+                                *blocks == result.requested_blocks && *mode == result.mode
+                            });
+
+                            assert!(found);
+                        }
+                        _ => panic!("unexpected RPC data {:?}", r.rpc_event),
+                    }
+                }
             }
             _ => panic!("unexpected event {:?}", event),
         },

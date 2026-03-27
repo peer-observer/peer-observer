@@ -30,8 +30,9 @@ use shared::{
         p2p_extractor,
         rpc_extractor::{
             self, AddrManInfo, AddrManInfoNetwork, Addrman, AddrmanBucket, AddrmanEntry,
-            BlockchainInfo, ChainTxStats, MemoryInfo, MempoolInfo, NetTotals, NetworkInfo,
-            NetworkInfoNetwork, OrphanTx, OrphanTxs, PeerInfo, PeerInfos, UploadTarget,
+            BlockchainInfo, ChainTxStats, EstimateSmartFee, FeeEstimateMode, MemoryInfo,
+            MempoolInfo, NetTotals, NetworkInfo, NetworkInfoNetwork, OrphanTx, OrphanTxs, PeerInfo,
+            PeerInfos, UploadTarget,
         },
     },
     rand::{self, Rng},
@@ -3767,6 +3768,46 @@ async fn test_integration_metrics_log_line_bytes() {
         Subject::LogExtractor,
         r#"
         peerobserver_log_bytes{category="unknown",level="info"} 12
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_rpc_estimatesmartfee() {
+    println!("test that the estimatesmartfee metrics work");
+
+    publish_and_check(
+        &[
+            Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+                rpc_event: Some(rpc_extractor::rpc::RpcEvent::EstimateSmartFee(
+                    EstimateSmartFee {
+                        fee_rate: Some(1.08),
+                        blocks: 12,
+                        requested_blocks: 144,
+                        mode: FeeEstimateMode::Economical.into(),
+                        errors: vec![],
+                    },
+                )),
+            }))
+            .unwrap(),
+            Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+                rpc_event: Some(rpc_extractor::rpc::RpcEvent::EstimateSmartFee(
+                    EstimateSmartFee {
+                        fee_rate: Some(0.777),
+                        blocks: 2,
+                        requested_blocks: 6,
+                        mode: FeeEstimateMode::Conservative.into(),
+                        errors: vec![],
+                    },
+                )),
+            }))
+            .unwrap(),
+        ],
+        Subject::Rpc,
+        r#"
+            peerobserver_rpc_estimatesmartfee_feerate{mode="CONSERVATIVE",target_block="6"} 0.777
+            peerobserver_rpc_estimatesmartfee_feerate{mode="ECONOMICAL",target_block="144"} 1.08
         "#,
     )
     .await;
