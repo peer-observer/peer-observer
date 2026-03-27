@@ -12,7 +12,7 @@ fn main() {
         println!("Error while compiling protos: {}", e);
         panic!("Failed to code-gen the Rust structs from the Protobuf definitions");
     }
-    println!("cargo:rerun-if-changed=../protobuf/*");
+    println!("cargo:rerun-if-changed=../protobuf/");
 
     // Generate check functions for IP addresses
     gen_ip_match_fn(
