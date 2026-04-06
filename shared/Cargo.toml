@@ -13,7 +13,7 @@ serde = { version = "1.0.219", features = ["derive"] }
 clap = { version = "4.6.0", features = ["derive"] }
 simple_logger = "5.2.0"
 log = "0.4"
-async-nats = { version = "0.46.0", default-features = false } 
+async-nats = { version = "0.47.0", default-features = false } 
 prometheus = "0.14.0"
 lazy_static = "1.5.0"
 tokio = { version = "1.50.0", features = ["rt-multi-thread", "process", "signal"] }
