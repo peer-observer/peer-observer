@@ -1,0 +1,1081 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Signet Slow-Block Demo</title>
+  <style>
+    /* ── Reset & base ───────────────────────────────────────────── */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    #main-area {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    #svg-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    /* ── Fork-observer SVG ───────────────────────────────────────── */
+    #drawing-area {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      border: none;
+      display: block;
+    }
+
+    /* fork-observer block tree styles */
+    .link { stroke: grey; stroke-width: 2; fill: transparent; }
+    .link.being-mined { stroke: grey; stroke-width: 2; stroke-dasharray: 4 5; }
+    .block-text { font-size: 12px; text-anchor: middle; fill: black; }
+    .block-miner { font-size: 12px; text-anchor: middle; fill: #8b949e; }
+    .text-blocks-not-shown { fill: #8b949e; }
+    .tip-status-color-fill-active { fill: lime; }
+    .tip-status-color-fill-invalid { fill: fuchsia; }
+    .tip-status-color-fill-valid-fork { fill: cyan; }
+    .tip-status-color-fill-valid-headers { fill: red; }
+    .tip-status-color-fill-headers-only { fill: yellow; }
+    .tip-label { fill: #c9d1d9; }
+
+    /* ── Header bar ─────────────────────────────────────────────── */
+    #header-bar {
+      flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 8px 20px;
+      background: rgba(13, 17, 23, 0.9);
+      border-bottom: 1px solid #30363d;
+      z-index: 10;
+    }
+    #header-title {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      min-width: 0;
+    }
+    #header-bar h1 {
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    #header-explainer {
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    #timers {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 4px;
+      flex-shrink: 0;
+      align-self: stretch;
+    }
+    .timer {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .timer-label {
+      font-size: 13px;
+      color: #8b949e;
+      white-space: nowrap;
+    }
+    .timer-value {
+      font-size: 18px;
+      font-weight: bold;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      white-space: nowrap;
+    }
+    .timer-pending { color: #e6edf3; }
+    .timer-in-progress { color: #3fb950; }
+    .timer-done { color: #484f58; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .timer-in-progress { animation: pulse 2s ease-in-out infinite; }
+
+    /* ── Right panels container ─────────────────────────────────── */
+    #right-panels {
+      width: 42vw;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 4px;
+      overflow: hidden;
+    }
+
+    /* ── Validation events panel ────────────────────────────────── */
+    #validation-panel {
+      flex: 0 0 200px;
+      background: rgba(22, 27, 34, 0.88);
+      border: 1px solid #30363d;
+      padding: 6px 8px;
+      overflow-y: auto;
+      min-height: 0;
+      position: relative;
+    }
+    #sim-btn {
+      position: absolute;
+      top: 4px;
+      right: 6px;
+      background: none;
+      border: 1px solid #30363d;
+      color: #8b949e;
+      font-size: 14px;
+      line-height: 1;
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      padding: 0;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    #validation-panel:hover #sim-btn { opacity: 1; }
+    #validation-panel h2 {
+      font-size: 15px;
+      color: #8b949e;
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+    #validation-list {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .val-entry {
+      padding: 2px 4px;
+      border-bottom: 1px solid #21262d;
+      display: flex;
+      gap: 8px;
+      align-items: baseline;
+    }
+    .val-node { color: #8b949e; min-width: 60px; }
+    .val-height { color: #c9d1d9; }
+    .val-time-fast { color: #3fb950; }
+    .val-time-medium { color: #d29922; }
+    .val-time-slow { color: #f85149; font-weight: bold; }
+    .val-txs { color: #8b949e; }
+    .val-sigops { color: #8b949e; }
+
+    /* ── Log panels ─────────────────────────────────────────────── */
+    .log-panel {
+      background: rgba(30, 30, 30, 0.88);
+      border: 1px solid #30363d;
+      flex: 1 1 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .log-panel-header {
+      font-size: 20px;
+      font-weight: 600;
+      color: #8b949e;
+      padding: 6px 10px;
+      border-bottom: 1px solid #30363d;
+      flex-shrink: 0;
+    }
+    .log-container {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.4;
+      overflow-y: auto;
+      scrollbar-width: none;
+      padding: 2px;
+      flex: 1 1 0;
+      min-height: 0;
+    }
+    .log-container::-webkit-scrollbar { display: none; }
+    .log-line {
+      white-space: pre;
+      padding: 1px 4px;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    .log-ts { color: #6a9955; margin-right: 6px; }
+    .log-category {
+      display: inline-block; min-width: 90px; text-align: left;
+      margin-right: 6px; font-weight: bold;
+    }
+    .log-level {
+      display: inline-block; min-width: 50px; text-align: left;
+      margin-right: 6px; font-weight: bold;
+    }
+    .log-thread {
+      color: #808080; margin-right: 6px;
+      display: inline-block; min-width: 100px;
+    }
+    .log-msg { color: #d4d4d4; }
+    .log-msg-block-connected { color: #4ec9b0; }
+    .log-msg-block-checked { color: #dcdcaa; }
+
+
+    /* ── Sponsor messages ──────────────────────────────────────── */
+    .sponsor-log-line {
+      padding: 3px 6px;
+      color: #d29922;
+      font-size: 12px;
+      font-style: italic;
+      border-top: 1px dashed #30363d;
+      border-bottom: 1px dashed #30363d;
+    }
+    .sponsor-val-entry {
+      padding: 4px;
+      color: #d29922;
+      font-size: 12px;
+      font-style: italic;
+    }
+
+    /* ── Author ─────────────────────────────────────────────────── */
+    #author {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+      align-self: center;
+      margin-left: 20px;
+    }
+    #author img {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+    }
+    #author span {
+      font-size: 16px;
+      color: #8b949e;
+    }
+
+    /* ── WS status ──────────────────────────────────────────────── */
+    .ws-status {
+      font-size: 13px;
+      margin-left: 6px;
+    }
+    .ws-connected { color: #3fb950; }
+    .ws-disconnected { color: #f85149; }
+    .ws-connecting { color: #d29922; }
+  </style>
+</head>
+<body>
+  <div id="header-bar">
+    <div id="header-title">
+      <h1>Slow block validation on Signet: BIP-54 demo stream</h1>
+      <p id="header-explainer">
+          A monitoring setup with two nodes: <strong>Bitcoin Inquisition</strong> (BIP-54 implemented) and <strong>Bitcoin Core</strong> (unfixed).
+          There will be three runs at different times &mdash; during each, there will be a few slow-to-validate blocks.
+          The Bitcoin Core takes tens of seconds to process them while Inquisition rejects them immediately.
+          Each run ends with a reorg that removes the slow blocks from the chain.
+      </p>
+    </div>
+    <div id="timers"></div>
+    <div id="author">
+      <img src="https://b10c.me/0xb10c.png" alt="0xb10c">
+      <span>b10c.me</span>
+    </div>
+  </div>
+
+  <div id="main-area">
+    <div id="svg-container">
+      <svg id="drawing-area"></svg>
+      <div id="validation-panel">
+        <h2>Block validation duration</h2>
+        <button id="sim-btn" onclick="simulateValidation()">+</button>
+        <div id="validation-list"></div>
+      </div>
+    </div>
+
+    <div id="right-panels">
+      <div class="log-panel">
+        <div class="log-panel-header">
+          <span id="log-a-label">Node A</span>
+          <span id="ws-status-a" class="ws-status"></span>
+        </div>
+        <div class="log-container" id="log-container-a"></div>
+      </div>
+      <div class="log-panel">
+        <div class="log-panel-header">
+          <span id="log-b-label">Node B</span>
+          <span id="ws-status-b" class="ws-status"></span>
+        </div>
+        <div class="log-container" id="log-container-b"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/d3@7.js"></script>
+  <script>
+    // ════════════════════════════════════════════════════════════════
+    // HARDCODED CONFIGURATION — edit these before the stream
+    // ════════════════════════════════════════════════════════════════
+    const WS_NODE_A = { label: "Bitcoin Core v31.0", url: "wss://signet.peer.observer/websocket/node01/" };
+    const WS_NODE_B = { label: "Inquisition  v29.2", url: "wss://signet.peer.observer/websocket/node02/" };
+
+    const FORK_OBSERVER_DATA_URL = "https://signet.peer.observer/forks/api/1/data.json";
+    const FORK_OBSERVER_SSE_URL = "https://signet.peer.observer/forks/api/changes";
+
+    const FILTER_TERMS = ["bench", "validation"];
+    const EXCLUDE_TERMS = ["net", "FlushStateToDisk", "BatchWrite", "ChainStateFlushed", "TransactionAddedToMempool", "TransactionRemovedFromMempool", "Enqueuing", "MempoolTransactionsRemovedForBlock", "CreateNewBlock() packages"];
+    const HIGHLIGHT_TERMS = ["- Verify", "- Connect block:"];
+
+    const EVENTS = [
+      { label: "Run 1", ts: Date.UTC(2026, 3, 8, 14, 0, 0) },
+      { label: "Run 2", ts: Date.UTC(2026, 3, 8, 22, 0, 0) },
+      { label: "Run 3", ts: Date.UTC(2026, 3, 9,  9, 0, 0) },
+    ];
+    const EVENT_DURATION_MS = 2 * 60 * 60 * 1000;
+
+    const HIGHLIGHT_COLORS = [
+      "#ff6b6b", "#ffd93d", "#6bcb77", "#4d96ff", "#ff922b",
+      "#cc5de8", "#20c997", "#ff8787", "#74c0fc", "#f783ac"
+    ];
+    const LOG_BACKLOG = 500;
+
+    // ── Block chime ─────────────────────────────────────────────────
+    let lastChimeTime = 0;
+    function playBlockChime() {
+      const now = Date.now();
+      if (now - lastChimeTime < 2000) return;
+      lastChimeTime = now;
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
+        notes.forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = "sine";
+          osc.frequency.value = freq;
+          const t = ctx.currentTime + i * 0.12;
+          gain.gain.setValueAtTime(0, t);
+          gain.gain.linearRampToValueAtTime(0.18, t + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+          osc.start(t);
+          osc.stop(t + 0.6);
+        });
+      } catch(e) {}
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // COUNTDOWN TIMERS
+    // ════════════════════════════════════════════════════════════════
+    (function initTimers() {
+      const container = document.getElementById("timers");
+
+      const clockDiv = document.createElement("div");
+      clockDiv.className = "timer";
+      clockDiv.innerHTML = `<div class="timer-label">UTC</div><div class="timer-value" id="utc-clock"></div>`;
+      container.appendChild(clockDiv);
+
+      EVENTS.forEach((ev, i) => {
+        const div = document.createElement("div");
+        div.className = "timer";
+        div.innerHTML = `<div class="timer-label">${ev.label}</div><div class="timer-value" id="timer-${i}"></div>`;
+        container.appendChild(div);
+      });
+
+      function update() {
+        const now = Date.now();
+        const d = new Date(now);
+        const hh = String(d.getUTCHours()).padStart(2, "0");
+        const mm = String(d.getUTCMinutes()).padStart(2, "0");
+        const ss = String(d.getUTCSeconds()).padStart(2, "0");
+        document.getElementById("utc-clock").textContent = hh + ":" + mm + ":" + ss;
+        EVENTS.forEach((ev, i) => {
+          const el = document.getElementById("timer-" + i);
+          const diff = ev.ts - now;
+          if (diff > 0) {
+            const h = Math.floor(diff / 3600000);
+            const m = Math.floor((diff % 3600000) / 60000);
+            const s = Math.floor((diff % 60000) / 1000);
+            el.textContent = (h > 0 ? h + "h " : "") + m + "m";
+            el.className = "timer-value timer-pending";
+          } else if (-diff < EVENT_DURATION_MS) {
+            el.textContent = "now";
+            el.className = "timer-value timer-in-progress";
+          } else {
+            el.textContent = "done";
+            el.className = "timer-value timer-done";
+          }
+        });
+      }
+      update();
+      setInterval(update, 1000);
+    })();
+
+    // ════════════════════════════════════════════════════════════════
+    // LOG FORMATTING (from logs.html)
+    // ════════════════════════════════════════════════════════════════
+    const LOG_CATEGORIES = [
+      "unknown", "addrman", "bench", "blockstorage", "cmpctblock",
+      "coindb", "estimatefee", "http", "i2p", "ipc",
+      "leveldb", "libevent", "mempool", "mempoolrej", "net",
+      "proxy", "prune", "qt", "rand", "reindex",
+      "rpc", "scan", "selectcoins", "tor", "txpackages",
+      "txreconciliation", "validation", "walletdb", "zmq"
+    ];
+    const CATEGORY_COLORS = {
+      net: "#7a7a7a", validation: "#4ec9b0", mempool: "#c586c0",
+      mempoolrej: "#d16969", blockstorage: "#569cd6", cmpctblock: "#4fc1ff",
+      addrman: "#dcdcaa", bench: "#b5cea8", coindb: "#ce9178",
+      http: "#9cdcfe", rpc: "#6a9955", tor: "#cc5de8",
+      i2p: "#20c997", txpackages: "#d7ba7d", txreconciliation: "#f783ac",
+      reindex: "#ff922b", prune: "#74c0fc",
+    };
+    const LOG_LEVELS = ["INFO", "WARNING", "ERROR", "DEBUG", "TRACE"];
+    const LEVEL_COLORS = {
+      INFO: "#569cd6", WARNING: "#ffd93d", ERROR: "#ff6b6b",
+      DEBUG: "#d4d4d4", TRACE: "#808080",
+    };
+
+    function categoryName(id) {
+      return (typeof id === "string") ? id : (LOG_CATEGORIES[id] || "unknown(" + id + ")");
+    }
+    function categoryColor(name) { return CATEGORY_COLORS[name] || "#569cd6"; }
+    function levelName(id) {
+      return (typeof id === "string") ? id : (LOG_LEVELS[id] || "unknown(" + id + ")");
+    }
+    function levelColor(name) { return LEVEL_COLORS[name] || "#d4d4d4"; }
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    }
+
+    function applyHighlights(text) {
+      if (HIGHLIGHT_TERMS.length === 0) return escapeHtml(text);
+      const escapedTerms = HIGHLIGHT_TERMS.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      const regex = new RegExp("(" + escapedTerms.join("|") + ")", "gi");
+      const parts = text.split(regex);
+      let html = "";
+      for (const part of parts) {
+        const lp = part.toLowerCase();
+        let idx = -1;
+        for (let i = 0; i < HIGHLIGHT_TERMS.length; i++) {
+          if (lp === HIGHLIGHT_TERMS[i].toLowerCase()) { idx = i; break; }
+        }
+        if (idx >= 0) {
+          const c = HIGHLIGHT_COLORS[idx % HIGHLIGHT_COLORS.length];
+          html += `<span style="background:${c};color:#000;border-radius:2px;">${escapeHtml(part)}</span>`;
+        } else {
+          html += escapeHtml(part);
+        }
+      }
+      return html;
+    }
+
+    function formatLogTimestamp(us) {
+      const d = new Date(us / 1000);
+      const h = String(d.getHours()).padStart(2, "0");
+      const m = String(d.getMinutes()).padStart(2, "0");
+      const s = String(d.getSeconds()).padStart(2, "0");
+      const ms = String(d.getMilliseconds()).padStart(3, "0");
+      return h + ":" + m + ":" + s + "." + ms;
+    }
+
+    function formatLogMessage(log) {
+      const logEvent = log.log_event;
+      if (logEvent.hasOwnProperty("UnknownLogMessage")) {
+        return { text: logEvent.UnknownLogMessage.raw_message, cssClass: "" };
+      } else if (logEvent.hasOwnProperty("BlockConnectedLog")) {
+        const bc = logEvent.BlockConnectedLog;
+        return { text: "Block connected: " + bc.block_hash + " at height " + bc.block_height, cssClass: "log-msg-block-connected" };
+      } else if (logEvent.hasOwnProperty("BlockCheckedLog")) {
+        const bc = logEvent.BlockCheckedLog;
+        return { text: "Block checked: " + bc.block_hash + " state=" + bc.state + " " + bc.debug_message, cssClass: "log-msg-block-checked" };
+      }
+      return { text: JSON.stringify(logEvent), cssClass: "" };
+    }
+
+    function matchesFilter(messageText) {
+      if (FILTER_TERMS.length === 0) return true;
+      const lower = messageText.toLowerCase();
+      return FILTER_TERMS.some(t => lower.includes(t));
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // DUAL LOG PANELS + VALIDATION EVENTS
+    // ════════════════════════════════════════════════════════════════
+    const validationList = document.getElementById("validation-list");
+    const logContainerA = document.getElementById("log-container-a");
+    const logContainerB = document.getElementById("log-container-b");
+    const logLineCounts = { a: 0, b: 0 };
+
+    function addLogLine(log, container, key) {
+      const { text: msgText, cssClass } = formatLogMessage(log);
+      const catName = categoryName(log.category);
+      const lvlName = levelName(log.log_level);
+
+      const logText = catName + " " + lvlName + " " + msgText;
+      if (!matchesFilter(logText)) return;
+      if (EXCLUDE_TERMS.length > 0 && EXCLUDE_TERMS.some(t => logText.toLowerCase().includes(t.toLowerCase()))) return;
+
+      const line = document.createElement("div");
+      line.className = "log-line";
+      const ts = `<span class="log-ts">${formatLogTimestamp(log.log_timestamp)}</span>`;
+      const cat = `<span class="log-category" style="color:${categoryColor(catName)}">${escapeHtml(catName)}</span>`;
+      const msgHtml = applyHighlights(msgText);
+      const msg = `<span class="log-msg ${cssClass}">${msgHtml}</span>`;
+      line.innerHTML = ts + cat + msg;
+      container.appendChild(line);
+      logLineCounts[key]++;
+      lastActivityTime = Date.now();
+      if (msgText.includes("NewPoWValidBlock")) playBlockChime();
+
+      // auto-scroll
+      const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 30;
+      if (atBottom) container.scrollTop = container.scrollHeight;
+    }
+
+    function trimLogBacklog(container, key) {
+      const excess = logLineCounts[key] - LOG_BACKLOG;
+      if (excess <= 0) return;
+      const children = container.children;
+      let count = Math.min(excess, children.length);
+      if (count > 0) {
+        const range = document.createRange();
+        range.setStartBefore(children[0]);
+        range.setEndAfter(children[count - 1]);
+        range.deleteContents();
+        logLineCounts[key] -= count;
+      }
+    }
+    setInterval(() => { trimLogBacklog(logContainerA, "a"); trimLogBacklog(logContainerB, "b"); }, 2000);
+
+    // ── Sponsor messages ────────────────────────────────────────────
+    let lastActivityTime = Date.now();
+    const SPONSOR_IDLE_MS = 30 * 1000;
+    const SPONSOR_MESSAGES = [
+      { text: "⚡ Support this stream: ₿bolt12@b10c.me", target: "log" },
+      { text: "⚡ Support this stream: ₿bolt12@b10c.me", target: "val" },
+      { text: "Donations: b10c.me/funding", target: "log" },
+      { text: "Donations: b10c.me/funding", target: "val" },
+      { text: "bitrefill.com/invite/0xb10c", target: "log" },
+      { text: "bitrefill.com/invite/0xb10c", target: "val" },
+      { text: "Obscura VPN: obscura.net/refer#amerch", target: "val" },
+      { text: "Obscura VPN: obscura.net/refer#amerch", target: "log" },
+      { text: "Gift Claude Pro to claude@b10c.me", target: "log" },
+      { text: "Gift Claude Pro to claude@b10c.me", target: "val" },
+    ];
+    let lastSponsorIdx = -1;
+
+    function showSponsorMessage() {
+      // remove previous
+      document.querySelectorAll(".sponsor-log-line, .sponsor-val-entry").forEach(el => el.remove());
+
+      // pick a different message than last time
+      let idx;
+      do { idx = Math.floor(Math.random() * SPONSOR_MESSAGES.length); } while (idx === lastSponsorIdx);
+      lastSponsorIdx = idx;
+      const m = SPONSOR_MESSAGES[idx];
+
+      if (m.target === "log") {
+        const el = document.createElement("div");
+        el.className = "sponsor-log-line";
+        el.textContent = m.text;
+        const container = Math.random() < 0.5 ? logContainerA : logContainerB;
+        container.appendChild(el);
+        container.scrollTop = container.scrollHeight;
+      } else {
+        const el = document.createElement("div");
+        el.className = "sponsor-val-entry";
+        el.textContent = m.text;
+        validationList.insertBefore(el, validationList.firstChild);
+      }
+    }
+
+    setInterval(() => {
+      if (Date.now() - lastActivityTime >= SPONSOR_IDLE_MS) {
+        showSponsorMessage();
+        lastActivityTime = Date.now(); // reset so it doesn't spam
+      }
+    }, 5000);
+
+    function addValidationEntry(event, nodeLabel) {
+      const timeSec = event.connection_time / 1e9;
+      let timeClass = "val-time-fast";
+      if (timeSec >= 10) timeClass = "val-time-slow";
+      else if (timeSec >= 1) timeClass = "val-time-medium";
+
+      const hashArr = event.hash;
+      let hashHex = "";
+      if (Array.isArray(hashArr)) {
+        hashHex = hashArr.map(b => b.toString(16).padStart(2, "0")).join("");
+      } else if (typeof hashArr === "string") {
+        hashHex = hashArr;
+      } else {
+        hashHex = String(hashArr);
+      }
+
+      const entry = document.createElement("div");
+      entry.className = "val-entry";
+      entry.innerHTML =
+        `<span class="val-node">${escapeHtml(nodeLabel)}</span>` +
+        `<span class="val-height">height=${event.height}</span>` +
+        `<span class="val-hash">…${hashHex.slice(-16)}</span>` +
+        `<span class="${timeClass}">${timeSec.toFixed(1)}s</span>` +
+        `<span class="val-txs">txs=${event.transactions}</span>` +
+        `<span class="val-sigops">sigops=${event.sigops}</span>`;
+
+      lastActivityTime = Date.now();
+
+      // prepend so newest is on top
+      validationList.insertBefore(entry, validationList.firstChild);
+
+      // limit entries
+      while (validationList.children.length > 50) {
+        validationList.removeChild(validationList.lastChild);
+      }
+    }
+
+    let _simHeight = 100000;
+    function simulateValidation() {
+      const times = [0.05, 0.4, 1.8, 5.2, 12.7];
+      const nodes = ["Node A", "Node B"];
+      addValidationEntry({
+        connection_time: times[Math.floor(Math.random() * times.length)] * 1e9,
+        height: _simHeight++,
+        hash: Array.from({length: 32}, () => Math.floor(Math.random() * 256)),
+        transactions: Math.floor(Math.random() * 3000),
+        sigops: Math.floor(Math.random() * 80000),
+      }, nodes[Math.floor(Math.random() * nodes.length)]);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // WEBSOCKET CONNECTIONS (from lib.js processWebsocketMessage)
+    // ════════════════════════════════════════════════════════════════
+    function createNodeConnection(config, logContainer, logKey, statusElId) {
+      const statusEl = document.getElementById(statusElId);
+
+      function setStatus(text, cls) {
+        statusEl.textContent = text;
+        statusEl.className = "ws-status " + cls;
+      }
+
+      function connect() {
+        setStatus("connecting...", "ws-connecting");
+        const ws = new WebSocket(config.url);
+
+        ws.addEventListener("open", () => {
+          setStatus("connected", "ws-connected");
+          ws.send(JSON.stringify({
+            log: true,
+            ebpf: { messages: false, mempool: false, validation: true, connections: false, addrman: false },
+            p2p: false,
+            rpc: false
+          }));
+        });
+
+        ws.addEventListener("message", (e) => {
+          const event = JSON.parse(e.data);
+
+          if (event.hasOwnProperty("LogExtractor")) {
+            const log = event.LogExtractor;
+            const logEvent = log.log_event;
+            if (logEvent.hasOwnProperty("UnknownLogMessage") ||
+                logEvent.hasOwnProperty("BlockConnectedLog") ||
+                logEvent.hasOwnProperty("BlockCheckedLog")) {
+              addLogLine(log, logContainer, logKey);
+            }
+          } else if (event.hasOwnProperty("EbpfExtractor")) {
+            const ebpf = event.EbpfExtractor.ebpf_event;
+            if (ebpf.hasOwnProperty("Validation")) {
+              const valEvent = ebpf.Validation.event;
+              if (valEvent.hasOwnProperty("BlockConnected")) {
+                addValidationEntry(valEvent.BlockConnected, config.label);
+              }
+            }
+          }
+        });
+
+        ws.addEventListener("close", () => {
+          setStatus("disconnected - reconnecting...", "ws-disconnected");
+          setTimeout(connect, 3000);
+        });
+
+        ws.addEventListener("error", () => {
+          setStatus("error", "ws-disconnected");
+        });
+      }
+
+      connect();
+    }
+
+    // Set labels
+    document.getElementById("log-a-label").textContent = WS_NODE_A.label;
+    document.getElementById("log-b-label").textContent = WS_NODE_B.label;
+
+    // Connect to both nodes
+    createNodeConnection(WS_NODE_A, logContainerA, "a", "ws-status-a");
+    createNodeConnection(WS_NODE_B, logContainerB, "b", "ws-status-b");
+
+    // ════════════════════════════════════════════════════════════════
+    // FORK-OBSERVER BLOCK TREE (from blocktree.js + main.js)
+    // ════════════════════════════════════════════════════════════════
+    const NODE_SIZE = 100;
+    const MAX_USIZE = 18446744073709551615;
+    const BLOCK_SIZE = 50;
+    const MIN_DIFFICULTY = 1;
+
+    const fo_orientation = {
+      x: (d, htoi) => htoi[d.data.data.height] * NODE_SIZE,
+      y: (d, _) => d.x,
+      linkDir: (htoi) => d3.linkHorizontal()
+        .x(d => fo_orientation.x(d, htoi))
+        .y(d => fo_orientation.y(d, htoi)),
+      hidden_blocks_text: { offset_x: 0, offset_y: 15, anchor: "middle" },
+      block_text_rotate: 0,
+    };
+
+    const status_to_color = {
+      "active": "lime",
+      "invalid": "fuchsia",
+      "valid-fork": "cyan",
+      "valid-headers": "red",
+      "headers-only": "yellow",
+    };
+
+    const indicator_radius = 8;
+    const indicator_margin = 1;
+
+    let fo_svg = d3.select("#drawing-area");
+    let fo_initialDraw = true;
+    let fo_state_data = {};
+
+    const fo_zoom = d3.zoom()
+      .scaleExtent([0.15, 2])
+      .on("zoom", e => fo_g.attr("transform", e.transform));
+    fo_svg.call(fo_zoom);
+
+    let fo_g = fo_svg.append("g");
+
+    function stripUninteresting(node, x) {
+      if (node.children) {
+        node.children.forEach(child => {
+          const nextForkOrTip = findNextInteresting(child);
+          const distance = nextForkOrTip.depth - child.depth;
+          if (distance > x) {
+            child.children[0].children = [nextForkOrTip.parent];
+          }
+          stripUninteresting(nextForkOrTip, x);
+        });
+      }
+    }
+
+    function findNextInteresting(node) {
+      if (isInteresting(node)) return node;
+      for (const descendant of node) {
+        if (isInteresting(descendant)) return descendant;
+      }
+      return null;
+    }
+
+    function isInteresting(node) {
+      if (node.children === undefined) return true;
+      if (node.children.length > 1) return true;
+      if (node.data.status != "in-chain") return true;
+      return false;
+    }
+
+    function gen_treemap(tips, unique_heights) {
+      return d3.tree().size([tips, unique_heights]).nodeSize([NODE_SIZE, NODE_SIZE]);
+    }
+
+    function preprocess_data(data) {
+      const header_infos = data.header_infos;
+      const node_infos = data.nodes;
+
+      const hash_to_tipstatus = {};
+      node_infos.forEach(node => {
+        node.tips.forEach(tip => {
+          if (!(tip.hash in hash_to_tipstatus)) hash_to_tipstatus[tip.hash] = {};
+          if (!(tip.status in hash_to_tipstatus[tip.hash])) {
+            hash_to_tipstatus[tip.hash][tip.status] = { status: tip.status, count: 0, nodes: [] };
+          }
+          hash_to_tipstatus[tip.hash][tip.status].count++;
+          hash_to_tipstatus[tip.hash][tip.status].nodes.push(node);
+        });
+      });
+
+      header_infos.forEach(hi => {
+        const status = hash_to_tipstatus[hi.hash];
+        hi.status = status == undefined ? "in-chain" : Object.values(status);
+        hi.is_tip = status != undefined;
+      });
+
+      const treeData = d3.stratify()
+        .id(d => d.id)
+        .parentId(d => (d.prev_id == MAX_USIZE ? null : d.prev_id))
+        (header_infos);
+
+      stripUninteresting(treeData, 4);
+
+      const interesting_heights = [];
+      treeData.descendants().forEach(d => {
+        interesting_heights.push(d.data.height);
+        interesting_heights.push(d.data.height + 1);
+      });
+
+      const unique_heights = Array.from(new Set(interesting_heights));
+      unique_heights.sort((a, b) => a - b);
+
+      const htoi = {};
+      let last_height = 0;
+      let index = 0;
+      unique_heights.forEach(height => {
+        if (last_height + 1 > height) index += 1;
+        htoi[height] = index;
+        index += 1;
+        last_height = height;
+      });
+
+      const treemap = gen_treemap(0, unique_heights);
+      const hierarchy = d3.hierarchy(treeData);
+      hierarchy.sort((a, b) => d3.ascending(a.data.data.hash, b.data.data.hash));
+      const root_node = treemap(hierarchy);
+      const max_height = Math.max(...header_infos.map(d => d.height));
+
+      return [root_node, max_height, htoi];
+    }
+
+    function fo_draw() {
+      const data = fo_state_data;
+      if (!data.header_infos || data.header_infos.length === 0) return;
+
+      const o = fo_orientation;
+      const [root_node, max_height, htoi] = preprocess_data(data);
+
+      // Links
+      fo_g.selectAll(".link-block-block")
+        .data(root_node.links(), d => `${d.source.data.data.hash}-${d.target.data.data.hash}`)
+        .join(
+          enter => {
+            enter.append("path")
+              .attr("class", "link link-block-block")
+              .attr("d", o.linkDir(htoi))
+              .attr("stroke-dasharray", (d, x, y) => d.target.data.data.height - d.source.data.data.height == 1 ? y[x].getTotalLength() + " " + y[x].getTotalLength() : "4 5")
+              .attr("fill", "transparent")
+              .attr("stroke-dashoffset", (d, x, y) => y[x].getTotalLength())
+              .attr("stroke-opacity", 1)
+              .classed("being-mined", d => d.target.data.data.status == "mining")
+              .transition(d3.transition().duration(300))
+              .attr("stroke-dashoffset", 0)
+              .attr("stroke-opacity", 0.2)
+              .transition(d3.transition().duration(300))
+              .attr("stroke-opacity", 1);
+          },
+          update => {
+            update.transition(d3.transition().duration(600))
+              .attr("d", o.linkDir(htoi))
+              .attr("stroke-dasharray", (d, x, y) => d.target.data.data.height - d.source.data.data.height == 1 ? y[x].getTotalLength() + " " + y[x].getTotalLength() : "4 5")
+              .attr("stroke-dashoffset", 0)
+              .attr("stroke-opacity", 1);
+          }
+        );
+
+      // Hidden block count text
+      fo_g.selectAll(".text-blocks-not-shown")
+        .data(root_node.links().filter(d => d.target.data.data.height - d.source.data.data.height != 1), d => d.source.data.data.hash + d.target.data.data.hash)
+        .join(
+          enter => {
+            const t = enter.append("text")
+              .attr("class", "text-blocks-not-shown")
+              .style("text-anchor", o.hidden_blocks_text.anchor)
+              .style("font-size", "12px")
+              .attr("x", d => o.x(d.target, htoi) - ((o.x(d.target, htoi) - o.x(d.source, htoi)) / 2) + o.hidden_blocks_text.offset_x)
+              .attr("y", d => o.y(d.target, htoi) - ((o.y(d.target, htoi) - o.y(d.source, htoi)) / 2) + o.hidden_blocks_text.offset_y)
+              .attr("transform", d => `rotate(${o.block_text_rotate}, ${o.x(d.target, htoi) - ((o.x(d.target, htoi) - o.x(d.source, htoi)) / 2) + o.hidden_blocks_text.offset_x},${o.y(d.target, htoi) - ((o.y(d.target, htoi) - o.y(d.source, htoi)) / 2) + o.hidden_blocks_text.offset_y})`);
+            t.append("tspan")
+              .text(d => (d.target.data.data.height - d.source.data.data.height - 1) + " blocks hidden")
+              .attr("dy", ".3em");
+            return t;
+          },
+          update => {
+            update.transition(d3.transition().duration(600))
+              .attr("x", d => o.x(d.target, htoi) - ((o.x(d.target, htoi) - o.x(d.source, htoi)) / 2) + o.hidden_blocks_text.offset_x)
+              .attr("y", d => o.y(d.target, htoi) - ((o.y(d.target, htoi) - o.y(d.source, htoi)) / 2) + o.hidden_blocks_text.offset_y)
+              .attr("transform", d => `rotate(${o.block_text_rotate}, ${o.x(d.target, htoi) - ((o.x(d.target, htoi) - o.x(d.source, htoi)) / 2) + o.hidden_blocks_text.offset_x},${o.y(d.target, htoi) - ((o.y(d.target, htoi) - o.y(d.source, htoi)) / 2) + o.hidden_blocks_text.offset_y})`);
+          }
+        );
+
+      // Blocks
+      const blocks = fo_g.selectAll(".block")
+        .data(root_node.descendants(), d => `${d.data.data.hash}-${d.data.data.height}`)
+        .join(
+          enter => {
+            const newBlocks = enter.append("g")
+              .classed("block", true)
+              .attr("id", d => "block-" + d.data.data.height + "-" + d.data.data.hash)
+              .attr("transform", d => "translate(" + o.x(d, htoi) + "," + o.y(d, htoi) + ")")
+              .attr("x", d => o.x(d, htoi))
+              .attr("y", d => o.y(d, htoi));
+
+            const block_child_group = newBlocks.append("g").attr("class", "block-child-group");
+
+            const block_bg = block_child_group.insert("rect")
+              .attr("rx", 5)
+              .attr("fill", "white")
+              .attr("stroke", d => d.data.data.difficulty_int == MIN_DIFFICULTY ? "darksalmon" : "lightgray")
+              .attr("stroke-width", d => d.data.data.difficulty_int == MIN_DIFFICULTY ? 3 : 1)
+              .attr("stroke-opacity", d => d.data.data.status == "mining" ? 0.2 : 1)
+              .classed("being-mined", d => d.data.data.status == "mining");
+
+            block_bg.filter(d => d.data.data.height != max_height || fo_initialDraw)
+              .attr("x", -BLOCK_SIZE / 2).attr("y", -BLOCK_SIZE / 2)
+              .attr("height", BLOCK_SIZE).attr("width", BLOCK_SIZE);
+
+            block_child_group.insert("text")
+              .attr("dy", ".35em")
+              .attr("class", "block-text")
+              .text(d => d.data.data.height);
+
+            block_child_group.insert("text")
+              .classed("block-pool-name", true)
+              .attr("transform", `rotate(${o.block_text_rotate},0,0)`)
+              .attr("dy", "4em")
+              .classed("block-miner", true)
+              .text(d => d.data.data.miner.length > 14 ? d.data.data.miner.substring(0, 14) + "\u2026" : d.data.data.miner);
+
+            if (!fo_initialDraw) {
+              block_bg.filter(d => d.data.data.height == max_height)
+                .attr("transform", "scale(0.1)")
+                .attr("height", BLOCK_SIZE).attr("width", BLOCK_SIZE)
+                .transition(d3.transition().duration(600))
+                .attr("x", -BLOCK_SIZE / 2).attr("y", -BLOCK_SIZE / 2)
+                .attr("transform", "scale(1)");
+            }
+
+            return newBlocks;
+          },
+          update => {
+            update.transition(d3.transition().duration(600))
+              .attr("transform", d => "translate(" + o.x(d, htoi) + "," + o.y(d, htoi) + ")");
+            update.raise();
+            return update;
+          }
+        );
+
+      // Tip status indicators
+      const node_groups = fo_g.selectAll(".node-tip-status-indicator")
+        .data(root_node.descendants().filter(d => d.data.data.status != "in-chain" && d.data.data.status != "mining"))
+        .join("g")
+        .classed("node-tip-status-indicator", true)
+        .attr("transform", d => "translate(" + o.x(d, htoi) + "," + o.y(d, htoi) + ")");
+
+      // Clear old indicators
+      node_groups.selectAll("g").remove();
+
+      // Tip status labels: show "NodeName: status" above each tip block with connector line
+      node_groups.selectAll(".tip-label").remove();
+      node_groups.selectAll(".tip-label-line").remove();
+      node_groups.each(function(d) {
+        const g = d3.select(this);
+        const statuses = d.data.data.status; // array of { status, count, nodes }
+        const lineStartY = -BLOCK_SIZE / 2 ;
+        let lineIdx = 0;
+        let totalLines = 0;
+        statuses.forEach(s => { totalLines += s.nodes.length; });
+
+        // Vertical connector line from block top to labels
+        const lineEndY = lineStartY - 10 - totalLines * 20;
+        g.append("line")
+          .attr("class", "tip-label-line")
+          .attr("x1", 0).attr("y1", lineStartY)
+          .attr("x2", 0).attr("y2", lineEndY)
+          .attr("stroke", "#8b949e")
+          .attr("stroke-width", 1)
+          .attr("stroke-dasharray", "3 2");
+
+        statuses.forEach(s => {
+          s.nodes.forEach(n => {
+            g.append("text")
+              .attr("class", "tip-label")
+              .attr("x", 0)
+              .attr("y", lineStartY - 40 - lineIdx * 20)
+              .attr("text-anchor", "middle")
+              .style("font-size", "20px")
+              .html(escapeHtml(n.name) + ": " +
+                `<tspan style="fill:${status_to_color[s.status] || '#8b949e'}">${escapeHtml(s.status)}</tspan>`);
+            lineIdx++;
+          });
+        });
+      });
+
+      // Pan to last fork block (deepest node with >1 child), fallback to tip
+      let forkBlock = null;
+      root_node.each(d => {
+        if (d.children && d.children.length > 1) {
+          if (forkBlock === null || d.data.data.height > forkBlock.data.data.height) {
+            forkBlock = d;
+          }
+        }
+      });
+      let offset_x = 0, offset_y = 0;
+      const max_height_tip = root_node.leaves().filter(d => d.data.data.height == max_height)[0];
+      if (max_height_tip !== undefined) offset_x = o.x(max_height_tip, htoi);
+      const yNode = forkBlock || max_height_tip;
+      if (yNode !== undefined) offset_y = o.y(yNode, htoi);
+
+      blocks.raise();
+      node_groups.raise();
+
+      const svgSize = document.getElementById("drawing-area").getBoundingClientRect();
+      if (fo_initialDraw) {
+        // Set a zoomed-in initial view
+        fo_zoom.scaleTo(fo_svg, 1);
+      }
+      fo_zoom.translateTo(
+        fo_svg.transition(d3.transition().duration(fo_initialDraw ? 0 : 750)),
+        offset_x, offset_y,
+        [svgSize.width * 0.85, svgSize.height / 2]
+      );
+
+      fo_initialDraw = false;
+    }
+
+    // Fetch data and draw
+    let fo_update_scheduled = false;
+    async function fo_fetchAndDraw() {
+      try {
+        fo_update_scheduled = false;
+        const resp = await fetch(FORK_OBSERVER_DATA_URL);
+        fo_state_data = await resp.json();
+        fo_draw();
+      } catch (err) {
+        console.error("Failed to fetch fork-observer data:", err);
+      }
+    }
+
+    // Initial load
+    fo_fetchAndDraw();
+
+    // SSE for live updates
+    const fo_sse = new EventSource(FORK_OBSERVER_SSE_URL);
+    fo_sse.addEventListener("cache_changed", () => {
+      if (!fo_update_scheduled) {
+        setTimeout(fo_fetchAndDraw, 500);
+        fo_update_scheduled = true;
+      }
+    });
+    fo_sse.addEventListener("error", (e) => {
+      console.error("Fork-observer SSE error", e);
+    });
+  </script>
+</body>
+</html>
