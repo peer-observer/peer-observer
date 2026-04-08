@@ -728,6 +728,18 @@
     // ════════════════════════════════════════════════════════════════
     // FORK-OBSERVER BLOCK TREE (from blocktree.js + main.js)
     // ════════════════════════════════════════════════════════════════
+    // Short display names for fork-observer nodes
+    const SHORT_NAMES = {
+      "Bitcoin Core v31.0": "Core",
+      "Inquisition": "Inquisition",
+    };
+    function shortName(name) {
+      for (const [full, short] of Object.entries(SHORT_NAMES)) {
+        if (name.includes(full)) return short;
+      }
+      return name;
+    }
+
     const NODE_SIZE = 100;
     const MAX_USIZE = 18446744073709551615;
     const BLOCK_SIZE = 50;
@@ -981,36 +993,47 @@
       // Clear old indicators
       node_groups.selectAll("g").remove();
 
-      // Tip status labels: show "NodeName: status" above each tip block with connector line
+      // Tip status labels: show "NodeName: status" near each tip block with connector line.
+      // Labels go above for upper-half branches, below for lower-half branches,
+      // so they fan outward and don't overlap.
       node_groups.selectAll(".tip-label").remove();
       node_groups.selectAll(".tip-label-line").remove();
+
+      const rootY = o.y(root_node, htoi);
+
       node_groups.each(function(d) {
         const g = d3.select(this);
         const statuses = d.data.data.status; // array of { status, count, nodes }
-        const lineStartY = -BLOCK_SIZE / 2 ;
-        let lineIdx = 0;
         let totalLines = 0;
         statuses.forEach(s => { totalLines += s.nodes.length; });
 
-        // Vertical connector line from block top to labels
-        const lineEndY = lineStartY - 10 - totalLines * 20;
+        // Place labels above if this branch is above (or at) root, below otherwise
+        const tipY = o.y(d, htoi);
+        const goUp = tipY <= rootY;
+        const dir = goUp ? -1 : 1; // -1 = upward, 1 = downward
+        const edgeY = dir * (BLOCK_SIZE / 2);  // top or bottom edge of block
+
+        // Connector line
+        const lineEndY = edgeY + dir * (10 + totalLines * 20);
         g.append("line")
           .attr("class", "tip-label-line")
-          .attr("x1", 0).attr("y1", lineStartY)
+          .attr("x1", 0).attr("y1", edgeY)
           .attr("x2", 0).attr("y2", lineEndY)
           .attr("stroke", "#8b949e")
           .attr("stroke-width", 1)
           .attr("stroke-dasharray", "3 2");
 
+        let lineIdx = 0;
         statuses.forEach(s => {
           s.nodes.forEach(n => {
             g.append("text")
               .attr("class", "tip-label")
               .attr("x", 0)
-              .attr("y", lineStartY - 40 - lineIdx * 20)
+              .attr("y", edgeY + dir * (30 + lineIdx * 20))
               .attr("text-anchor", "middle")
+              .attr("dominant-baseline", goUp ? "auto" : "hanging")
               .style("font-size", "20px")
-              .html(escapeHtml(n.name) + ": " +
+              .html(escapeHtml(shortName(n.name)) + ": " +
                 `<tspan style="fill:${status_to_color[s.status] || '#8b949e'}">${escapeHtml(s.status)}</tspan>`);
             lineIdx++;
           });
