@@ -1,0 +1,39 @@
+groups:
+  - name: transformations
+    interval: 15s
+    rules:
+      - record: peerobserver_conn_closed_increase_30m
+        expr: increase(peerobserver_conn_closed[30m])
+        labels:
+          anomaly_name: peerobserver_conn_closed_increase_30m
+          anomaly_type: latency
+    
+      - record: peerobserver_p2p_addrv2_addresses_sum_inbound_increase_30m
+        expr: increase(peerobserver_p2p_addrv2_addresses_sum{direction="inbound"}[30m])
+        labels:
+          anomaly_name: peerobserver_p2p_addrv2_addresses_sum_inbound_increase_30m
+          anomaly_type: latency
+
+      - record: peerobserver_p2p_addr_addresses_sum_inbound_increase_30m
+        expr: increase(peerobserver_p2p_addr_addresses_sum{direction="inbound"}[30m])
+        labels:
+          anomaly_name: peerobserver_p2p_addr_addresses_sum_inbound_increase_30m
+          anomaly_type: latency
+
+      - record: peerobserver_conn_inbound_current_anomaly
+        expr: peerobserver_conn_inbound_current
+        labels:
+          anomaly_name: peerobserver_conn_inbound_current_anomaly
+          anomaly_type: latency
+
+      - record: peerobserver_rpc_peer_info_network_peers_iv4
+        expr: peerobserver_rpc_peer_info_network_peers{network="ipv4"}
+        labels:
+          anomaly_name: peerobserver_rpc_peer_info_network_peers_iv4
+          anomaly_type: latency
+
+      - record: peerobserver_p2p_share_linkinglion_total
+        expr: sum (increase(peerobserver_p2p_message_bytes_linkinglion{direction="outbound"}[30m])) / sum (increase(peerobserver_p2p_message_bytes{direction="outbound"}[30m]))
+        labels:
+          anomaly_name: peerobserver_p2p_share_linkinglion_total
+          anomaly_type: latency

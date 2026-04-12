@@ -1,0 +1,71 @@
+groups:
+  - name: anomalies
+    interval: 1m
+    rules:
+      - record: anomaly:adaptive:select
+        expr: |-
+          {anomaly_name!="", anomaly_select="", anomaly_strategy=~"^$|adaptive"}
+        labels:
+          anomaly_select: "1"
+          anomaly_strategy: adaptive
+
+      # SHORT_LOOKBACK = 1h
+      - record: anomaly:adaptive:avg_1h
+        expr: avg_over_time(anomaly:adaptive:select[1h])
+
+      # THRESHOLD_BY_COVAR = 0.25
+      # SHORT_LOOKBACK = 1h
+      - record: anomaly:adaptive:stddev_1h:filtered
+        expr: |-
+          stddev_over_time(anomaly:adaptive:select[1h]) > anomaly:adaptive:avg_1h * 0.25
+
+      # LONG_LOOKBACK = 26h
+      - record: anomaly:adaptive:stddev_st
+        expr: avg_over_time(anomaly:adaptive:stddev_1h:filtered[26h])
+
+      # STDDEV_MULTIPLIER = 2
+      - record: upper_band_st
+        expr: anomaly:adaptive:avg_1h + anomaly:adaptive:stddev_st * on() group_left 2
+
+      # STDDEV_MULTIPLIER = 2
+      - record: lower_band_st
+        expr: anomaly:adaptive:avg_1h - anomaly:adaptive:stddev_st * on() group_left 2
+
+      - record: upper_band
+        expr: |-
+          max without(prediction_type)
+          (
+            label_replace(
+              # MARGIN_MULTIPLIER = 1.5
+              # margin_upper_band
+              anomaly:adaptive:avg_1h * 1.5,
+              "prediction_type", "margin", "", ""
+            )
+            or
+            label_replace(
+              upper_band_st,
+              "prediction_type", "short_term", "", ""
+            )
+          )
+
+      - record: lower_band
+        expr: |-
+          clamp_min(
+            min without(prediction_type)
+            (
+              label_replace(
+                # MARGIN_MULTIPLIER = 1.5
+                # margin_lower_band
+                anomaly:adaptive:avg_1h / 1.5,
+                "prediction_type", "margin", "", ""
+              )
+              or
+              label_replace(
+                lower_band_st,
+                "prediction_type", "short_term", "", ""
+              )
+            )
+            # Hardcoded offset. Lower bands under 5 don't seem useful, so we force them down to 0.
+            - 5,
+            0
+          )
