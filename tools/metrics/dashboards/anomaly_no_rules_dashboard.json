@@ -1,0 +1,1443 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P1809F7CD0C75ACF3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "upper_band"
+            },
+            "properties": [
+              {
+                "id": "custom.fillBelowTo",
+                "value": "lower_band"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 24
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#85818d",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lower_band"
+            },
+            "properties": [
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "alert"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 29
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#847c5a",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "increase(peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL])",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "max without(prediction_type)\r\n(\r\n  label_replace(\r\n    # margin_upper_band\r\n    avg_over_time(increase(peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m]) * $MARGIN_MULTIPLIER,\r\n    \"prediction_type\", \"margin\", \"\", \"\"\r\n  )\r\n  or\r\n  label_replace(\r\n    # upper_band_st\r\n    avg_over_time(increase(peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m])\r\n    # anomaly:adaptive:stddev_st\r\n    + avg_over_time\r\n    (\r\n      (\r\n        # anomaly:adaptive:stddev_1h:filtered\r\n        stddev_over_time(\r\n          increase\r\n          (\r\n            peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL]\r\n          )\r\n          [$SHORT_LOOKBACK:1m]\r\n        ) > avg_over_time\r\n        (\r\n          increase\r\n          (\r\n            peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL]\r\n          )\r\n          [$SHORT_LOOKBACK:1m]\r\n        )\r\n        * $THRESHOLD_BY_COVAR\r\n      )\r\n      [$LONG_LOOKBACK:1m]\r\n    )\r\n    * $STDDEV_MULTIPLIER,\r\n    \"prediction_type\", \"short_term\", \"\", \"\"\r\n  )\r\n)",
+          "instant": false,
+          "legendFormat": "upper_band",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "clamp_min(min without(prediction_type)\r\n(\r\n  label_replace(\r\n    # margin_lower_band\r\n    avg_over_time(increase(peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m]) / $MARGIN_MULTIPLIER,\r\n    \"prediction_type\", \"margin\", \"\", \"\"\r\n  )\r\n  or\r\n  # lower_band_st\r\n  label_replace(\r\n    avg_over_time(increase(peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m])\r\n    # anomaly:adaptive:stddev_st\r\n    - avg_over_time\r\n    (\r\n      (\r\n        # anomaly:adaptive:stddev_1h:filtered\r\n        stddev_over_time\r\n        (\r\n          increase\r\n          (\r\n            peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL]\r\n          )\r\n          [$SHORT_LOOKBACK:1m]\r\n        )\r\n        > avg_over_time\r\n        (\r\n          increase\r\n          (\r\n            peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL]\r\n          )\r\n          [$SHORT_LOOKBACK:1m]\r\n        )\r\n        * $THRESHOLD_BY_COVAR\r\n      )\r\n      [$LONG_LOOKBACK:1m]\r\n    )\r\n    * $STDDEV_MULTIPLIER,\r\n    \"prediction_type\", \"short_term\", \"\", \"\"\r\n  )\r\n), 0)",
+          "instant": false,
+          "legendFormat": "lower_band",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "(\r\n    last_over_time(\r\n      increase(peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL])\r\n      [2m:1s]\r\n    )\r\n    < bool last_over_time\r\n    (\r\n      (\r\n        clamp_min(min without(prediction_type)\r\n        (\r\n          label_replace(\r\n            # margin_lower_band\r\n            avg_over_time(increase(peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m]) / $MARGIN_MULTIPLIER,\r\n            \"prediction_type\", \"margin\", \"\", \"\"\r\n          )\r\n          or\r\n          # lower_band_st\r\n          label_replace(\r\n            avg_over_time(increase(peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m])\r\n            # anomaly:adaptive:stddev_st\r\n            - avg_over_time\r\n            (\r\n              (\r\n                # anomaly:adaptive:stddev_1h:filtered\r\n                stddev_over_time\r\n                (\r\n                  increase\r\n                  (\r\n                    peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL]\r\n                  )\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                > avg_over_time\r\n                (\r\n                  increase\r\n                  (\r\n                    peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL]\r\n                  )\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                * $THRESHOLD_BY_COVAR\r\n              )\r\n              [$LONG_LOOKBACK:1m]\r\n            )\r\n            * $STDDEV_MULTIPLIER,\r\n            \"prediction_type\", \"short_term\", \"\", \"\"\r\n          )\r\n        ), 0)\r\n      )\r\n      [2m:1s]\r\n    )\r\n)\r\n+\r\n(\r\n    last_over_time\r\n    (\r\n      increase(peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL])\r\n      [2m:1s]\r\n    )\r\n    > bool last_over_time\r\n    (\r\n      (\r\n        max without(prediction_type)\r\n        (\r\n          label_replace(\r\n            # margin_upper_band\r\n            avg_over_time(increase(peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m]) * $MARGIN_MULTIPLIER,\r\n            \"prediction_type\", \"margin\", \"\", \"\"\r\n          )\r\n          or\r\n          label_replace(\r\n            # upper_band_st\r\n            avg_over_time(increase(peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m])\r\n            # anomaly:adaptive:stddev_st\r\n            + avg_over_time\r\n            (\r\n              (\r\n                # anomaly:adaptive:stddev_1h:filtered\r\n                stddev_over_time(\r\n                  increase\r\n                  (\r\n                    peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL]\r\n                  )\r\n                  [$SHORT_LOOKBACK:1m]\r\n                ) > avg_over_time\r\n                (\r\n                  increase\r\n                  (\r\n                    peerobserver_conn_closed{host=\"$HOST\"}[$INCREASE_INTERVAL]\r\n                  )\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                * $THRESHOLD_BY_COVAR\r\n              )\r\n              [$LONG_LOOKBACK:1m]\r\n            )\r\n            * $STDDEV_MULTIPLIER,\r\n            \"prediction_type\", \"short_term\", \"\", \"\"\r\n          )\r\n        )\r\n      )\r\n      [2m:1s]\r\n    )\r\n)\r\n> bool 0",
+          "instant": false,
+          "legendFormat": "alert",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Closed connections",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P1809F7CD0C75ACF3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "upper_band"
+            },
+            "properties": [
+              {
+                "id": "custom.fillBelowTo",
+                "value": "lower_band"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 24
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#85818d",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lower_band"
+            },
+            "properties": [
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "alert"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 29
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#847c5a",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "increase(peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "max without(prediction_type)\r\n(\r\n  label_replace(\r\n    # margin_upper_band\r\n    avg_over_time(increase(peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m]) * $MARGIN_MULTIPLIER,\r\n    \"prediction_type\", \"margin\", \"\", \"\"\r\n  )\r\n  or\r\n  label_replace(\r\n    # upper_band_st\r\n    avg_over_time(increase(peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m])\r\n    # anomaly:adaptive:stddev_st\r\n    + avg_over_time\r\n    (\r\n      (\r\n        # anomaly:adaptive:stddev_1h:filtered\r\n        stddev_over_time\r\n        (\r\n            increase\r\n            (\r\n                peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m]\r\n            )\r\n            > avg_over_time\r\n            (\r\n                increase\r\n                (\r\n                    peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL]\r\n                )\r\n                [$SHORT_LOOKBACK:1m]\r\n            )\r\n            * $THRESHOLD_BY_COVAR\r\n        )\r\n        [$LONG_LOOKBACK:1m]\r\n    )\r\n    * $STDDEV_MULTIPLIER,\r\n    \"prediction_type\", \"short_term\", \"\", \"\"\r\n  )\r\n)",
+          "instant": false,
+          "legendFormat": "upper_band",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "clamp_min(min without(prediction_type)\r\n(\r\n  label_replace(\r\n    # margin_upper_band\r\n    avg_over_time(increase(peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m]) / $MARGIN_MULTIPLIER,\r\n    \"prediction_type\", \"margin\", \"\", \"\"\r\n  )\r\n  or\r\n  label_replace(\r\n    # upper_band_st\r\n    avg_over_time(increase(peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m])\r\n    # anomaly:adaptive:stddev_st\r\n    - avg_over_time\r\n    (\r\n      (\r\n        # anomaly:adaptive:stddev_1h:filtered\r\n        stddev_over_time\r\n        (\r\n            increase\r\n            (\r\n                peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m]\r\n            )\r\n            > avg_over_time\r\n            (\r\n                increase\r\n                (\r\n                    peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL]\r\n                )\r\n                [$SHORT_LOOKBACK:1m]\r\n            )\r\n            * $THRESHOLD_BY_COVAR\r\n        )\r\n        [$LONG_LOOKBACK:1m]\r\n    )\r\n    * $STDDEV_MULTIPLIER,\r\n    \"prediction_type\", \"short_term\", \"\", \"\"\r\n  )\r\n), 0)",
+          "instant": false,
+          "legendFormat": "lower_band",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "(\r\n    last_over_time(\r\n      increase(peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])\r\n      [2m:1s]\r\n    )\r\n    < bool last_over_time\r\n    (\r\n      (\r\n        clamp_min(min without(prediction_type)\r\n        (\r\n          label_replace(\r\n            # margin_lower_band\r\n            avg_over_time(increase(peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m]) / $MARGIN_MULTIPLIER,\r\n            \"prediction_type\", \"margin\", \"\", \"\"\r\n          )\r\n          or\r\n          # lower_band_st\r\n          label_replace(\r\n            avg_over_time(increase(peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m])\r\n            # anomaly:adaptive:stddev_st\r\n            - avg_over_time\r\n            (\r\n              (\r\n                # anomaly:adaptive:stddev_1h:filtered\r\n                stddev_over_time\r\n                (\r\n                  increase\r\n                  (\r\n                    peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL]\r\n                  )\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                > avg_over_time\r\n                (\r\n                  increase\r\n                  (\r\n                    peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL]\r\n                  )\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                * $THRESHOLD_BY_COVAR\r\n              )\r\n              [$LONG_LOOKBACK:1m]\r\n            )\r\n            * $STDDEV_MULTIPLIER,\r\n            \"prediction_type\", \"short_term\", \"\", \"\"\r\n          )\r\n        ), 0)\r\n      )\r\n      [2m:1s]\r\n    )\r\n)\r\n+\r\n(\r\n    last_over_time\r\n    (\r\n      increase(peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])\r\n      [2m:1s]\r\n    )\r\n    > bool last_over_time\r\n    (\r\n      (\r\n        max without(prediction_type)\r\n        (\r\n          label_replace(\r\n            # margin_upper_band\r\n            avg_over_time(increase(peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m]) * $MARGIN_MULTIPLIER,\r\n            \"prediction_type\", \"margin\", \"\", \"\"\r\n          )\r\n          or\r\n          label_replace(\r\n            # upper_band_st\r\n            avg_over_time(increase(peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m])\r\n            # anomaly:adaptive:stddev_st\r\n            + avg_over_time\r\n            (\r\n              (\r\n                # anomaly:adaptive:stddev_1h:filtered\r\n                stddev_over_time(\r\n                  increase\r\n                  (\r\n                    peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL]\r\n                  )\r\n                  [$SHORT_LOOKBACK:1m]\r\n                ) > avg_over_time\r\n                (\r\n                  increase\r\n                  (\r\n                    peerobserver_p2p_addrv2_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL]\r\n                  )\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                * $THRESHOLD_BY_COVAR\r\n              )\r\n              [$LONG_LOOKBACK:1m]\r\n            )\r\n            * $STDDEV_MULTIPLIER,\r\n            \"prediction_type\", \"short_term\", \"\", \"\"\r\n          )\r\n        )\r\n      )\r\n      [2m:1s]\r\n    )\r\n)\r\n> bool 0",
+          "instant": false,
+          "legendFormat": "alert",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Total addresses received in Inbound addrv2 msgs",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P1809F7CD0C75ACF3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "upper_band"
+            },
+            "properties": [
+              {
+                "id": "custom.fillBelowTo",
+                "value": "lower_band"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 24
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#85818d",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lower_band"
+            },
+            "properties": [
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "alert"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 29
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#847c5a",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "increase(peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "max without(prediction_type)\r\n(\r\n  label_replace(\r\n    # margin_upper_band\r\n    avg_over_time(increase(peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m]) * $MARGIN_MULTIPLIER,\r\n    \"prediction_type\", \"margin\", \"\", \"\"\r\n  )\r\n  or\r\n  label_replace(\r\n    # upper_band_st\r\n    avg_over_time(increase(peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m])\r\n    # anomaly:adaptive:stddev_st\r\n    + avg_over_time\r\n    (\r\n      (\r\n        # anomaly:adaptive:stddev_1h:filtered\r\n        stddev_over_time\r\n        (\r\n            increase\r\n            (\r\n                peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m]\r\n            )\r\n            > avg_over_time\r\n            (\r\n                increase\r\n                (\r\n                    peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL]\r\n                )\r\n                [$SHORT_LOOKBACK:1m]\r\n            )\r\n            * $THRESHOLD_BY_COVAR\r\n        )\r\n        [$LONG_LOOKBACK:1m]\r\n    )\r\n    * $STDDEV_MULTIPLIER,\r\n    \"prediction_type\", \"short_term\", \"\", \"\"\r\n  )\r\n)",
+          "instant": false,
+          "legendFormat": "upper_band",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "clamp_min(min without(prediction_type)\r\n(\r\n  label_replace(\r\n    # margin_upper_band\r\n    avg_over_time(increase(peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m]) / $MARGIN_MULTIPLIER,\r\n    \"prediction_type\", \"margin\", \"\", \"\"\r\n  )\r\n  or\r\n  label_replace(\r\n    # upper_band_st\r\n    avg_over_time(increase(peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m])\r\n    # anomaly:adaptive:stddev_st\r\n    - avg_over_time\r\n    (\r\n      (\r\n        # anomaly:adaptive:stddev_1h:filtered\r\n        stddev_over_time\r\n        (\r\n            increase\r\n            (\r\n                peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m]\r\n            )\r\n            > avg_over_time\r\n            (\r\n                increase\r\n                (\r\n                    peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL]\r\n                )\r\n                [$SHORT_LOOKBACK:1m]\r\n            )\r\n            * $THRESHOLD_BY_COVAR\r\n        )\r\n        [$LONG_LOOKBACK:1m]\r\n    )\r\n    * $STDDEV_MULTIPLIER,\r\n    \"prediction_type\", \"short_term\", \"\", \"\"\r\n  )\r\n), 0)",
+          "instant": false,
+          "legendFormat": "lower_band",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "(\r\n    last_over_time(\r\n      increase(peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])\r\n      [2m:1s]\r\n    )\r\n    < bool last_over_time\r\n    (\r\n      (\r\n        clamp_min(min without(prediction_type)\r\n        (\r\n          label_replace(\r\n            # margin_lower_band\r\n            avg_over_time(increase(peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m]) / $MARGIN_MULTIPLIER,\r\n            \"prediction_type\", \"margin\", \"\", \"\"\r\n          )\r\n          or\r\n          # lower_band_st\r\n          label_replace(\r\n            avg_over_time(increase(peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m])\r\n            # anomaly:adaptive:stddev_st\r\n            - avg_over_time\r\n            (\r\n              (\r\n                # anomaly:adaptive:stddev_1h:filtered\r\n                stddev_over_time\r\n                (\r\n                  increase\r\n                  (\r\n                    peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL]\r\n                  )\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                > avg_over_time\r\n                (\r\n                  increase\r\n                  (\r\n                    peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL]\r\n                  )\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                * $THRESHOLD_BY_COVAR\r\n              )\r\n              [$LONG_LOOKBACK:1m]\r\n            )\r\n            * $STDDEV_MULTIPLIER,\r\n            \"prediction_type\", \"short_term\", \"\", \"\"\r\n          )\r\n        ), 0)\r\n      )\r\n      [2m:1s]\r\n    )\r\n)\r\n+\r\n(\r\n    last_over_time\r\n    (\r\n      increase(peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])\r\n      [2m:1s]\r\n    )\r\n    > bool last_over_time\r\n    (\r\n      (\r\n        max without(prediction_type)\r\n        (\r\n          label_replace(\r\n            # margin_upper_band\r\n            avg_over_time(increase(peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m]) * $MARGIN_MULTIPLIER,\r\n            \"prediction_type\", \"margin\", \"\", \"\"\r\n          )\r\n          or\r\n          label_replace(\r\n            # upper_band_st\r\n            avg_over_time(increase(peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL])[$SHORT_LOOKBACK:1m])\r\n            # anomaly:adaptive:stddev_st\r\n            + avg_over_time\r\n            (\r\n              (\r\n                # anomaly:adaptive:stddev_1h:filtered\r\n                stddev_over_time(\r\n                  increase\r\n                  (\r\n                    peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL]\r\n                  )\r\n                  [$SHORT_LOOKBACK:1m]\r\n                ) > avg_over_time\r\n                (\r\n                  increase\r\n                  (\r\n                    peerobserver_p2p_addr_addresses_sum{host=\"$HOST\", direction=\"inbound\"}[$INCREASE_INTERVAL]\r\n                  )\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                * $THRESHOLD_BY_COVAR\r\n              )\r\n              [$LONG_LOOKBACK:1m]\r\n            )\r\n            * $STDDEV_MULTIPLIER,\r\n            \"prediction_type\", \"short_term\", \"\", \"\"\r\n          )\r\n        )\r\n      )\r\n      [2m:1s]\r\n    )\r\n)\r\n> bool 0",
+          "instant": false,
+          "legendFormat": "alert",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Total addresses received in Inbound addr msgs",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P1809F7CD0C75ACF3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "upper_band"
+            },
+            "properties": [
+              {
+                "id": "custom.fillBelowTo",
+                "value": "lower_band"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 24
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#85818d",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lower_band"
+            },
+            "properties": [
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "alert"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 29
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#847c5a",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "peerobserver_conn_inbound_current{host=\"$HOST\"}",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "max without(prediction_type)\r\n(\r\n  label_replace(\r\n    # margin_upper_band\r\n    avg_over_time(peerobserver_conn_inbound_current{host=\"$HOST\"}[$SHORT_LOOKBACK:1m]) * $MARGIN_MULTIPLIER,\r\n    \"prediction_type\", \"margin\", \"\", \"\"\r\n  )\r\n  or\r\n  label_replace(\r\n    # upper_band_st\r\n    avg_over_time(peerobserver_conn_inbound_current{host=\"$HOST\"}[$SHORT_LOOKBACK:1m])\r\n    # anomaly:adaptive:stddev_st\r\n    + avg_over_time\r\n    (\r\n        (\r\n            # anomaly:adaptive:stddev_1h:filtered\r\n            stddev_over_time\r\n            (\r\n                peerobserver_conn_inbound_current{host=\"$HOST\"}[$SHORT_LOOKBACK:1m]\r\n            )\r\n            > avg_over_time\r\n            (\r\n                peerobserver_conn_inbound_current{host=\"$HOST\"}[$SHORT_LOOKBACK:1m]\r\n            )\r\n            * $THRESHOLD_BY_COVAR\r\n        )\r\n        [$LONG_LOOKBACK:1m]\r\n    )\r\n    * $STDDEV_MULTIPLIER,\r\n    \"prediction_type\", \"short_term\", \"\", \"\"\r\n  )\r\n)",
+          "instant": false,
+          "legendFormat": "upper_band",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "clamp_min(min without(prediction_type)\r\n(\r\n  label_replace(\r\n    # margin_upper_band\r\n    avg_over_time(peerobserver_conn_inbound_current{host=\"$HOST\"}[$SHORT_LOOKBACK:1m]) / $MARGIN_MULTIPLIER,\r\n    \"prediction_type\", \"margin\", \"\", \"\"\r\n  )\r\n  or\r\n  label_replace(\r\n    # upper_band_st\r\n    avg_over_time(peerobserver_conn_inbound_current{host=\"$HOST\"}[$SHORT_LOOKBACK:1m])\r\n    # anomaly:adaptive:stddev_st\r\n    - avg_over_time\r\n    (\r\n        (\r\n            # anomaly:adaptive:stddev_1h:filtered\r\n            stddev_over_time\r\n            (\r\n                peerobserver_conn_inbound_current{host=\"$HOST\"}[$SHORT_LOOKBACK:1m]\r\n            )\r\n            > avg_over_time\r\n            (\r\n                peerobserver_conn_inbound_current{host=\"$HOST\"}[$SHORT_LOOKBACK:1m]\r\n            )\r\n            * $THRESHOLD_BY_COVAR\r\n        )\r\n        [$LONG_LOOKBACK:1m]\r\n    )\r\n    * $STDDEV_MULTIPLIER,\r\n    \"prediction_type\", \"short_term\", \"\", \"\"\r\n  )\r\n), 0)",
+          "instant": false,
+          "legendFormat": "lower_band",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "(\r\n    last_over_time(\r\n      peerobserver_conn_inbound_current{host=\"$HOST\"}\r\n      [2m:1s]\r\n    )\r\n    < bool last_over_time\r\n    (\r\n      (\r\n        clamp_min(min without(prediction_type)\r\n        (\r\n          label_replace(\r\n            # margin_lower_band\r\n            avg_over_time(peerobserver_conn_inbound_current{host=\"$HOST\"}[$SHORT_LOOKBACK:1m]) / $MARGIN_MULTIPLIER,\r\n            \"prediction_type\", \"margin\", \"\", \"\"\r\n          )\r\n          or\r\n          # lower_band_st\r\n          label_replace(\r\n            avg_over_time(peerobserver_conn_inbound_current{host=\"$HOST\"}[$SHORT_LOOKBACK:1m])\r\n            # anomaly:adaptive:stddev_st\r\n            - avg_over_time\r\n            (\r\n              (\r\n                # anomaly:adaptive:stddev_1h:filtered\r\n                stddev_over_time\r\n                (\r\n                  peerobserver_conn_inbound_current{host=\"$HOST\"}\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                > avg_over_time\r\n                (\r\n                  peerobserver_conn_inbound_current{host=\"$HOST\"}\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                * $THRESHOLD_BY_COVAR\r\n              )\r\n              [$LONG_LOOKBACK:1m]\r\n            )\r\n            * $STDDEV_MULTIPLIER,\r\n            \"prediction_type\", \"short_term\", \"\", \"\"\r\n          )\r\n        ), 0)\r\n      )\r\n      [2m:1s]\r\n    )\r\n)\r\n+\r\n(\r\n    last_over_time\r\n    (\r\n      peerobserver_conn_inbound_current{host=\"$HOST\"}\r\n      [2m:1s]\r\n    )\r\n    > bool last_over_time\r\n    (\r\n      (\r\n        max without(prediction_type)\r\n        (\r\n          label_replace(\r\n            # margin_upper_band\r\n            avg_over_time(peerobserver_conn_inbound_current{host=\"$HOST\"}[$SHORT_LOOKBACK:1m]) * $MARGIN_MULTIPLIER,\r\n            \"prediction_type\", \"margin\", \"\", \"\"\r\n          )\r\n          or\r\n          label_replace(\r\n            # upper_band_st\r\n            avg_over_time(peerobserver_conn_inbound_current{host=\"$HOST\"}[$SHORT_LOOKBACK:1m])\r\n            # anomaly:adaptive:stddev_st\r\n            + avg_over_time\r\n            (\r\n              (\r\n                # anomaly:adaptive:stddev_1h:filtered\r\n                stddev_over_time(\r\n                  peerobserver_conn_inbound_current{host=\"$HOST\"}\r\n                  [$SHORT_LOOKBACK:1m]\r\n                ) > avg_over_time\r\n                (\r\n                  peerobserver_conn_inbound_current{host=\"$HOST\"}\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                * $THRESHOLD_BY_COVAR\r\n              )\r\n              [$LONG_LOOKBACK:1m]\r\n            )\r\n            * $STDDEV_MULTIPLIER,\r\n            \"prediction_type\", \"short_term\", \"\", \"\"\r\n          )\r\n        )\r\n      )\r\n      [2m:1s]\r\n    )\r\n)\r\n> bool 0",
+          "instant": false,
+          "legendFormat": "alert",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Inbound connections",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P1809F7CD0C75ACF3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "upper_band"
+            },
+            "properties": [
+              {
+                "id": "custom.fillBelowTo",
+                "value": "lower_band"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 24
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#85818d",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lower_band"
+            },
+            "properties": [
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "alert"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 29
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#847c5a",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "max without(prediction_type)\r\n(\r\n  label_replace(\r\n    # margin_upper_band\r\n    avg_over_time(peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}[$SHORT_LOOKBACK:1m]) * $MARGIN_MULTIPLIER,\r\n    \"prediction_type\", \"margin\", \"\", \"\"\r\n  )\r\n  or\r\n  label_replace(\r\n    # upper_band_st\r\n    avg_over_time(peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}[$SHORT_LOOKBACK:1m])\r\n    # anomaly:adaptive:stddev_st\r\n    + avg_over_time\r\n    (\r\n        (\r\n            # anomaly:adaptive:stddev_1h:filtered\r\n            stddev_over_time\r\n            (\r\n                peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}[$SHORT_LOOKBACK:1m]\r\n            )\r\n            > avg_over_time\r\n            (\r\n                peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}[$SHORT_LOOKBACK:1m]\r\n            )\r\n            * $THRESHOLD_BY_COVAR\r\n        )\r\n        [$LONG_LOOKBACK:1m]\r\n    )\r\n    * $STDDEV_MULTIPLIER,\r\n    \"prediction_type\", \"short_term\", \"\", \"\"\r\n  )\r\n)",
+          "instant": false,
+          "legendFormat": "upper_band",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "clamp_min(min without(prediction_type)\r\n(\r\n  label_replace(\r\n    # margin_upper_band\r\n    avg_over_time(peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}[$SHORT_LOOKBACK:1m]) / $MARGIN_MULTIPLIER,\r\n    \"prediction_type\", \"margin\", \"\", \"\"\r\n  )\r\n  or\r\n  label_replace(\r\n    # upper_band_st\r\n    avg_over_time(peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}[$SHORT_LOOKBACK:1m])\r\n    # anomaly:adaptive:stddev_st\r\n    - avg_over_time\r\n    (\r\n        (\r\n            # anomaly:adaptive:stddev_1h:filtered\r\n            stddev_over_time\r\n            (\r\n                peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}[$SHORT_LOOKBACK:1m]\r\n            )\r\n            > avg_over_time\r\n            (\r\n                peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}[$SHORT_LOOKBACK:1m]\r\n            )\r\n            * $THRESHOLD_BY_COVAR\r\n        )\r\n        [$LONG_LOOKBACK:1m]\r\n    )\r\n    * $STDDEV_MULTIPLIER,\r\n    \"prediction_type\", \"short_term\", \"\", \"\"\r\n  )\r\n), 0)",
+          "instant": false,
+          "legendFormat": "lower_band",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "(\r\n    last_over_time(\r\n      peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}\r\n      [2m:1s]\r\n    )\r\n    < bool last_over_time\r\n    (\r\n      (\r\n        clamp_min(min without(prediction_type)\r\n        (\r\n          label_replace(\r\n            # margin_lower_band\r\n            avg_over_time(peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}[$SHORT_LOOKBACK:1m]) / $MARGIN_MULTIPLIER,\r\n            \"prediction_type\", \"margin\", \"\", \"\"\r\n          )\r\n          or\r\n          # lower_band_st\r\n          label_replace(\r\n            avg_over_time(peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}[$SHORT_LOOKBACK:1m])\r\n            # anomaly:adaptive:stddev_st\r\n            - avg_over_time\r\n            (\r\n              (\r\n                # anomaly:adaptive:stddev_1h:filtered\r\n                stddev_over_time\r\n                (\r\n                  peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                > avg_over_time\r\n                (\r\n                  peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                * $THRESHOLD_BY_COVAR\r\n              )\r\n              [$LONG_LOOKBACK:1m]\r\n            )\r\n            * $STDDEV_MULTIPLIER,\r\n            \"prediction_type\", \"short_term\", \"\", \"\"\r\n          )\r\n        ), 0)\r\n      )\r\n      [2m:1s]\r\n    )\r\n)\r\n+\r\n(\r\n    last_over_time\r\n    (\r\n      peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}\r\n      [2m:1s]\r\n    )\r\n    > bool last_over_time\r\n    (\r\n      (\r\n        max without(prediction_type)\r\n        (\r\n          label_replace(\r\n            # margin_upper_band\r\n            avg_over_time(peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}[$SHORT_LOOKBACK:1m]) * $MARGIN_MULTIPLIER,\r\n            \"prediction_type\", \"margin\", \"\", \"\"\r\n          )\r\n          or\r\n          label_replace(\r\n            # upper_band_st\r\n            avg_over_time(peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}[$SHORT_LOOKBACK:1m])\r\n            # anomaly:adaptive:stddev_st\r\n            + avg_over_time\r\n            (\r\n              (\r\n                # anomaly:adaptive:stddev_1h:filtered\r\n                stddev_over_time(\r\n                  peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}\r\n                  [$SHORT_LOOKBACK:1m]\r\n                ) > avg_over_time\r\n                (\r\n                  peerobserver_rpc_peer_info_network_peers{host=\"$HOST\", network=\"ipv4\"}\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                * $THRESHOLD_BY_COVAR\r\n              )\r\n              [$LONG_LOOKBACK:1m]\r\n            )\r\n            * $STDDEV_MULTIPLIER,\r\n            \"prediction_type\", \"short_term\", \"\", \"\"\r\n          )\r\n        )\r\n      )\r\n      [2m:1s]\r\n    )\r\n)\r\n> bool 0",
+          "instant": false,
+          "legendFormat": "alert",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Peers connected via ipv4",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P1809F7CD0C75ACF3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "upper_band"
+            },
+            "properties": [
+              {
+                "id": "custom.fillBelowTo",
+                "value": "lower_band"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 24
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#85818d",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lower_band"
+            },
+            "properties": [
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "alert"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 29
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#847c5a",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "sum( increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]) ) / sum ( increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]) )",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "max without(prediction_type)\r\n(\r\n  label_replace(\r\n    # margin_lower_band\r\n    avg_over_time\r\n    (\r\n        # peerobserver_p2p_share_linkinglion_total\r\n        (\r\n            sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n            / sum (increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n        )\r\n        [$SHORT_LOOKBACK:1m]\r\n    ) * $MARGIN_MULTIPLIER,\r\n    \"prediction_type\", \"margin\", \"\", \"\"\r\n  )\r\n  or\r\n  # lower_band_st\r\n  label_replace(\r\n    avg_over_time(\r\n      # peerobserver_p2p_share_linkinglion_total\r\n      (\r\n          sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n          / sum (increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n      )\r\n      [$SHORT_LOOKBACK:1m]\r\n    )\r\n    # anomaly:adaptive:stddev_st\r\n    + avg_over_time\r\n    (\r\n      (\r\n        # anomaly:adaptive:stddev_1h:filtered\r\n        stddev_over_time\r\n        (\r\n            # peerobserver_p2p_share_linkinglion_total\r\n            (\r\n                sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n                / sum (increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n            )\r\n            [$SHORT_LOOKBACK:1m]\r\n        )\r\n        > avg_over_time\r\n        (\r\n            # peerobserver_p2p_share_linkinglion_total\r\n            (\r\n                sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n                / sum ( increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n            ) \r\n            [$SHORT_LOOKBACK:1m]\r\n        )\r\n        * $THRESHOLD_BY_COVAR\r\n      )\r\n      [$LONG_LOOKBACK:1m]\r\n    )\r\n    * $STDDEV_MULTIPLIER,\r\n    \"prediction_type\", \"short_term\", \"\", \"\"\r\n  )\r\n)",
+          "instant": false,
+          "legendFormat": "upper_band",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "clamp_min(min without(prediction_type)\r\n(\r\n  label_replace(\r\n    # margin_lower_band\r\n    avg_over_time\r\n    (\r\n        # peerobserver_p2p_share_linkinglion_total\r\n        (\r\n            sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n            / sum (increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n        )\r\n        [$SHORT_LOOKBACK:1m]\r\n    ) / $MARGIN_MULTIPLIER,\r\n    \"prediction_type\", \"margin\", \"\", \"\"\r\n  )\r\n  or\r\n  # lower_band_st\r\n  label_replace(\r\n    avg_over_time(\r\n      # peerobserver_p2p_share_linkinglion_total\r\n      (\r\n          sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n          / sum (increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n      )\r\n      [$SHORT_LOOKBACK:1m]\r\n    )\r\n    # anomaly:adaptive:stddev_st\r\n    - avg_over_time\r\n    (\r\n      (\r\n        # anomaly:adaptive:stddev_1h:filtered\r\n        stddev_over_time\r\n        (\r\n            # peerobserver_p2p_share_linkinglion_total\r\n            (\r\n                sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n                / sum (increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n            )\r\n            [$SHORT_LOOKBACK:1m]\r\n        )\r\n        > avg_over_time\r\n        (\r\n            # peerobserver_p2p_share_linkinglion_total\r\n            (\r\n                sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n                / sum ( increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n            ) \r\n            [$SHORT_LOOKBACK:1m]\r\n        )\r\n        * $THRESHOLD_BY_COVAR\r\n      )\r\n      [$LONG_LOOKBACK:1m]\r\n    )\r\n    * $STDDEV_MULTIPLIER,\r\n    \"prediction_type\", \"short_term\", \"\", \"\"\r\n  )\r\n), 0)",
+          "instant": false,
+          "legendFormat": "lower_band",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "(\r\n    last_over_time(\r\n      # peerobserver_p2p_share_linkinglion_total\r\n      (\r\n          sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n          / sum (increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n      )\r\n      [2m:1s]\r\n    )\r\n    < bool last_over_time\r\n    (\r\n      (\r\n        clamp_min(min without(prediction_type)\r\n        (\r\n          label_replace(\r\n            # margin_lower_band\r\n            avg_over_time(\r\n              # peerobserver_p2p_share_linkinglion_total\r\n              (\r\n                sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n                / sum (increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n              )\r\n              [$SHORT_LOOKBACK:1m]\r\n            ) / $MARGIN_MULTIPLIER,\r\n            \"prediction_type\", \"margin\", \"\", \"\"\r\n          )\r\n          or\r\n          # lower_band_st\r\n          label_replace(\r\n            avg_over_time(\r\n              # peerobserver_p2p_share_linkinglion_total\r\n              (\r\n                sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n                / sum (increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n              )\r\n              [$SHORT_LOOKBACK:1m]\r\n            )\r\n            # anomaly:adaptive:stddev_st\r\n            - avg_over_time\r\n            (\r\n              (\r\n                # anomaly:adaptive:stddev_1h:filtered\r\n                stddev_over_time\r\n                (\r\n                  # peerobserver_p2p_share_linkinglion_total\r\n                  (\r\n                    sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n                    / sum (increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n                  )\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                > avg_over_time\r\n                (\r\n                  # peerobserver_p2p_share_linkinglion_total\r\n                  (\r\n                    sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n                    / sum (increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n                  )\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                * $THRESHOLD_BY_COVAR\r\n              )\r\n              [$LONG_LOOKBACK:1m]\r\n            )\r\n            * $STDDEV_MULTIPLIER,\r\n            \"prediction_type\", \"short_term\", \"\", \"\"\r\n          )\r\n        ), 0)\r\n      )\r\n      [2m:1s]\r\n    )\r\n)\r\n+\r\n(\r\n    last_over_time\r\n    (\r\n      # peerobserver_p2p_share_linkinglion_total\r\n      (\r\n          sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n          / sum (increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n      )\r\n      [2m:1s]\r\n    )\r\n    > bool last_over_time\r\n    (\r\n      (\r\n        max without(prediction_type)\r\n        (\r\n          label_replace(\r\n            # margin_upper_band\r\n            avg_over_time(\r\n              # peerobserver_p2p_share_linkinglion_total\r\n              (\r\n                sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n                / sum (increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n              )\r\n              [$SHORT_LOOKBACK:1m]\r\n            ) * $MARGIN_MULTIPLIER,\r\n            \"prediction_type\", \"margin\", \"\", \"\"\r\n          )\r\n          or\r\n          label_replace(\r\n            # upper_band_st\r\n            avg_over_time(\r\n              # peerobserver_p2p_share_linkinglion_total\r\n              (\r\n                sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n                / sum (increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n              )\r\n              [$SHORT_LOOKBACK:1m]\r\n            )\r\n            # anomaly:adaptive:stddev_st\r\n            + avg_over_time\r\n            (\r\n              (\r\n                # anomaly:adaptive:stddev_1h:filtered\r\n                stddev_over_time(\r\n                  # peerobserver_p2p_share_linkinglion_total\r\n                  (\r\n                    sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n                    / sum (increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n                  )\r\n                  [$SHORT_LOOKBACK:1m]\r\n                ) > avg_over_time\r\n                (\r\n                  # peerobserver_p2p_share_linkinglion_total\r\n                  (\r\n                    sum(increase(peerobserver_p2p_message_bytes_linkinglion{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n                    / sum (increase(peerobserver_p2p_message_bytes{host=\"$HOST\", direction=\"outbound\"}[$INCREASE_INTERVAL]))\r\n                  )\r\n                  [$SHORT_LOOKBACK:1m]\r\n                )\r\n                * $THRESHOLD_BY_COVAR\r\n              )\r\n              [$LONG_LOOKBACK:1m]\r\n            )\r\n            * $STDDEV_MULTIPLIER,\r\n            \"prediction_type\", \"short_term\", \"\", \"\"\r\n          )\r\n        )\r\n      )\r\n      [2m:1s]\r\n    )\r\n)\r\n> bool 0",
+          "instant": false,
+          "legendFormat": "alert",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Outbound traffic share to LinkingLion peers",
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "schemaVersion": 42,
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "0.5",
+          "value": "0.5"
+        },
+        "description": "Used to filter the short interval standard deviation.",
+        "name": "THRESHOLD_BY_COVAR",
+        "options": [
+          {
+            "selected": true,
+            "text": "0.5",
+            "value": "0.5"
+          }
+        ],
+        "query": "0.5",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "2",
+          "value": "2"
+        },
+        "description": "How many standard deviations from the mean to start looking for outliers. For a normal distribution, if this value is 2, the anomaly rate would be 4.55%.",
+        "name": "STDDEV_MULTIPLIER",
+        "options": [
+          {
+            "selected": true,
+            "text": "2",
+            "value": "2"
+          }
+        ],
+        "query": "2",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "1.5",
+          "value": "1.5"
+        },
+        "description": "For the case the metric doesn't have high variation, we look at anomalies only based on the mean. The anomaly thresholds are at the mean multiplied and divided by this value.",
+        "name": "MARGIN_MULTIPLIER",
+        "options": [
+          {
+            "selected": true,
+            "text": "1.5",
+            "value": "1.5"
+          }
+        ],
+        "query": "1.5",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "30m",
+          "value": "30m"
+        },
+        "description": "The range used for computing the increase of monotonic metrics.",
+        "name": "INCREASE_INTERVAL",
+        "options": [
+          {
+            "selected": true,
+            "text": "30m",
+            "value": "30m"
+          }
+        ],
+        "query": "30m",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "1h",
+          "value": "1h"
+        },
+        "description": "The time interval to use as look-back when computing the simple anomaly expressions.",
+        "name": "SHORT_LOOKBACK",
+        "options": [
+          {
+            "selected": true,
+            "text": "1h",
+            "value": "1h"
+          }
+        ],
+        "query": "1h",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "6h",
+          "value": "6h"
+        },
+        "description": "The time interval to use as look-back when computing the amortized standard deviation. Default: 26h.",
+        "name": "LONG_LOOKBACK",
+        "options": [
+          {
+            "selected": true,
+            "text": "6h",
+            "value": "6h"
+          }
+        ],
+        "query": "6h",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "my_host",
+          "value": "my_host"
+        },
+        "name": "HOST",
+        "options": [
+          {
+            "selected": true,
+            "text": "my_host",
+            "value": "my_host"
+          }
+        ],
+        "query": "my_host",
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Anomalies (without recording rules)",
+  "uid": "adtn9gz",
+  "version": 60,
+  "weekStart": ""
+}

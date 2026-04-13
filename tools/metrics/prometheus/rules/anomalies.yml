@@ -21,9 +21,9 @@ groups:
         expr: |-
           stddev_over_time(anomaly:adaptive:select[1h]) > anomaly:adaptive:avg_1h * 0.25
 
-      # LONG_LOOKBACK = 26h
+      # LONG_LOOKBACK = 6h
       - record: anomaly:adaptive:stddev_st
-        expr: avg_over_time(anomaly:adaptive:stddev_1h:filtered[26h])
+        expr: avg_over_time(anomaly:adaptive:stddev_1h:filtered[6h])
 
       # STDDEV_MULTIPLIER = 2
       - record: upper_band_st
