@@ -1,6 +1,7 @@
 groups:
   - name: anomalies
     interval: 1m
+    # THRESHOLD_SPARSE = 5/60
     rules:
       - record: anomaly:adaptive:select
         expr: |-
@@ -15,6 +16,7 @@ groups:
 
       # THRESHOLD_BY_COVAR = 0.25
       # SHORT_LOOKBACK = 1h
+      # When the metric is stable, this rule produces no data.
       - record: anomaly:adaptive:stddev_1h:filtered
         expr: |-
           stddev_over_time(anomaly:adaptive:select[1h]) > anomaly:adaptive:avg_1h * 0.25
@@ -25,11 +27,11 @@ groups:
 
       # STDDEV_MULTIPLIER = 2
       - record: upper_band_st
-        expr: anomaly:adaptive:avg_1h + anomaly:adaptive:stddev_st * on() group_left 2
+        expr: anomaly:adaptive:avg_1h + anomaly:adaptive:stddev_st * 2
 
       # STDDEV_MULTIPLIER = 2
       - record: lower_band_st
-        expr: anomaly:adaptive:avg_1h - anomaly:adaptive:stddev_st * on() group_left 2
+        expr: anomaly:adaptive:avg_1h - anomaly:adaptive:stddev_st * 2
 
       - record: upper_band
         expr: |-
@@ -69,3 +71,15 @@ groups:
             - 5,
             0
           )
+
+  - name: AnomalyAdaptiveAlerts
+    rules:
+      - alert: AnomalyDetected
+        for: 30m
+        expr: >
+          last_over_time(anomaly:adaptive:select[2m]) < last_over_time(lower_band{anomaly_strategy="adaptive"}[2m])
+          or
+          last_over_time(anomaly:adaptive:select[2m]) > last_over_time(upper_band{anomaly_strategy="adaptive"}[2m])
+        labels:
+          severity: warning
+          anomaly_strategy: adaptive
