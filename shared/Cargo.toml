@@ -18,7 +18,7 @@ prometheus = "0.14.0"
 lazy_static = "1.5.0"
 tokio = { version = "1.51.0", features = ["rt-multi-thread", "process", "signal"] }
 futures = "0.3.31"
-rand = "0.9.2"
+rand = "0.9.3"
 time = { version = "0.3.47", features = ["parsing"] }
 regex = "1.12"
 
