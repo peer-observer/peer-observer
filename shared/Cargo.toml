@@ -13,7 +13,7 @@ serde = { version = "1.0.219", features = ["derive"] }
 clap = { version = "4.6.0", features = ["derive"] }
 simple_logger = "5.2.0"
 log = "0.4"
-async-nats = { version = "0.47.0", default-features = false } 
+async-nats = { version = "0.47.0", default-features = false }
 prometheus = "0.14.0"
 lazy_static = "1.5.0"
 tokio = { version = "1.51.0", features = ["rt-multi-thread", "process", "signal"] }
@@ -24,12 +24,11 @@ regex = "1.12"
 
 # Use custom commit to support:
 # - cpu_load and inv_to_send in getpeerinfo
-# - and master has the fix https://github.com/rust-bitcoin/corepc/pull/483
-# (branch 2026-02-v0.11-peer-observer-custom)
+# (branch 2026-04-corepc-0.12+custom-peer-observer-patches)
 # When updating the Bitcoin Core version used, grep for CORE_VERSION_GREP
 # and update the corepc_client::types::v* to the new version.
-corepc-node = { git = "https://github.com/0xb10c/corepc", rev = "b777fa7160c7b97e1e845e771953a158233660cd", features = ["download", "30_2"] }
-corepc-client = { git = "https://github.com/0xb10c/corepc", rev = "b777fa7160c7b97e1e845e771953a158233660cd", features = ["client-sync"]}
+corepc-node = { git = "https://github.com/0xb10c/corepc", rev = "9e4eb4d7181575ff75f9e0a6997b091bd5023b1d", features = ["download", "30_2"] }
+corepc-client = { git = "https://github.com/0xb10c/corepc", rev = "9e4eb4d7181575ff75f9e0a6997b091bd5023b1d", features = ["client-sync"]}
 
 [build-dependencies]
 prost-build = "0.14"

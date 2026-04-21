@@ -231,8 +231,8 @@ checksum = "843867be96c8daad0d758b57df9392b6d8d271134fce549de6ce169ff98a92af"
 
 [[package]]
 name = "bitreq"
-version = "0.3.1"
-source = "git+https://github.com/0xb10c/corepc?rev=b777fa7160c7b97e1e845e771953a158233660cd#b777fa7160c7b97e1e845e771953a158233660cd"
+version = "0.3.4"
+source = "git+https://github.com/0xb10c/corepc?rev=9e4eb4d7181575ff75f9e0a6997b091bd5023b1d#9e4eb4d7181575ff75f9e0a6997b091bd5023b1d"
 dependencies = [
  "rustls 0.21.12",
  "rustls-webpki 0.101.7",
@@ -440,8 +440,8 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "corepc-client"
-version = "0.11.0"
-source = "git+https://github.com/0xb10c/corepc?rev=b777fa7160c7b97e1e845e771953a158233660cd#b777fa7160c7b97e1e845e771953a158233660cd"
+version = "0.12.0"
+source = "git+https://github.com/0xb10c/corepc?rev=9e4eb4d7181575ff75f9e0a6997b091bd5023b1d#9e4eb4d7181575ff75f9e0a6997b091bd5023b1d"
 dependencies = [
  "bitcoin",
  "corepc-types",
@@ -453,8 +453,8 @@ dependencies = [
 
 [[package]]
 name = "corepc-node"
-version = "0.11.0"
-source = "git+https://github.com/0xb10c/corepc?rev=b777fa7160c7b97e1e845e771953a158233660cd#b777fa7160c7b97e1e845e771953a158233660cd"
+version = "0.12.0"
+source = "git+https://github.com/0xb10c/corepc?rev=9e4eb4d7181575ff75f9e0a6997b091bd5023b1d#9e4eb4d7181575ff75f9e0a6997b091bd5023b1d"
 dependencies = [
  "anyhow",
  "bitcoin_hashes",
@@ -471,8 +471,8 @@ dependencies = [
 
 [[package]]
 name = "corepc-types"
-version = "0.11.0"
-source = "git+https://github.com/0xb10c/corepc?rev=b777fa7160c7b97e1e845e771953a158233660cd#b777fa7160c7b97e1e845e771953a158233660cd"
+version = "0.12.0"
+source = "git+https://github.com/0xb10c/corepc?rev=9e4eb4d7181575ff75f9e0a6997b091bd5023b1d#9e4eb4d7181575ff75f9e0a6997b091bd5023b1d"
 dependencies = [
  "bitcoin",
  "serde",
@@ -1079,7 +1079,7 @@ dependencies = [
 [[package]]
 name = "jsonrpc"
 version = "0.19.0"
-source = "git+https://github.com/0xb10c/corepc?rev=b777fa7160c7b97e1e845e771953a158233660cd#b777fa7160c7b97e1e845e771953a158233660cd"
+source = "git+https://github.com/0xb10c/corepc?rev=9e4eb4d7181575ff75f9e0a6997b091bd5023b1d#9e4eb4d7181575ff75f9e0a6997b091bd5023b1d"
 dependencies = [
  "base64 0.22.1",
  "bitreq",
