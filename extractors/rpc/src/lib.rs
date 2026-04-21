@@ -1,7 +1,6 @@
 use shared::clap::{ArgGroup, Parser};
 use shared::corepc_client::client_sync::Auth;
-use shared::corepc_client::client_sync::v30::Client;
-use shared::corepc_client::types::v30::EstimateSmartFee as RPCEstimateSmartFee;
+use shared::corepc_client::client_sync::v30::{Client, FeeEstimateMode};
 use shared::corepc_node::mtype::{
     GetBlockchainInfo, GetChainTxStats, GetNetworkInfo, GetOrphanTxsVerboseTwo,
 };
@@ -10,7 +9,7 @@ use shared::nats_subjects::Subject;
 use shared::nats_util::{self, NatsArgs};
 use shared::prost::Message;
 use shared::protobuf::event::{Event, event::PeerObserverEvent};
-use shared::protobuf::rpc_extractor::{self, EstimateSmartFee, FeeEstimateMode};
+use shared::protobuf::rpc_extractor::{self, EstimateSmartFee};
 use shared::tokio::sync::watch;
 use shared::tokio::time::{self, Duration};
 use shared::{async_nats, clap};
@@ -663,20 +662,14 @@ async fn estimatesmartfee(
 
     for target in BLOCK_TARGETS {
         for mode in MODES {
-            let estimate: RPCEstimateSmartFee =
-                measure_rpc_call("estimatesmartfee", metrics, || {
-                    // TODO: when https://github.com/rust-bitcoin/corepc/pull/531 gets released
-                    // use estimate_smart_fee_with_mode instead of the generic call
-                    rpc_client.call::<RPCEstimateSmartFee>(
-                        "estimatesmartfee",
-                        &[target.into(), mode.to_string().into()],
-                    )
-                })?;
+            let estimate = measure_rpc_call("estimatesmartfee", metrics, || {
+                rpc_client.estimate_smart_fee_with_mode(target, mode)
+            })?;
             let estimate = estimate.into_model().unwrap();
 
             let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
                 rpc_event: Some(rpc_extractor::rpc::RpcEvent::EstimateSmartFee(
-                    EstimateSmartFee::from_rpc(estimate, target, mode),
+                    EstimateSmartFee::from_rpc(estimate, target, mode.into()),
                 )),
             }))?;
 

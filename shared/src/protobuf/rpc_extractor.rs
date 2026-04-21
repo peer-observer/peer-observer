@@ -3,6 +3,7 @@ use bitcoin::FeeRate;
 // Types that don't have a generic model type in corepc (yet).
 // Once they have a model, move them down to the mtypes!
 // CORE_VERSION_GREP: When updating the corepc node crate version, bump this too.
+use corepc_client::client_sync::v30::FeeEstimateMode as RPCFeeEstimateMode;
 use corepc_client::types::v30::{
     AddrManInfoNetwork as RPCAddrManInfoNetwork, GetAddrManInfo as RPCGetAddrManInfo,
     GetMemoryInfoStats as RPCGetMemoryInfoStats, GetNetTotals as RPCGetNetTotals,
@@ -564,6 +565,16 @@ impl fmt::Display for EstimateSmartFee {
 impl fmt::Display for FeeEstimateMode {
     fn fmt(&self, estimate: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(estimate, "{}", self.as_str_name())
+    }
+}
+
+impl From<RPCFeeEstimateMode> for FeeEstimateMode {
+    fn from(mode: RPCFeeEstimateMode) -> Self {
+        match mode {
+            RPCFeeEstimateMode::Unset => FeeEstimateMode::Unset,
+            RPCFeeEstimateMode::Economical => FeeEstimateMode::Economical,
+            RPCFeeEstimateMode::Conservative => FeeEstimateMode::Conservative,
+        }
     }
 }
 
