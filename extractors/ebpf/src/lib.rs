@@ -8,13 +8,11 @@ use shared::log::{self, error};
 use shared::nats_subjects::Subject;
 use shared::prost::Message;
 use shared::protobuf::ebpf_extractor::ctypes::{
-    AddrmanInsertNew, AddrmanInsertTried, ClosedConnection, InboundConnection, MempoolAdded,
-    MempoolRejected, MempoolRemoved, MempoolReplaced, MisbehavingConnection, OutboundConnection,
-    P2PMessage, ValidationBlockConnected,
+    ClosedConnection, InboundConnection, MempoolAdded, MempoolRejected, MempoolRemoved,
+    MempoolReplaced, MisbehavingConnection, OutboundConnection, P2PMessage,
+    ValidationBlockConnected,
 };
-use shared::protobuf::ebpf_extractor::{
-    addrman, connection, ebpf, mempool, message, validation, Ebpf,
-};
+use shared::protobuf::ebpf_extractor::{connection, ebpf, mempool, message, validation, Ebpf};
 use shared::protobuf::event::event::PeerObserverEvent;
 use shared::protobuf::event::Event;
 use shared::tokio::sync::watch;
@@ -110,21 +108,6 @@ const TRACEPOINTS_MEMPOOL: [Tracepoint; 4] = [
         function: "handle_mempool_rejected",
     },
 ];
-
-// Update the ebpf-extractor docs in the README.md when editing these.
-const TRACEPOINTS_ADDRMAN: [Tracepoint; 2] = [
-    Tracepoint {
-        context: "addrman",
-        name: "attempt_add",
-        function: "handle_addrman_new",
-    },
-    Tracepoint {
-        context: "addrman",
-        name: "move_to_good",
-        function: "handle_addrman_tried",
-    },
-];
-
 // Update the ebpf-extractor docs in the README.md when editing these.
 const TRACEPOINTS_VALIDATION: [Tracepoint; 1] = [Tracepoint {
     context: "validation",
@@ -175,12 +158,6 @@ pub struct Args {
     #[arg(long)]
     pub no_validation_tracepoints: bool,
 
-    // Custom tracepoints
-    /// Controls if the addrman tracepoints should be hooked into.
-    /// These may not have been PRed to Bitcoin Core yet.
-    #[arg(long)]
-    pub addrman_tracepoints: bool,
-
     /// The log level the extractor should run with. Valid log levels are "trace",
     /// "debug", "info", "warn", "error". See https://docs.rs/log/latest/log/enum.Level.html
     #[arg(short, long, default_value_t = log::Level::Debug)]
@@ -210,7 +187,6 @@ impl Args {
             no_connection_tracepoints: false,
             no_mempool_tracepoints: false,
             no_validation_tracepoints: false,
-            addrman_tracepoints: false,
             log_level: log::Level::Debug,
             libbpf_debug: false,
             no_idle_exit: false,
@@ -222,7 +198,6 @@ impl Args {
             && self.no_connection_tracepoints
             && self.no_validation_tracepoints
             && self.no_mempool_tracepoints
-            && !self.addrman_tracepoints
     }
 }
 
@@ -418,17 +393,6 @@ fn init_bpf_listener<'a, 'b>(
             .add(&map_mempool_removed,  |data| { handle_mempool_removed(data, nc) })?
             .add(&map_mempool_rejected, |data| { handle_mempool_rejected(data, nc) })?
             .add(&map_mempool_replaced, |data| { handle_mempool_replaced(data, nc) })?;
-    }
-
-    // addrman tracepoints
-    let map_addrman_insert_new = find_map(obj, "addrman_insert_new")?;
-    let map_addrman_insert_tried = find_map(obj, "addrman_insert_tried")?;
-    if args.addrman_tracepoints {
-        active_tracepoints.extend(&TRACEPOINTS_ADDRMAN);
-        #[rustfmt::skip]
-        ringbuff_builder
-            .add(&map_addrman_insert_new, |data| { handle_addrman_new(data, nc) })?
-            .add(&map_addrman_insert_tried, |data| { handle_addrman_tried(data, nc) })?;
     }
 
     // attach tracepoints
@@ -752,56 +716,6 @@ fn handle_net_message(data: &[u8], nc: &async_nats::Client) -> i32 {
             .await
         {
             error!("could not publish message in 'handle_net_message': {}", e);
-        }
-    });
-    RINGBUFF_CALLBACK_OK
-}
-
-fn handle_addrman_new(data: &[u8], nc: &async_nats::Client) -> i32 {
-    let new = AddrmanInsertNew::from_bytes(data);
-    let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Addrman(addrman::AddrmanEvent {
-            event: Some(addrman::addrman_event::Event::New(new.into())),
-        })),
-    })) {
-        Ok(p) => p,
-        Err(e) => {
-            error!("Could not create new Event due to SystemTimeError: {}", e);
-            return RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR;
-        }
-    };
-    let nc = nc.clone();
-    tokio::spawn(async move {
-        if let Err(e) = nc
-            .publish(Subject::Addrman.to_string(), proto.encode_to_vec().into())
-            .await
-        {
-            error!("could not publish message in 'handle_addrman_new': {}", e);
-        }
-    });
-    RINGBUFF_CALLBACK_OK
-}
-
-fn handle_addrman_tried(data: &[u8], nc: &async_nats::Client) -> i32 {
-    let tried = AddrmanInsertTried::from_bytes(data);
-    let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Addrman(addrman::AddrmanEvent {
-            event: Some(addrman::addrman_event::Event::Tried(tried.into())),
-        })),
-    })) {
-        Ok(p) => p,
-        Err(e) => {
-            error!("Could not create new Event due to SystemTimeError: {}", e);
-            return RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR;
-        }
-    };
-    let nc = nc.clone();
-    tokio::spawn(async move {
-        if let Err(e) = nc
-            .publish(Subject::Addrman.to_string(), proto.encode_to_vec().into())
-            .await
-        {
-            error!("could not publish message in 'handle_addrman_tried': {}", e);
         }
     });
     RINGBUFF_CALLBACK_OK

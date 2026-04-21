@@ -28,7 +28,6 @@ pub const LABEL_CONN_NETWORK: &str = "network";
 pub const LABEL_CONN_ADDR: &str = "addr";
 pub const LABEL_CONN_MISBEHAVING_MESSAGE: &str = "misbehavingmessage";
 pub const LABEL_CONN_MISBEHAVING_ID: &str = "id";
-pub const LABEL_ADDRMAN_NEW_INSERT_SUCCESS: &str = "inserted";
 pub const LABEL_MEMPOOL_REASON: &str = "reason";
 
 pub const LABEL_RPC_TRANSPORT_PROTOCOL_TYPE: &str = "transport_protocol_type";
@@ -220,8 +219,6 @@ pub struct Metrics {
     pub conn_misbehaving_reason: IntCounterVec,
     pub conn_private_transaction_broadcast: IntCounter,
 
-    pub addrman_new_insert: IntCounterVec,
-    pub addrman_tried_insert: IntCounter,
     pub mempool_added: IntCounter,
     pub mempool_added_vbytes: IntCounter,
     pub mempool_replaced: IntCounter,
@@ -437,8 +434,6 @@ impl Metrics {
         icv!(p2p_version_useragent, "Number of version messages received by user agent. Fake user agents from LinkingLion are set to 'LinkingLion'.", [LABEL_P2P_VERSION_USERAGENT], registry);
         icv!(p2p_feefilter_feerate, "Number of feefilter messages received and sent by feerate.", [LABEL_P2P_DIRECTION, LABEL_P2P_FEEFILTER_FEERATE], registry);
         icv!(p2p_reject_message, "Number of reject messages received by command and reason.", [LABEL_P2P_REJECT_COMMAND, LABEL_P2P_REJECT_REASON], registry);
-        icv!(addrman_new_insert, "Number of attempted inserts into the addrman new table with their success as label.", [LABEL_ADDRMAN_NEW_INSERT_SUCCESS], registry);
-        ic!(addrman_tried_insert, "Number of inserts into the addrman tried table", registry);
         ic!(mempool_added, "Number of transactions added to the mempool.", registry);
         ic!(mempool_added_vbytes, "Number of vbytes added to the mempool.", registry);
         ic!(mempool_replaced, "Number of transactions replaced in the mempool.", registry);
@@ -651,8 +646,6 @@ impl Metrics {
             p2p_version_useragent,
             p2p_feefilter_feerate,
             p2p_reject_message,
-            addrman_new_insert,
-            addrman_tried_insert,
             mempool_added,
             mempool_added_vbytes,
             mempool_replaced,

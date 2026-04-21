@@ -62,7 +62,6 @@ pub struct ClientSubscriptionsEbpf {
     pub mempool: bool,
     pub validation: bool,
     pub connections: bool,
-    pub addrman: bool,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
@@ -248,7 +247,6 @@ async fn broadcast_to_clients(event: &PeerObserverEvent, clients: &Clients) {
             PeerObserverEvent::EbpfExtractor(ebpf) => match &ebpf.ebpf_event {
                 Some(ebpf::EbpfEvent::Message(_)) => client.subscriptions.ebpf.messages,
                 Some(ebpf::EbpfEvent::Connection(_)) => client.subscriptions.ebpf.connections,
-                Some(ebpf::EbpfEvent::Addrman(_)) => client.subscriptions.ebpf.addrman,
                 Some(ebpf::EbpfEvent::Mempool(_)) => client.subscriptions.ebpf.mempool,
                 Some(ebpf::EbpfEvent::Validation(_)) => client.subscriptions.ebpf.validation,
                 None => false,

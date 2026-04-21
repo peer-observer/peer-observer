@@ -470,19 +470,15 @@ fn decode_weird_network_message(
     payload: &[u8],
 ) -> Option<message::message_event::Msg> {
     match meta.msg_type().as_str() {
-        "addrv2" => {
-            if meta.msg_size == 0 {
-                // case: empty addrv2 message.
-                log::debug!("emtpy addrv2: {}", meta);
-                return Some(message::message_event::Msg::Emptyaddrv2(true));
-            }
+        "addrv2" if meta.msg_size == 0 => {
+            // case: empty addrv2 message.
+            log::debug!("empty addrv2: {}", meta);
+            return Some(message::message_event::Msg::Emptyaddrv2(true));
         }
-        "ping" => {
-            if meta.msg_size == 0 {
-                // case: old ping message with no nonce.
-                log::debug!("no-value ping: {}", meta);
-                return Some(message::message_event::Msg::Oldping(true));
-            }
+        "ping" if meta.msg_size == 0 => {
+            // case: old ping message with no nonce.
+            log::debug!("no-value ping: {}", meta);
+            return Some(message::message_event::Msg::Oldping(true));
         }
         "tx" => {
             log::debug!(
@@ -514,90 +510,6 @@ impl P2PMessageDecodeError {
 impl fmt::Display for P2PMessageDecodeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "P2P message decode error: {}: {}", self.meta, self.error)
-    }
-}
-
-#[repr(C)]
-pub struct AddrmanInsertNew {
-    pub inserted: bool,
-    pub bucket: i32,
-    pub bucket_pos: i32,
-    pub addr: [u8; MAX_PEER_ADDR_LENGTH],
-    pub addr_as: u32,
-    pub source: [u8; MAX_PEER_ADDR_LENGTH],
-    pub source_as: u32,
-}
-
-impl AddrmanInsertNew {
-    /// Extracts the IP address as a string from the addr bytes.
-    pub fn addr(&self) -> String {
-        String::from_utf8_lossy(self.addr.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
-    }
-
-    /// Extracts the source IP address as a string from the source bytes.
-    pub fn source(&self) -> String {
-        String::from_utf8_lossy(self.source.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
-    }
-
-    pub fn from_bytes(x: &[u8]) -> AddrmanInsertNew {
-        unsafe { ptr::read_unaligned(x.as_ptr() as *const AddrmanInsertNew) }
-    }
-}
-
-impl fmt::Display for AddrmanInsertNew {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "AddrmanInsertNew(inserted={}, bucket={}, bucket_pos={}, addr={}, addr_AS={}, source={}, source_AS={})",
-            self.inserted,
-            self.bucket,
-            self.bucket_pos,
-            self.addr(),
-            self.addr_as,
-            self.source(),
-            self.source_as,
-        )
-    }
-}
-
-#[repr(C)]
-pub struct AddrmanInsertTried {
-    pub bucket: i32,
-    pub bucket_pos: i32,
-    pub addr: [u8; MAX_PEER_ADDR_LENGTH],
-    pub addr_as: u32,
-    pub source: [u8; MAX_PEER_ADDR_LENGTH],
-    pub source_as: u32,
-}
-
-impl AddrmanInsertTried {
-    /// Extracts the IP address as a string from the addr bytes.
-    pub fn addr(&self) -> String {
-        String::from_utf8_lossy(self.addr.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
-    }
-
-    /// Extracts the source IP address as a string from the source bytes.
-    pub fn source(&self) -> String {
-        String::from_utf8_lossy(self.source.split(|c| *c == 0x00u8).next().unwrap()).into_owned()
-    }
-
-    pub fn from_bytes(x: &[u8]) -> AddrmanInsertTried {
-        unsafe { ptr::read_unaligned(x.as_ptr() as *const AddrmanInsertTried) }
-    }
-}
-
-impl fmt::Display for AddrmanInsertTried {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "AddrmanInsertTried(bucket={}, bucket_pos={}, addr={}, addr_AS={}, source={}, source_AS={})",
-            self.bucket,
-            self.bucket_pos,
-            self.addr(),
-            self.addr_as,
-            self.source(),
-            self.source_as,
-        )
     }
 }
 

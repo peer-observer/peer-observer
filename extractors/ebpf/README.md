@@ -103,8 +103,6 @@ Options:
           Controls if the mempool tracepoints should be hooked into
       --no-validation-tracepoints
           Controls if the validation tracepoints should be hooked into
-      --addrman-tracepoints
-          Controls if the addrman tracepoints should be hooked into. These may not have been PRed to Bitcoin Core yet
   -l, --log-level <LOG_LEVEL>
           The log level the extractor should run with. Valid log levels are "trace", "debug", "info", "warn", "error". See https://docs.rs/log/latest/log/enum.Level.html [default: DEBUG]
       --libbpf-debug

@@ -18,8 +18,7 @@ var subscriptions = {
     messages: false,
     mempool: false,
     validation: false,
-    connections: false,
-    addrman: false
+    connections: false
   },
   p2p: false,
   log: false,

@@ -73,8 +73,6 @@ Options:
           If passed, show P2P message events
       --connections
           If passed, show P2P connection events
-      --addrman
-          If passed, show addrman events
       --mempool
           If passed, show mempool events
       --validation

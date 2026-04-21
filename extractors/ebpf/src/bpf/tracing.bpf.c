@@ -279,57 +279,6 @@ int BPF_USDT(handle_net_conn_misbehaving, u64 id, void *message) {
     return bpf_ringbuf_output(&net_conn_misbehaving, &misbehaving, sizeof(misbehaving), 0);
 };
 
-// ADDRMAN
-
-#define ADDRMAN_PAGES 64
-
-RINGBUFFER(addrman_insert_new, ADDRMAN_PAGES)
-RINGBUFFER(addrman_insert_tried, ADDRMAN_PAGES)
-
-struct AddrmanNew {
-    bool    inserted;
-    s32     bucket;
-    s32     bucket_pos;
-    char    addr[MAX_PEER_ADDR_LENGTH];
-    u32     addr_AS;
-    char    source[MAX_PEER_ADDR_LENGTH];
-    u32     source_AS;
-};
-
-struct AddrmanTried {
-    s32     bucket;
-    s32     bucket_pos;
-    char    addr[MAX_PEER_ADDR_LENGTH];
-    u32     addr_AS;
-    char    source[MAX_PEER_ADDR_LENGTH];
-    u32     source_AS;
-};
-
-SEC("usdt")
-int BPF_USDT(handle_addrman_new, bool inserted, s32 bucket, s32 bucket_pos, void *addr, u32 addr_AS, void *source, u32 source_AS) {
-    struct AddrmanNew new = {};
-    new.inserted = inserted;
-    new.bucket = bucket;
-    new.bucket_pos = bucket_pos;
-    bpf_probe_read_user_str(&new.addr, sizeof(new.addr), addr);
-    new.addr_AS = addr_AS;
-    bpf_probe_read_user_str(&new.source, sizeof(new.source), source);
-    new.source_AS = source_AS;
-    return bpf_ringbuf_output(&addrman_insert_new, &new, sizeof(new), 0);
-};
-
-SEC("usdt")
-int BPF_USDT(handle_addrman_tried, s32 bucket, s32 bucket_pos, void *addr, u32 addr_AS, void *source, u32 source_AS) {
-    struct AddrmanTried tried = {};
-    tried.bucket = bucket;
-    tried.bucket_pos = bucket_pos;
-    bpf_probe_read_user_str(&tried.addr, sizeof(tried.addr), addr);
-    tried.addr_AS = addr_AS;
-    bpf_probe_read_user_str(&tried.source, sizeof(tried.source), source);
-    tried.source_AS = source_AS;
-    return bpf_ringbuf_output(&addrman_insert_tried, &tried, sizeof(tried), 0);
-};
-
 // MEMPOOL
 
 #define MEMPOOL_PAGES 64

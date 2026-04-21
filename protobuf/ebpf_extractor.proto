@@ -4,7 +4,6 @@ package ebpf_extractor;
 
 import "ebpf_extractor/message.proto";
 import "ebpf_extractor/connection.proto";
-import "ebpf_extractor/addrman.proto";
 import "ebpf_extractor/mempool.proto";
 import "ebpf_extractor/validation.proto";
 
@@ -12,7 +11,6 @@ message ebpf {
   oneof ebpf_event {
     message.MessageEvent          message       = 1;
     connection.ConnectionEvent    connection    = 2;
-    addrman.AddrmanEvent          addrman       = 3;
     mempool.MempoolEvent          mempool       = 4;
     validation.ValidationEvent    validation    = 5;
   }

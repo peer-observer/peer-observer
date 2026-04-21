@@ -174,7 +174,6 @@ function runUnitTests() {
 function handle_ebpf_extractor_message(e) {};
 function handle_ebpf_extractor_connection(e) {};
 function handle_ebpf_extractor_mempool(e) {};
-function handle_ebpf_extractor_addrman(e) {};
 function handle_ebpf_extractor_validation(e) {};
 // rpc-extractor
 function handle_rpc_extractor_peerinfo(e) {};
@@ -199,8 +198,6 @@ function processWebsocketMessage(e) {
       handle_ebpf_extractor_connection(ebpf_event.Connection.event)
     } else if (ebpf_event.hasOwnProperty("Mempool")) {
       handle_ebpf_extractor_mempool(ebpf_event.Mempool.event)
-    } else if (ebpf_event.hasOwnProperty("Addrman")) {
-      handle_ebpf_extractor_addrman(ebpf_event.Addrman.event)
     } else if (ebpf_event.hasOwnProperty("Validation")) {
       handle_ebpf_extractor_validation(ebpf_event.Validation.event)
     } else {

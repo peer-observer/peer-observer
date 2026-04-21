@@ -1,5 +1,3 @@
-/// Protobuf types for ebpf-extractor addrman tracepoint events.
-pub mod addrman;
 /// Protobuf types for ebpf-extractor connection tracepoint events.
 pub mod connection;
 /// Protobuf types for ebpf-extractor mempool tracepoint events.
@@ -22,7 +20,6 @@ impl fmt::Display for ebpf::EbpfEvent {
         match self {
             ebpf::EbpfEvent::Message(message) => write!(f, "{}", message),
             ebpf::EbpfEvent::Connection(connection) => write!(f, "{}", connection),
-            ebpf::EbpfEvent::Addrman(addrman) => write!(f, "{}", addrman),
             ebpf::EbpfEvent::Mempool(mempool) => write!(f, "{}", mempool),
             ebpf::EbpfEvent::Validation(validation) => write!(f, "{}", validation),
         }

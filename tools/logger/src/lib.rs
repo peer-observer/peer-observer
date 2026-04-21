@@ -44,10 +44,6 @@ pub struct Args {
     #[arg(long)]
     pub connections: bool,
 
-    /// If passed, show addrman events
-    #[arg(long)]
-    pub addrman: bool,
-
     /// If passed, show mempool events
     #[arg(long)]
     pub mempool: bool,
@@ -73,7 +69,6 @@ impl Args {
     pub fn show_all(&self) -> bool {
         !(self.messages
             || self.connections
-            || self.addrman
             || self.mempool
             || self.validation
             || self.rpc
@@ -87,7 +82,6 @@ impl Args {
         log_level: log::Level,
         messages: bool,
         connections: bool,
-        addrman: bool,
         mempool: bool,
         validation: bool,
         rpc: bool,
@@ -99,7 +93,6 @@ impl Args {
             log_level,
             messages,
             connections,
-            addrman,
             mempool,
             validation,
             rpc,
@@ -116,7 +109,6 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         log::info!("logging all events:           {}", args.show_all());
         log::info!("logging P2P messages:         {}", args.messages);
         log::info!("logging P2P connections:      {}", args.connections);
-        log::info!("logging addrman events:       {}", args.addrman);
         log::info!("logging mempool events:       {}", args.mempool);
         log::info!("logging validation events:    {}", args.validation);
         log::info!("logging rpc events:           {}", args.rpc);
@@ -173,11 +165,6 @@ fn log_event(event: Event, args: Args) {
             ebpf::EbpfEvent::Connection(conn) => {
                 if log_all || args.connections {
                     log::info!("connection: {}", conn);
-                }
-            }
-            ebpf::EbpfEvent::Addrman(addrman) => {
-                if log_all || args.addrman {
-                    log::info!("addrman: {}", addrman);
                 }
             }
             ebpf::EbpfEvent::Mempool(mempool) => {

@@ -11,7 +11,6 @@ use shared::prost::Message;
 use shared::protobuf::bitcoin_primitives;
 use shared::protobuf::{
     ebpf_extractor::{
-        addrman::addrman_event,
         connection::connection_event,
         ebpf,
         mempool::mempool_event,
@@ -145,9 +144,6 @@ fn handle_event(
                 }
                 ebpf::EbpfEvent::Connection(conn) => {
                     handle_connection_event(&conn.event.unwrap(), unwrapped.timestamp, metrics);
-                }
-                ebpf::EbpfEvent::Addrman(addrman) => {
-                    handle_addrman_event(&addrman.event.unwrap(), metrics);
                 }
                 ebpf::EbpfEvent::Mempool(mempool) => {
                     handle_mempool_event(&mempool.event.unwrap(), metrics);
@@ -1178,20 +1174,6 @@ fn handle_p2p_extractor_event(p2p_event: &p2p::P2pEvent, metrics: metrics::Metri
     }
 }
 
-fn handle_addrman_event(aevent: &addrman_event::Event, metrics: metrics::Metrics) {
-    match aevent {
-        addrman_event::Event::New(new) => {
-            metrics
-                .addrman_new_insert
-                .with_label_values(&[&new.inserted.to_string()])
-                .inc();
-        }
-        addrman_event::Event::Tried(_) => {
-            metrics.addrman_tried_insert.inc();
-        }
-    }
-}
-
 fn check_self_and_subnet_announcement(
     address: bitcoin_primitives::address::Address,
     ip: &str,
@@ -1398,32 +1380,28 @@ fn handle_p2p_message(msg: &message::MessageEvent, timestamp_ms: u64, metrics: m
                         .inc();
                 }
             }
-            Msg::Oldping(_) => {
-                if msg.meta.inbound {
-                    metrics
-                        .p2p_oldping_subnet
-                        .with_label_values(&[&subnet])
-                        .inc();
-                }
+            Msg::Oldping(_) if msg.meta.inbound => {
+                metrics
+                    .p2p_oldping_subnet
+                    .with_label_values(&[&subnet])
+                    .inc();
             }
-            Msg::Version(v) => {
-                if msg.meta.inbound {
-                    // LinkingLion is using a lot of fake user agents. To reduce noise and the metric
-                    // cardinality (see https://github.com/0xB10C/peer-observer/issues/239#issuecomment-3248916550),
-                    // treat them as "LinkingLion".
-                    // https://b10c.me/data/observations/06-linkinglion/linkinglion-user-agents.txt
-                    let user_agent = match is_on_linkinglion_banlist(&ip) {
-                        true => "LinkingLion",
-                        false => &v.user_agent,
-                    };
-                    metrics
-                        .p2p_version_useragent
-                        .with_label_values(&[&user_agent])
-                        .inc();
+            Msg::Version(v) if msg.meta.inbound => {
+                // LinkingLion is using a lot of fake user agents. To reduce noise and the metric
+                // cardinality (see https://github.com/0xB10C/peer-observer/issues/239#issuecomment-3248916550),
+                // treat them as "LinkingLion".
+                // https://b10c.me/data/observations/06-linkinglion/linkinglion-user-agents.txt
+                let user_agent = match is_on_linkinglion_banlist(&ip) {
+                    true => "LinkingLion",
+                    false => &v.user_agent,
+                };
+                metrics
+                    .p2p_version_useragent
+                    .with_label_values(&[&user_agent])
+                    .inc();
 
-                    if user_agent == PRIVATE_TRANSACTION_BROADCAST_USERAGENT {
-                        metrics.conn_private_transaction_broadcast.inc();
-                    }
+                if user_agent == PRIVATE_TRANSACTION_BROADCAST_USERAGENT {
+                    metrics.conn_private_transaction_broadcast.inc();
                 }
             }
             Msg::Feefilter(f) => {
@@ -1432,17 +1410,15 @@ fn handle_p2p_message(msg: &message::MessageEvent, timestamp_ms: u64, metrics: m
                     .with_label_values(&[&direction, &f.fee.to_string()])
                     .inc();
             }
-            Msg::Reject(r) => {
-                if msg.meta.inbound {
-                    let reason = match RejectReason::try_from(r.reason) {
-                        Ok(r) => r.to_string(),
-                        Err(_) => "unknown".to_string(),
-                    };
-                    metrics
-                        .p2p_reject_message
-                        .with_label_values(&[&r.rejected_command, &reason])
-                        .inc();
-                }
+            Msg::Reject(r) if msg.meta.inbound => {
+                let reason = match RejectReason::try_from(r.reason) {
+                    Ok(r) => r.to_string(),
+                    Err(_) => "unknown".to_string(),
+                };
+                metrics
+                    .p2p_reject_message
+                    .with_label_values(&[&r.rejected_command, &reason])
+                    .inc();
             }
             _ => (),
         }

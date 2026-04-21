@@ -9,7 +9,6 @@ use shared::{
     prost::Message,
     protobuf::{
         ebpf_extractor::{
-            addrman::{self, InsertNew, InsertTried},
             connection::{self, Connection, InboundConnection},
             ebpf,
             mempool::{self, Added},
@@ -71,7 +70,6 @@ fn make_test_args(
     nats_port: u16,
     messages: bool,
     connections: bool,
-    addrman: bool,
     mempool: bool,
     validation: bool,
     rpc: bool,
@@ -88,7 +86,6 @@ fn make_test_args(
         log::Level::Trace,
         messages,
         connections,
-        addrman,
         mempool,
         validation,
         rpc,
@@ -123,17 +120,7 @@ async fn publish_and_check(events: &[Event], subject: Subject, expected: &str) {
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
     let logger_handle = tokio::spawn(async move {
-        let args = make_test_args(
-            nats_server.port,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-        );
+        let args = make_test_args(nats_server.port, true, true, true, true, true, true, true);
         logger::run(args, shutdown_rx.clone()).await.unwrap();
     });
     // allow the logger tool to start
@@ -176,7 +163,7 @@ async fn test_integration_logger_fail_if_no_nats() {
     let logger_handle = tokio::spawn(async move {
         let args = make_test_args(
             65535, // There shouln't be a NATS server running on this port..
-            true, true, true, true, true, true, true, true,
+            true, true, true, true, true, true, true,
         );
         match logger::run(args, shutdown_rx.clone()).await {
             Ok(_) => panic!("We should fail when no NATS server is reachable."),
@@ -458,46 +445,6 @@ async fn test_integration_logger_rpc_peerinfo() {
         Subject::Rpc,
         r#"
         rpc: PeerInfos([PeerInfo(id=1), PeerInfo(id=2), PeerInfo(id=2)])
-        "#,
-    )
-    .await;
-}
-
-#[tokio::test]
-async fn test_integration_logger_addrman() {
-    println!("test that addrman events are logged");
-
-    publish_and_check(
-        &[Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-            ebpf_event: Some(ebpf::EbpfEvent::Addrman(addrman::AddrmanEvent {
-                event: Some(addrman::addrman_event::Event::New(InsertNew {
-                    addr: "127.0.0.1:2340".to_string(),
-                    addr_as: 2,
-                    bucket: 2,
-                    bucket_pos: 2,
-                    inserted: false,
-                    source: "127.0.0.1:2340".to_string(),
-                    source_as: 0,
-                })),
-            })),
-        })).unwrap(),
-        Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-            ebpf_event: Some(ebpf::EbpfEvent::Addrman(addrman::AddrmanEvent {
-                event: Some(addrman::addrman_event::Event::Tried(InsertTried {
-                    addr: "127.0.0.1:2340".to_string(),
-                    addr_as: 2,
-                    bucket: 2,
-                    bucket_pos: 2,
-                    source: "127.0.0.1:2340".to_string(),
-                    source_as: 0,
-                })),
-            })),
-        })).unwrap(),
-        ],
-        Subject::Addrman,
-        r#"
-        addrman: InsertNew(inserted=false, bucket=2, bucket_pos=2, addr=127.0.0.1:2340, addr_AS=2, source=127.0.0.1:2340, source_AS=0)
-        addrman: InsertTried(bucket=2, bucket_pos=2, addr=127.0.0.1:2340, addr_AS=2, source=127.0.0.1:2340, source_AS=0)
         "#,
     )
     .await;
