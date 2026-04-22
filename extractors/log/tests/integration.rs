@@ -4,7 +4,7 @@
 use log_extractor::Args;
 use shared::{
     async_nats,
-    bitcoin::{self, Block, consensus::Decodable, hashes::Hash, hex::FromHex},
+    bitcoin::{Block, consensus::Decodable, hashes::Hash, hex::FromHex},
     corepc_node,
     futures::StreamExt,
     log::{Level, LevelFilter, info},
@@ -15,7 +15,7 @@ use shared::{
         log_extractor::{LogDebugCategory, log},
     },
     simple_logger::SimpleLogger,
-    testing::nats_server::NatsServerForTesting,
+    testing::{REGTEST_ADDRESS, nats_server::NatsServerForTesting},
     tokio::{
         self, select,
         sync::watch,
@@ -23,7 +23,6 @@ use shared::{
     },
 };
 use std::io::Write;
-use std::str::FromStr;
 use std::sync::Once;
 
 static INIT: Once = Once::new();
@@ -328,12 +327,7 @@ async fn test_integration_logextractor_block_connected() {
     check(
         vec!["-debug=validation"],
         |node1| {
-            let address: bitcoin::address::Address =
-                bitcoin::address::Address::from_str("bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw")
-                    .unwrap()
-                    .require_network(bitcoin::Network::Regtest)
-                    .unwrap();
-            node1.generate_to_address(1, &address).unwrap();
+            node1.generate_to_address(1, &REGTEST_ADDRESS).unwrap();
         },
         |event| {
             match event {
@@ -389,12 +383,7 @@ async fn test_integration_logextractor_extralogging() {
             "-logtimemicros=1",
         ],
         |node1| {
-            let address: bitcoin::address::Address =
-                bitcoin::address::Address::from_str("bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw")
-                    .unwrap()
-                    .require_network(bitcoin::Network::Regtest)
-                    .unwrap();
-            node1.generate_to_address(1, &address).unwrap();
+            node1.generate_to_address(1, &REGTEST_ADDRESS).unwrap();
         },
         |event| {
             match event {
@@ -422,12 +411,7 @@ async fn test_integration_logextractor_block_checked() {
     check(
         vec!["-debug=validation"],
         |node1| {
-            let address: bitcoin::address::Address =
-                bitcoin::address::Address::from_str("bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw")
-                    .unwrap()
-                    .require_network(bitcoin::Network::Regtest)
-                    .unwrap();
-            node1.generate_to_address(1, &address).unwrap();
+            node1.generate_to_address(1, &REGTEST_ADDRESS).unwrap();
         },
         |event| {
             match event {
@@ -455,14 +439,8 @@ async fn test_integration_logextractor_mutated_block_bad_witness_nonce_size() {
     check(
         vec!["-debug=validation"],
         |node1| {
-            let address: bitcoin::address::Address =
-                bitcoin::address::Address::from_str("bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw")
-                    .unwrap()
-                    .require_network(bitcoin::Network::Regtest)
-                    .unwrap();
-
             let block = node1
-                .generate_block(&address.to_string(), &[], false)
+                .generate_block(&REGTEST_ADDRESS.to_string(), &[], false)
                 .unwrap();
             let block_hex = block.hex.unwrap();
             let block_bytes: Vec<u8> = FromHex::from_hex(&block_hex).unwrap();
@@ -509,14 +487,8 @@ async fn test_integration_logextractor_mutated_block_bad_txnmrklroot() {
     check(
         vec!["-debug=validation"],
         |node1| {
-            let address: bitcoin::address::Address =
-                bitcoin::address::Address::from_str("bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw")
-                    .unwrap()
-                    .require_network(bitcoin::Network::Regtest)
-                    .unwrap();
-
             let block = node1
-                .generate_block(&address.to_string(), &[], false)
+                .generate_block(&REGTEST_ADDRESS.to_string(), &[], false)
                 .unwrap();
             let block_hex = block.hex.unwrap();
             let block_bytes: Vec<u8> = FromHex::from_hex(&block_hex).unwrap();

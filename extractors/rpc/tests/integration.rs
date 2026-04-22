@@ -26,7 +26,7 @@ use shared::{
             },
         },
     },
-    testing::nats_server::NatsServerForTesting,
+    testing::{REGTEST_ADDRESS, nats_server::NatsServerForTesting},
     tokio::{
         self, select,
         sync::watch,
@@ -308,13 +308,9 @@ async fn test_integration_rpc_getchaintxstats() {
             // Note: window_tx_count, window_interval, and tx_rate
             // are only present when window_block_count > 0, which
             // requires mining a few blocks blocks.
-            let address = node1
-                .client
-                .new_address()
-                .expect("failed to get new address");
             node1
                 .client
-                .generate_to_address(201, &address)
+                .generate_to_address(201, &REGTEST_ADDRESS)
                 .expect("failed to generate to address");
         },
         |event| match event {
@@ -457,10 +453,6 @@ async fn test_integration_rpc_getorphantxs() {
         |node1, node2| {
             // Generate a couple of orphan transactions by spending from non-existing UTXOs.
             const NUM_ORPHANS: u8 = 3;
-            let address = node2
-                .client
-                .new_address()
-                .expect("failed to get new address");
             let orphans: Vec<Transaction> = (0..NUM_ORPHANS)
                 .map(|i| Transaction {
                     version: transaction::Version::ONE,
@@ -476,19 +468,15 @@ async fn test_integration_rpc_getorphantxs() {
                     }],
                     output: vec![TxOut {
                         value: Amount::from_sat(100_000),
-                        script_pubkey: address.script_pubkey(),
+                        script_pubkey: REGTEST_ADDRESS.script_pubkey(),
                     }],
                 })
                 .collect();
 
             // The receiving node needs to be out of IBD to start accepting transactions.
-            let address = node1
-                .client
-                .new_address()
-                .expect("failed to get new address");
             node1
                 .client
-                .generate_to_address(1, &address)
+                .generate_to_address(1, &REGTEST_ADDRESS)
                 .expect("failed to generate to address");
 
             // node1 is peer=0 of node2
@@ -603,7 +591,8 @@ async fn test_integration_rpc_estimatesmartfee() {
             estimatesmartfee: true,
             ..Default::default()
         },
-        |node1, node2| {
+        |node1, _node2| {
+            // Mine to a wallet-owned address so node1 has spendable UTXOs
             let miner_address = node1
                 .client
                 .new_address()
@@ -614,14 +603,11 @@ async fn test_integration_rpc_estimatesmartfee() {
                 .expect("failed to generate to address");
 
             // generate some transactions to create enough data for fee estimation
+            let recipient = REGTEST_ADDRESS.to_string();
             for _ in 0..20 {
-                let address = node2
-                    .client
-                    .new_address()
-                    .expect("failed to get new address");
                 node1
                     .client
-                    .call::<String>("sendtoaddress", &[address.to_string().into(), "1".into()])
+                    .call::<String>("sendtoaddress", &[recipient.clone().into(), "1".into()])
                     .expect("failed to send to address");
 
                 node1

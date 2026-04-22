@@ -17,7 +17,7 @@ use shared::{
         },
     },
     simple_logger::SimpleLogger,
-    testing::nats_server::NatsServerForTesting,
+    testing::{REGTEST_ADDRESS, nats_server::NatsServerForTesting},
     tokio::{
         self, select,
         sync::{oneshot, watch},
@@ -25,7 +25,6 @@ use shared::{
     },
     util,
 };
-use std::str::FromStr;
 use std::sync::Once;
 
 use p2p_extractor::{Args, Network};
@@ -248,12 +247,9 @@ async fn test_integration_p2pextractor_addr_annoucement() {
         |node| {
             // To self-announce our address, we need to be out ouf initial block download
             // Mine a block to get out of initial block download
-            let address: bitcoin::address::Address =
-                bitcoin::address::Address::from_str("bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw")
-                    .unwrap()
-                    .require_network(bitcoin::Network::Regtest)
-                    .unwrap();
-            node.client.generate_to_address(1, &address).unwrap();
+            node.client
+                .generate_to_address(1, &REGTEST_ADDRESS)
+                .unwrap();
             assert!(
                 !node
                     .client
@@ -310,6 +306,7 @@ async fn test_integration_p2pextractor_inv_annoucement() {
         false,
         true,
         |node| {
+            // Mine to a wallet-owned address so the node has spendable UTXOs
             let address = node
                 .client
                 .get_new_address(None, None)
@@ -321,7 +318,7 @@ async fn test_integration_p2pextractor_inv_annoucement() {
             node.client.generate_to_address(110, &address).unwrap();
             for _ in 0..NUM_TX {
                 node.client
-                    .send_to_address(&address, Amount::from_sat(10000))
+                    .send_to_address(&REGTEST_ADDRESS, Amount::from_sat(10000))
                     .unwrap();
             }
         },
