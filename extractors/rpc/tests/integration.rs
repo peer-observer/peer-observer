@@ -330,8 +330,23 @@ async fn test_integration_rpc_getchaintxstats() {
                             assert_eq!(stats.window_final_block_height, 201);
                             assert_eq!(stats.window_block_count, 200);
                             assert_eq!(stats.window_tx_count, Some(200));
-                            assert_eq!(stats.window_interval, Some(34));
-                            assert_eq!(stats.tx_rate, Some(5.882352941176471));
+                            // window_interval drifts with host load (block timestamp
+                            // deltas), so don't pin it to an exact value. tx_rate
+                            // must remain consistent with window_tx_count /
+                            // window_interval.
+                            let window_interval = stats
+                                .window_interval
+                                .expect("window_interval should be present");
+                            let tx_rate = stats.tx_rate.expect("tx_rate should be present");
+                            assert!(window_interval > 0);
+                            let expected_rate = 200.0 / window_interval as f64;
+                            assert!(
+                                (tx_rate - expected_rate).abs() < 1e-9,
+                                "tx_rate {} should match window_tx_count / window_interval = 200/{} = {}",
+                                tx_rate,
+                                window_interval,
+                                expected_rate
+                            );
                         }
                         _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }
