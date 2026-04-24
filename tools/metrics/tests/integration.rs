@@ -1,10 +1,9 @@
 #![cfg(feature = "nats_integration_tests")]
 
-use metrics::error::RuntimeError;
 use metrics::Args;
 
 use shared::{
-    log::{debug, warn, Level, LevelFilter},
+    log::{debug, Level, LevelFilter},
     nats_subjects::Subject,
     nats_util::NatsArgs,
     prost::Message,
@@ -34,58 +33,29 @@ use shared::{
             PeerInfos, UploadTarget,
         },
     },
-    rand::{self, Rng},
     simple_logger::SimpleLogger,
     testing::{
         metrics_fetcher::fetch_metrics_root, nats_publisher::NatsPublisherForTesting,
         nats_server::NatsServerForTesting,
     },
-    tokio::{
-        self,
-        sync::{watch, Mutex},
-        time::sleep,
-    },
+    tokio::{self, sync::watch, time::sleep},
     util::current_timestamp,
 };
 
-use std::{
-    collections::HashMap,
-    io::ErrorKind,
-    sync::{
-        atomic::{AtomicU16, Ordering},
-        Arc, Once, OnceLock,
-    },
-    time::Duration,
-};
+use std::{collections::HashMap, sync::Once, time::Duration};
 
 static INIT: Once = Once::new();
-static NEXT_METRICS_PORT: OnceLock<AtomicU16> = OnceLock::new();
 
-fn setup() -> u16 {
+fn setup() {
     INIT.call_once(|| {
         SimpleLogger::new()
             .with_level(LevelFilter::Trace)
             .init()
             .unwrap();
-
-        let mut rng = rand::rng();
-
-        // choose start ports from the ephemeral port range
-        let metrics_start = rng.random_range(49152..65500);
-
-        NEXT_METRICS_PORT
-            .set(AtomicU16::new(metrics_start))
-            .unwrap();
     });
-
-    let metrics_port = NEXT_METRICS_PORT
-        .get()
-        .unwrap()
-        .fetch_add(1, Ordering::SeqCst);
-    metrics_port
 }
 
-fn make_test_args(nats_port: u16, metrics_port: u16) -> Args {
+fn make_test_args(nats_port: u16) -> Args {
     Args::new(
         NatsArgs {
             address: format!("127.0.0.1:{}", nats_port),
@@ -93,7 +63,7 @@ fn make_test_args(nats_port: u16, metrics_port: u16) -> Args {
             password: None,
             password_file: None,
         },
-        format!("127.0.0.1:{}", metrics_port),
+        "127.0.0.1:0".to_string(),
         Level::Trace,
     )
 }
@@ -128,47 +98,22 @@ fn check_metrics(port: u16, expected: &[&str]) -> Result<bool, std::io::Error> {
 }
 
 async fn publish_and_check(events: &[Event], subject: Subject, expected: &str) {
-    let initial_metrics_port = setup();
-    let metrics_port: Arc<Mutex<u16>> = Arc::new(Mutex::new(initial_metrics_port));
+    setup();
 
     let nats_server = NatsServerForTesting::new(&[]).await;
     let nats_publisher = NatsPublisherForTesting::new(nats_server.port).await;
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
-    let metrics_port_clone = metrics_port.clone();
+    let (addr_tx, addr_rx) = shared::tokio::sync::oneshot::channel();
     let metrics_handle = tokio::spawn(async move {
-        loop {
-            let port: u16;
-            {
-                port = *metrics_port_clone.lock().await;
-            }
-
-            let args = make_test_args(nats_server.port, port);
-            match metrics::run(args, shutdown_rx.clone()).await {
-                Ok(_) => break,
-                Err(e) => match e {
-                    RuntimeError::Io(e) => match e.kind() {
-                        ErrorKind::AddrInUse => {
-                            let new_port = NEXT_METRICS_PORT
-                                .get()
-                                .unwrap()
-                                .fetch_add(1, Ordering::SeqCst);
-                            warn!(
-                                "Port {} seems to be already in use. Trying port {} next..",
-                                port, new_port
-                            );
-                            let mut port = metrics_port_clone.lock().await;
-                            *port = new_port;
-                        }
-                        _ => panic!("Couldn not start metrics tool: {}", e),
-                    },
-                    _ => panic!("Couldn not start metrics tool: {}", e),
-                },
-            }
-        }
+        let args = make_test_args(nats_server.port);
+        metrics::run(args, shutdown_rx.clone(), Some(addr_tx))
+            .await
+            .expect("Could not start metrics tool");
     });
-    // allow the metrics tool to start
-    sleep(Duration::from_secs(1)).await;
+
+    let metrics_addr = addr_rx.await.expect("Should receive bound address");
+    let metrics_port = metrics_addr.port();
 
     for event in events {
         debug!("publishing: {:?}", event);
@@ -177,11 +122,19 @@ async fn publish_and_check(events: &[Event], subject: Subject, expected: &str) {
             .await;
     }
 
-    sleep(Duration::from_millis(100)).await;
-
     let expected_lines: Vec<&str> = expected.split('\n').collect();
-    let port = metrics_port.lock().await;
-    assert!(check_metrics(*port, &expected_lines).expect("Could not fetch metrics"));
+
+    // Poll the metrics endpoint until all expected lines appear or we time out.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        if check_metrics(metrics_port, &expected_lines).expect("Could not fetch metrics") {
+            break;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            panic!("Timed out waiting for expected metrics");
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
 
     shutdown_tx.send(true).unwrap();
     metrics_handle.await.unwrap();
@@ -190,11 +143,11 @@ async fn publish_and_check(events: &[Event], subject: Subject, expected: &str) {
 #[tokio::test]
 async fn test_integration_metrics_no_nats_connection() {
     println!("test that we fail if we can't connect to NATS (due to port 0)");
-    let _ = setup();
+    setup();
 
-    let args = make_test_args(0, 0);
+    let args = make_test_args(0);
     let (_, shutdown_rx) = watch::channel(false);
-    let result = metrics::run(args, shutdown_rx).await;
+    let result = metrics::run(args, shutdown_rx, None).await;
 
     assert!(result.is_err());
     // allows for easier debugging if it's not a Io error..

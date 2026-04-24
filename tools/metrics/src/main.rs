@@ -12,7 +12,7 @@ async fn main() {
     }
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
-    let metrics_handle = tokio::spawn(metrics::run(args, shutdown_rx));
+    let metrics_handle = tokio::spawn(metrics::run(args, shutdown_rx, None));
 
     tokio::select! {
         _ = signal::ctrl_c() => {
