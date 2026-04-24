@@ -3,9 +3,7 @@
 
 mod common;
 
-use common::{
-    EnabledRPCsInTest, get_available_port, make_test_args, setup, setup_two_connected_nodes,
-};
+use common::{EnabledRPCsInTest, make_test_args, setup, setup_two_connected_nodes};
 
 use shared::{
     async_nats,
@@ -48,7 +46,6 @@ async fn check(
     let (node1, node2) = setup_two_connected_nodes();
     let nats_server = NatsServerForTesting::new(&[]).await;
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
-    let metrics_port = get_available_port();
 
     let url = node1.rpc_url().replace("http://", "");
     let cookie_file_path = node1.params.cookie_file.display().to_string();
@@ -62,7 +59,7 @@ async fn check(
             nats_server.port,
             url,
             cookie_file_path,
-            format!("127.0.0.1:{}", metrics_port),
+            "127.0.0.1:0".to_string(),
             rpcs,
         );
         rpc_extractor::run(args, shutdown_rx.clone())

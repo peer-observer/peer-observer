@@ -10,15 +10,6 @@ use std::sync::Once;
 
 use rpc_extractor::Args;
 
-/// Get an available port for the metrics server.
-pub fn get_available_port() -> u16 {
-    TcpListener::bind("127.0.0.1:0")
-        .expect("Failed to bind to port 0")
-        .local_addr()
-        .expect("Failed to get local addr")
-        .port()
-}
-
 static INIT: Once = Once::new();
 
 // 1 second query interval for fast tests
