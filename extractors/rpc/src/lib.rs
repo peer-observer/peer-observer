@@ -10,9 +10,10 @@ use shared::nats_util::{self, NatsArgs};
 use shared::prost::Message;
 use shared::protobuf::event::{Event, event::PeerObserverEvent};
 use shared::protobuf::rpc_extractor::{self, EstimateSmartFee};
-use shared::tokio::sync::watch;
+use shared::tokio::sync::{oneshot, watch};
 use shared::tokio::time::{self, Duration};
 use shared::{async_nats, clap};
+use std::net::SocketAddr;
 
 mod error;
 pub mod metrics;
@@ -172,12 +173,22 @@ impl Args {
     }
 }
 
-pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(), RuntimeError> {
+pub async fn run(
+    args: Args,
+    mut shutdown_rx: watch::Receiver<bool>,
+    bound_addr_tx: Option<oneshot::Sender<SocketAddr>>,
+) -> Result<(), RuntimeError> {
     // Create metrics instance with its own registry
     let metrics = Metrics::new();
 
     // Start the metric server with our custom registry.
-    shared::metricserver::start(&args.prometheus_address, Some(metrics.registry.clone()))?;
+    let metrics_addr =
+        shared::metricserver::start(&args.prometheus_address, Some(metrics.registry.clone()))?;
+
+    // Notify the caller of the actual bound address (used in tests with port 0).
+    if let Some(tx) = bound_addr_tx {
+        let _ = tx.send(metrics_addr);
+    }
 
     let auth: Auth = match args.rpc_cookie_file {
         Some(path) => Auth::CookieFile(path.into()),

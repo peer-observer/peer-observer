@@ -62,7 +62,7 @@ async fn check(
             "127.0.0.1:0".to_string(),
             rpcs,
         );
-        rpc_extractor::run(args, shutdown_rx.clone())
+        rpc_extractor::run(args, shutdown_rx.clone(), None)
             .await
             .expect("rpc extractor failed");
     });

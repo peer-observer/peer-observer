@@ -4,8 +4,7 @@
 mod common;
 
 use common::{
-    EnabledRPCsInTest, QUERY_INTERVAL_SECONDS, get_available_port, make_test_args, setup,
-    setup_two_connected_nodes,
+    EnabledRPCsInTest, QUERY_INTERVAL_SECONDS, make_test_args, setup, setup_two_connected_nodes,
 };
 
 use shared::{
@@ -13,7 +12,10 @@ use shared::{
         metrics_fetcher::{fetch_metrics, get_metric_value},
         nats_server::NatsServerForTesting,
     },
-    tokio::{self, sync::watch},
+    tokio::{
+        self,
+        sync::{oneshot, watch},
+    },
 };
 
 /// Verifies the Prometheus metrics server starts and responds to HTTP requests.
@@ -23,23 +25,23 @@ async fn test_integration_metrics_server_basic() {
     let (node1, _node2) = setup_two_connected_nodes();
     let nats_server = NatsServerForTesting::new(&[]).await;
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
-    let metrics_port = get_available_port();
+    let (addr_tx, addr_rx) = oneshot::channel();
 
     let rpc_extractor_handle = tokio::spawn(async move {
         let args = make_test_args(
             nats_server.port,
             node1.rpc_url().replace("http://", ""),
             node1.params.cookie_file.display().to_string(),
-            format!("127.0.0.1:{}", metrics_port),
+            "127.0.0.1:0".to_string(),
             EnabledRPCsInTest {
                 ..Default::default()
             },
         );
-        let _ = rpc_extractor::run(args, shutdown_rx.clone()).await;
+        let _ = rpc_extractor::run(args, shutdown_rx.clone(), Some(addr_tx)).await;
     });
 
-    // Wait for the metrics server to start
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    let metrics_addr = addr_rx.await.expect("Should receive bound address");
+    let metrics_port = metrics_addr.port();
 
     // Fetch metrics and verify the server responds
     let metrics = fetch_metrics(metrics_port, "/metrics");
@@ -64,21 +66,24 @@ async fn test_integration_metrics_rpc_fetch_duration() {
     let (node1, _node2) = setup_two_connected_nodes();
     let nats_server = NatsServerForTesting::new(&[]).await;
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
-    let metrics_port = get_available_port();
+    let (addr_tx, addr_rx) = oneshot::channel();
 
     let rpc_extractor_handle = tokio::spawn(async move {
         let args = make_test_args(
             nats_server.port,
             node1.rpc_url().replace("http://", ""),
             node1.params.cookie_file.display().to_string(),
-            format!("127.0.0.1:{}", metrics_port),
+            "127.0.0.1:0".to_string(),
             EnabledRPCsInTest {
                 uptime: true, // lightweight RPC
                 ..Default::default()
             },
         );
-        let _ = rpc_extractor::run(args, shutdown_rx.clone()).await;
+        let _ = rpc_extractor::run(args, shutdown_rx.clone(), Some(addr_tx)).await;
     });
+
+    let metrics_addr = addr_rx.await.expect("Should receive bound address");
+    let metrics_port = metrics_addr.port();
 
     // Wait for at least one RPC query cycle
     tokio::time::sleep(tokio::time::Duration::from_secs(QUERY_INTERVAL_SECONDS + 1)).await;
@@ -110,7 +115,7 @@ async fn test_integration_metrics_all_rpc_methods_duration() {
     let (node1, _node2) = setup_two_connected_nodes();
     let nats_server = NatsServerForTesting::new(&[]).await;
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
-    let metrics_port = get_available_port();
+    let (addr_tx, addr_rx) = oneshot::channel();
     let rpcs = EnabledRPCsInTest::all();
 
     let rpc_extractor_handle = tokio::spawn(async move {
@@ -118,11 +123,14 @@ async fn test_integration_metrics_all_rpc_methods_duration() {
             nats_server.port,
             node1.rpc_url().replace("http://", ""),
             node1.params.cookie_file.display().to_string(),
-            format!("127.0.0.1:{}", metrics_port),
+            "127.0.0.1:0".to_string(),
             EnabledRPCsInTest::all(),
         );
-        let _ = rpc_extractor::run(args, shutdown_rx.clone()).await;
+        let _ = rpc_extractor::run(args, shutdown_rx.clone(), Some(addr_tx)).await;
     });
+
+    let metrics_addr = addr_rx.await.expect("Should receive bound address");
+    let metrics_port = metrics_addr.port();
 
     // Wait for at least one RPC query cycle
     tokio::time::sleep(tokio::time::Duration::from_secs(QUERY_INTERVAL_SECONDS + 1)).await;
@@ -156,11 +164,11 @@ async fn test_integration_metrics_rpc_fetch_errors() {
     setup();
     let nats_server = NatsServerForTesting::new(&[]).await;
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
-    let metrics_port = get_available_port();
+    let (addr_tx, addr_rx) = oneshot::channel();
 
     // Create a temporary cookie file (required by Args validation)
     let temp_dir = std::env::temp_dir();
-    let cookie_file = temp_dir.join(format!("test_cookie_{}", metrics_port));
+    let cookie_file = temp_dir.join("test_cookie_rpc_fetch_errors");
     std::fs::write(&cookie_file, "__cookie__:test").expect("Failed to write cookie file");
 
     let cookie_file_path = cookie_file.display().to_string();
@@ -169,14 +177,17 @@ async fn test_integration_metrics_rpc_fetch_errors() {
             nats_server.port,
             "127.0.0.1:1".to_string(), // Unreachable RPC host
             cookie_file_path,
-            format!("127.0.0.1:{}", metrics_port),
+            "127.0.0.1:0".to_string(),
             EnabledRPCsInTest {
                 uptime: true, // will fail
                 ..Default::default()
             },
         );
-        let _ = rpc_extractor::run(args, shutdown_rx.clone()).await;
+        let _ = rpc_extractor::run(args, shutdown_rx.clone(), Some(addr_tx)).await;
     });
+
+    let metrics_addr = addr_rx.await.expect("Should receive bound address");
+    let metrics_port = metrics_addr.port();
 
     // Wait for at least one RPC query cycle (which will fail)
     tokio::time::sleep(tokio::time::Duration::from_secs(QUERY_INTERVAL_SECONDS + 1)).await;
@@ -225,11 +236,11 @@ async fn test_integration_metrics_rpc_fetch_errors_invalid_auth() {
     let (node1, _node2) = setup_two_connected_nodes();
     let nats_server = NatsServerForTesting::new(&[]).await;
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
-    let metrics_port = get_available_port();
+    let (addr_tx, addr_rx) = oneshot::channel();
 
     // Create a cookie file with invalid credentials
     let temp_dir = std::env::temp_dir();
-    let invalid_cookie_file = temp_dir.join(format!("invalid_cookie_{}", metrics_port));
+    let invalid_cookie_file = temp_dir.join("invalid_cookie_rpc_fetch_errors_invalid_auth");
     std::fs::write(&invalid_cookie_file, "__cookie__:invalid_password")
         .expect("Failed to write invalid cookie file");
 
@@ -240,14 +251,17 @@ async fn test_integration_metrics_rpc_fetch_errors_invalid_auth() {
             nats_server.port,
             rpc_url,
             invalid_cookie_path,
-            format!("127.0.0.1:{}", metrics_port),
+            "127.0.0.1:0".to_string(),
             EnabledRPCsInTest {
                 uptime: true, // will fail due to auth
                 ..Default::default()
             },
         );
-        let _ = rpc_extractor::run(args, shutdown_rx.clone()).await;
+        let _ = rpc_extractor::run(args, shutdown_rx.clone(), Some(addr_tx)).await;
     });
+
+    let metrics_addr = addr_rx.await.expect("Should receive bound address");
+    let metrics_port = metrics_addr.port();
 
     // Wait for at least one RPC query cycle (which will fail due to invalid auth)
     tokio::time::sleep(tokio::time::Duration::from_secs(QUERY_INTERVAL_SECONDS + 1)).await;

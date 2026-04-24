@@ -5,7 +5,6 @@ use shared::{
     simple_logger::SimpleLogger,
 };
 
-use std::net::TcpListener;
 use std::sync::Once;
 
 use rpc_extractor::Args;
