@@ -67,7 +67,7 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         })?;
     log::info!("Connected to IPC socket at {}", &args.ipc_socket_path);
 
-    let ipc_session = IpcClient::init(stream).await?;
+    let mut ipc_session = IpcClient::init(stream).await?;
 
     let duration_sec = Duration::from_secs(args.query_interval);
     let mut interval = time::interval(duration_sec);
@@ -79,40 +79,43 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
     loop {
         tokio::select! {
             _ = interval.tick() => {
-                 if ipc_session.rpc_task.is_finished() {
-                    log::error!("Lost connection to IPC socket. Exiting.");
-                    break;
+                if let Err(e) = fetch_and_publish_tip(&ipc_session, &nats_client).await {
+                    log::error!("Could not fetch and publish 'BlockTip': {}", e);
                 }
-
-                if let Err(e) = get_tip(&ipc_session, &nats_client).await {
-                        log::error!("Could not fetch and publish 'BlockTip': {}", e)
+            }
+            res = &mut ipc_session.rpc_task => {
+                match res {
+                    Ok(Ok(())) => log::warn!("Lost IPC connection to bitcoin-node."),
+                    Ok(Err(e)) => log::error!("Lost IPC connection to bitcoin-node: {e}"),
+                    Err(e) => log::error!("IPC task panicked or was cancelled: {e}"),
                 }
+                break;
             }
             res = shutdown_rx.changed() => {
                 match res {
-                    Ok(_) => {
-                        if *shutdown_rx.borrow() {
-                            log::info!("ipc_extractor received shutdown signal.");
-                            break;
-                        }
+                    Ok(_) if *shutdown_rx.borrow() => {
+                        log::info!("ipc_extractor received shutdown signal.");
                     }
-                    Err(_) => {
+                    _ => {
                         // all senders dropped -> treat as shutdown
                         log::warn!("The shutdown notification sender was dropped. Shutting down.");
-                        break;
                     }
                 }
+                break;
             }
         }
     }
+
     if let Err(e) = ipc_session.disconnector.await {
         log::error!("could not run disconnector during shutdown: {}", e);
     }
-    let _ = ipc_session.rpc_task.await;
+    if !ipc_session.rpc_task.is_finished() {
+        let _ = ipc_session.rpc_task.await;
+    }
     Ok(())
 }
 
-async fn get_tip(
+async fn fetch_and_publish_tip(
     ipc_client: &IpcClient,
     nats_client: &async_nats::Client,
 ) -> Result<(), RuntimeError> {
@@ -124,7 +127,6 @@ async fn get_tip(
     let proto = Event::new(PeerObserverEvent::IpcExtractor(ipc_extractor::Ipc {
         ipc_event: Some(ipc_extractor::ipc::IpcEvent::BlockTip(tip)),
     }))?;
-
     nats_client
         .publish(Subject::Ipc.to_string(), proto.encode_to_vec().into())
         .await?;
