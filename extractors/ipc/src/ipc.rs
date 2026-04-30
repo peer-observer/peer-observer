@@ -15,8 +15,7 @@ use shared::{
 };
 
 pub struct IpcClient {
-    pub mining: MiningClient,
-    pub thread: ThreadClient,
+    pub reader: IpcReader,
     pub rpc_task: JoinHandle<Result<(), CapnpError>>,
     pub disconnector: Disconnector<rpc_twoparty_capnp::Side>,
 }
@@ -38,28 +37,34 @@ impl IpcClient {
 
         let response = init.construct_request().send().promise.await?;
         let thread_map = response.get()?.get_thread_map()?;
-
         let response = thread_map.make_thread_request().send().promise.await?;
         let thread = response.get()?.get_result()?;
 
         let mut req = init.make_mining_request();
         set_context(req.get().get_context()?, &thread);
-
         let response = req.send().promise.await?;
         let mining = response.get()?.get_result()?;
 
+        let reader = IpcReader { mining, thread };
+
         Ok(Self {
+            reader,
             rpc_task,
-            thread,
-            mining,
             disconnector,
         })
     }
+}
 
+#[derive(Clone)]
+pub struct IpcReader {
+    pub mining: MiningClient,
+    pub thread: ThreadClient,
+}
+
+impl IpcReader {
     pub async fn get_tip(&self) -> Result<Option<BlockTip>> {
         let mut req = self.mining.get_tip_request();
         set_context(req.get().get_context()?, &self.thread);
-
         let response = req.send().promise.await?;
 
         let has_result = response.get()?.get_has_result();
