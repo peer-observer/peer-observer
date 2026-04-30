@@ -93,20 +93,22 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
                     Ok(_) => {
                         if *shutdown_rx.borrow() {
                             log::info!("ipc_extractor received shutdown signal.");
-                            ipc_session.rpc_task.abort();
                             break;
                         }
                     }
                     Err(_) => {
                         // all senders dropped -> treat as shutdown
                         log::warn!("The shutdown notification sender was dropped. Shutting down.");
-                        ipc_session.rpc_task.abort();
                         break;
                     }
                 }
             }
         }
     }
+    if let Err(e) = ipc_session.disconnector.await {
+        log::error!("could not run disconnector during shutdown: {}", e);
+    }
+    let _ = ipc_session.rpc_task.await;
     Ok(())
 }
 

@@ -12,7 +12,7 @@ use init_capnp::init::Client as InitClient;
 use mining_capnp::mining::Client as MiningClient;
 use proxy_capnp::thread::Client as ThreadClient;
 
-use capnp_rpc::{RpcSystem, rpc_twoparty_capnp, twoparty};
+use capnp_rpc::{Disconnector, RpcSystem, rpc_twoparty_capnp, twoparty};
 use shared::{
     futures::AsyncReadExt,
     protobuf::ipc_extractor::BlockTip,
@@ -26,6 +26,7 @@ pub struct IpcClient {
     pub mining: MiningClient,
     pub thread: ThreadClient,
     pub rpc_task: JoinHandle<Result<(), capnp::Error>>,
+    pub disconnector: Disconnector<rpc_twoparty_capnp::Side>,
 }
 
 impl IpcClient {
@@ -40,6 +41,7 @@ impl IpcClient {
 
         let mut rpc_system = RpcSystem::new(network, None);
         let init: InitClient = rpc_system.bootstrap(rpc_twoparty_capnp::Side::Server);
+        let disconnector = rpc_system.get_disconnector();
         let rpc_task = tokio::task::spawn_local(rpc_system);
 
         let response = init.construct_request().send().promise.await?;
@@ -58,6 +60,7 @@ impl IpcClient {
             rpc_task,
             thread,
             mining,
+            disconnector,
         })
     }
 
