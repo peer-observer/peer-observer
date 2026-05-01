@@ -141,6 +141,35 @@ async fn test_integration_block_connected() {
 }
 
 #[tokio::test]
+async fn test_integration_block_disconnected() {
+    println!("test that we receive a BlockDisconnected event when a block is invalidated");
+
+    let event = check(
+        |e| matches!(e, IpcEvent::BlockDisconnected(_)),
+        |node| {
+            let block_hashes = node
+                .client
+                .generate_to_address(2, &regtest_burn_address())
+                .expect("generate 2 blocks")
+                .into_model()
+                .expect("parse block hashes");
+            let to_invalidate = block_hashes.0[1];
+            node.client
+                .invalidate_block(to_invalidate)
+                .expect("invalidate block 2");
+        },
+    )
+    .await;
+
+    let IpcEvent::BlockDisconnected(bd) = event else {
+        unreachable!()
+    };
+    let block = bd.block;
+    assert_eq!(block.height, 2);
+    assert_eq!(block.hash.len(), 32);
+}
+
+#[tokio::test]
 async fn test_integration_ipc_node_shutdown() {
     println!("test that the ipc-extractor shuts down when the node is stopped");
 
