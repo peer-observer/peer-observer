@@ -7,7 +7,7 @@ use common::{configure_node, ipc_socket_path, make_test_args, setup};
 
 use shared::{
     async_nats,
-    bitcoin::{Address, Network, PubkeyHash, hashes::Hash},
+    bitcoin::{Address, BlockHash, Network, PubkeyHash, hashes::Hash},
     bitcoind,
     futures::StreamExt,
     prost::Message,
@@ -111,6 +111,33 @@ async fn test_integration_ipc() {
     };
     assert_eq!(tip.height, 1);
     assert_eq!(tip.hash.len(), 32);
+}
+
+#[tokio::test]
+async fn test_integration_block_connected() {
+    println!("test that we receive a BlockConnected event when a block is connected");
+
+    let event = check(
+        |e| matches!(e, IpcEvent::BlockConnected(_)),
+        |node| {
+            node.client
+                .generate_to_address(1, &regtest_burn_address())
+                .expect("generate 1 block");
+        },
+    )
+    .await;
+
+    let IpcEvent::BlockConnected(bc) = event else {
+        unreachable!()
+    };
+    let block = bc.block;
+    assert_eq!(block.height, 1);
+    assert_eq!(block.hash.len(), 32);
+    assert_eq!(block.prev_hash.len(), 32);
+    assert_eq!(
+        BlockHash::from_slice(&block.prev_hash).unwrap().to_string(),
+        "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206", // regtest genesis blockhash
+    );
 }
 
 #[tokio::test]
