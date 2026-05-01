@@ -6,7 +6,7 @@ use bitcoin_capnp_types::{
     handler_capnp::handler::Client as HandlerClient,
     init_capnp::init::Client as InitClient,
     mining_capnp::mining::Client as MiningClient,
-    proxy_capnp::{self, thread::Client as ThreadClient},
+    proxy_capnp::{self, thread::Client as ThreadClient, thread_map::Client as ThreadMapClient},
 };
 
 use shared::{
@@ -99,38 +99,41 @@ impl IpcClient {
         let disconnector = rpc_system.get_disconnector();
         let rpc_task = tokio::task::spawn_local(rpc_system);
 
-        let response = init.construct_request().send().promise.await?;
-        let thread_map = response.get()?.get_thread_map()?;
-        let response = thread_map.make_thread_request().send().promise.await?;
-        let thread = response.get()?.get_result()?;
+        let thread_map: ThreadMapClient = init
+            .construct_request()
+            .send()
+            .promise
+            .await?
+            .get()?
+            .get_thread_map()?;
+        let thread: ThreadClient = thread_map
+            .make_thread_request()
+            .send()
+            .promise
+            .await?
+            .get()?
+            .get_result()?;
 
         let mut req = init.make_mining_request();
         set_context(req.get().get_context()?, &thread);
-        let response = req.send().promise.await?;
-        let mining = response.get()?.get_result()?;
+        let mining: MiningClient = req.send().promise.await?.get()?.get_result()?;
 
         let mut req = init.make_chain_request();
         set_context(req.get().get_context()?, &thread);
-        let response = req.send().promise.await?;
-        let chain: ChainClient = response.get()?.get_result()?;
+        let chain: ChainClient = req.send().promise.await?.get()?.get_result()?;
 
-        let notif_client: chain_notifications::Client =
-            capnp_rpc::new_client(ChainNotificationsImpl);
         let mut req = chain.handle_notifications_request();
         set_context(req.get().get_context()?, &thread);
-        req.get().set_notifications(notif_client);
-        let handler = req.send().promise.await?.get()?.get_result()?;
-
-        let listener = IpcListener {
-            handler,
-            thread: thread.clone(),
-        };
-
-        let reader = IpcReader { mining, thread };
+        req.get()
+            .set_notifications(capnp_rpc::new_client(ChainNotificationsImpl));
+        let handler: HandlerClient = req.send().promise.await?.get()?.get_result()?;
 
         Ok(Self {
-            reader,
-            listener,
+            reader: IpcReader {
+                mining,
+                thread: thread.clone(),
+            },
+            listener: IpcListener { handler, thread },
             rpc_task,
             disconnector,
         })
