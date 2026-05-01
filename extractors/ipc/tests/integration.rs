@@ -98,7 +98,7 @@ async fn test_integration_ipc_node_shutdown() {
     println!("test that the ipc-extractor shuts down when the node is stopped");
 
     setup();
-    let mut node = configure_node();
+    let node = configure_node();
     let nats_server = NatsServerForTesting::new(&[]).await;
 
     let ipc_socket_path = node
@@ -135,7 +135,7 @@ async fn test_integration_ipc_node_shutdown() {
                         if unwrapped.peer_observer_event.is_some() {
                             // After we received the first message from the ipc-extractor,
                             // we shut down the node.
-                            node.stop().unwrap();
+                            node.client.stop().unwrap();
                         }
                     } else {
                         panic!("subscription ended");

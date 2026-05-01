@@ -1,6 +1,9 @@
 use bitcoin_capnp_types::{
+    capnp,
     capnp::Error as CapnpError,
-    capnp_rpc::{Disconnector, RpcSystem, rpc_twoparty_capnp, twoparty},
+    capnp_rpc::{self, Disconnector, RpcSystem, rpc_twoparty_capnp, twoparty},
+    chain_capnp::{chain::Client as ChainClient, chain_notifications},
+    handler_capnp::handler::Client as HandlerClient,
     init_capnp::init::Client as InitClient,
     mining_capnp::mining::Client as MiningClient,
     proxy_capnp::{self, thread::Client as ThreadClient},
@@ -14,8 +17,69 @@ use shared::{
     tokio_util,
 };
 
+struct ChainNotificationsImpl;
+
+impl chain_notifications::Server for ChainNotificationsImpl {
+    async fn destroy(
+        self: capnp::capability::Rc<Self>,
+        _: chain_notifications::DestroyParams,
+        _: chain_notifications::DestroyResults,
+    ) -> Result<(), CapnpError> {
+        Ok(())
+    }
+
+    async fn transaction_added_to_mempool(
+        self: capnp::capability::Rc<Self>,
+        _: chain_notifications::TransactionAddedToMempoolParams,
+        _: chain_notifications::TransactionAddedToMempoolResults,
+    ) -> Result<(), CapnpError> {
+        Ok(())
+    }
+
+    async fn transaction_removed_from_mempool(
+        self: capnp::capability::Rc<Self>,
+        _: chain_notifications::TransactionRemovedFromMempoolParams,
+        _: chain_notifications::TransactionRemovedFromMempoolResults,
+    ) -> Result<(), CapnpError> {
+        Ok(())
+    }
+
+    async fn block_connected(
+        self: capnp::capability::Rc<Self>,
+        _: chain_notifications::BlockConnectedParams,
+        _: chain_notifications::BlockConnectedResults,
+    ) -> Result<(), CapnpError> {
+        Ok(())
+    }
+
+    async fn block_disconnected(
+        self: capnp::capability::Rc<Self>,
+        _: chain_notifications::BlockDisconnectedParams,
+        _: chain_notifications::BlockDisconnectedResults,
+    ) -> Result<(), CapnpError> {
+        Ok(())
+    }
+
+    async fn updated_block_tip(
+        self: capnp::capability::Rc<Self>,
+        _: chain_notifications::UpdatedBlockTipParams,
+        _: chain_notifications::UpdatedBlockTipResults,
+    ) -> Result<(), CapnpError> {
+        Ok(())
+    }
+
+    async fn chain_state_flushed(
+        self: capnp::capability::Rc<Self>,
+        _: chain_notifications::ChainStateFlushedParams,
+        _: chain_notifications::ChainStateFlushedResults,
+    ) -> Result<(), CapnpError> {
+        Ok(())
+    }
+}
+
 pub struct IpcClient {
     pub reader: IpcReader,
+    pub listener: IpcListener,
     pub rpc_task: JoinHandle<Result<(), CapnpError>>,
     pub disconnector: Disconnector<rpc_twoparty_capnp::Side>,
 }
@@ -45,10 +109,28 @@ impl IpcClient {
         let response = req.send().promise.await?;
         let mining = response.get()?.get_result()?;
 
+        let mut req = init.make_chain_request();
+        set_context(req.get().get_context()?, &thread);
+        let response = req.send().promise.await?;
+        let chain: ChainClient = response.get()?.get_result()?;
+
+        let notif_client: chain_notifications::Client =
+            capnp_rpc::new_client(ChainNotificationsImpl);
+        let mut req = chain.handle_notifications_request();
+        set_context(req.get().get_context()?, &thread);
+        req.get().set_notifications(notif_client);
+        let handler = req.send().promise.await?.get()?.get_result()?;
+
+        let listener = IpcListener {
+            handler,
+            thread: thread.clone(),
+        };
+
         let reader = IpcReader { mining, thread };
 
         Ok(Self {
             reader,
+            listener,
             rpc_task,
             disconnector,
         })
@@ -83,4 +165,18 @@ impl IpcReader {
 fn set_context(mut ctx: proxy_capnp::context::Builder<'_>, thread: &ThreadClient) {
     ctx.set_thread(thread.clone());
     ctx.set_callback_thread(thread.clone());
+}
+
+pub struct IpcListener {
+    pub handler: HandlerClient,
+    pub thread: ThreadClient,
+}
+
+impl IpcListener {
+    pub async fn shutdown(&self) -> Result<()> {
+        let mut req = self.handler.disconnect_request();
+        set_context(req.get().get_context()?, &self.thread);
+        req.send().promise.await?;
+        Ok(())
+    }
 }

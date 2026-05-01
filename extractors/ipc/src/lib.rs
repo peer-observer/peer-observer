@@ -75,7 +75,7 @@ pub async fn run(
         })?;
     log::info!("Connected to IPC socket at {}", &args.ipc_socket_path);
 
-    let mut ipc_session = IpcClient::init(stream)
+    let mut ipc = IpcClient::init(stream)
         .await
         .context("initializing the IPC session")?;
 
@@ -97,11 +97,11 @@ pub async fn run(
     loop {
         tokio::select! {
             _ = interval.tick() => {
-                if let Err(e) = fetch_and_publish_tip(&ipc_session, &nats_client, &metrics).await {
+                if let Err(e) = fetch_and_publish_tip(&ipc, &nats_client, &metrics).await {
                     log::error!("Could not fetch and publish 'BlockTip': {:#}", e);
                 }
             }
-            res = &mut ipc_session.rpc_task => {
+            res = &mut ipc.rpc_task => {
                 match res {
                     Ok(Ok(())) => log::warn!("Lost IPC connection to bitcoin-node."),
                     Ok(Err(e)) => log::error!("Lost IPC connection to bitcoin-node: {e}"),
@@ -124,12 +124,17 @@ pub async fn run(
         }
     }
 
-    if let Err(e) = ipc_session.disconnector.await {
+    if ipc.rpc_task.is_finished() {
+        return Ok(());
+    }
+
+    if let Err(e) = ipc.listener.shutdown().await {
+        log::error!("could not shut down listener: {}", e);
+    }
+    if let Err(e) = ipc.disconnector.await {
         log::error!("could not run disconnector during shutdown: {}", e);
     }
-    if !ipc_session.rpc_task.is_finished() {
-        let _ = ipc_session.rpc_task.await;
-    }
+    let _ = ipc.rpc_task.await;
     Ok(())
 }
 
