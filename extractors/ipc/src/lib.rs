@@ -8,7 +8,7 @@ use shared::{
     prost::Message,
     protobuf::{
         event::{Event, event::PeerObserverEvent},
-        ipc_extractor,
+        ipc_extractor::{self, ipc::IpcEvent},
     },
     tokio::{
         self,
@@ -22,8 +22,8 @@ use std::net::SocketAddr;
 mod ipc;
 mod metrics;
 
-use ipc::IpcClient;
 use metrics::Metrics;
+use ipc::{ChainCallbacks, EventFut, IpcClient, IpcReader};
 
 /// The peer-observer ipc-extractor periodically queries data from the
 /// Bitcoin Core IPC interface and publishes the results as events into
@@ -75,9 +75,13 @@ pub async fn run(
         })?;
     log::info!("Connected to IPC socket at {}", &args.ipc_socket_path);
 
-    let mut ipc = IpcClient::init(stream)
+    let mut ipc = IpcClient::connect(stream)
         .await
         .context("initializing the IPC session")?;
+    let chain_listener = ipc
+        .subscribe_chain_notifications(make_chain_callbacks(nats_client.clone()))
+        .await
+        .context("subscribing to Chain notifications")?;
 
     let metrics = Metrics::new().context("creating metrics registry")?;
     let local_addr =
@@ -97,7 +101,7 @@ pub async fn run(
     loop {
         tokio::select! {
             _ = interval.tick() => {
-                if let Err(e) = fetch_and_publish_tip(&ipc, &nats_client, &metrics).await {
+                if let Err(e) = fetch_and_publish_tip(&ipc.reader, &nats_client, &metrics).await {
                     log::error!("Could not fetch and publish 'BlockTip': {:#}", e);
                 }
             }
@@ -128,7 +132,7 @@ pub async fn run(
         return Ok(());
     }
 
-    if let Err(e) = ipc.listener.shutdown().await {
+    if let Err(e) = chain_listener.shutdown().await {
         log::error!("could not shut down listener: {}", e);
     }
     if let Err(e) = ipc.disconnector.await {
@@ -163,11 +167,11 @@ where
 }
 
 async fn fetch_and_publish_tip(
-    ipc_client: &IpcClient,
+    reader: &IpcReader,
     nats_client: &async_nats::Client,
     metrics: &Metrics,
 ) -> Result<()> {
-    let tip = match measure_ipc_call("get_tip", metrics, ipc_client.reader.get_tip())
+    let tip = match measure_ipc_call("get_tip", metrics, reader.get_tip())
         .await
         .context("measuring get_tip IPC")?
     {
@@ -190,4 +194,46 @@ async fn fetch_and_publish_tip(
         })
         .context("publishing the block tip to NATS")?;
     Ok(())
+}
+
+fn make_chain_callbacks(nats: async_nats::Client) -> ChainCallbacks {
+    ChainCallbacks {
+        on_block_connected: wrap_publisher(nats.clone(), IpcEvent::BlockConnected),
+        on_block_disconnected: wrap_publisher(nats.clone(), IpcEvent::BlockDisconnected),
+        on_tx_added: wrap_publisher(nats.clone(), IpcEvent::TransactionAddedToMempool),
+        on_tx_removed: wrap_publisher(nats.clone(), IpcEvent::TransactionRemovedFromMempool),
+        on_chain_state_flushed: wrap_publisher(nats, IpcEvent::ChainStateFlushed),
+        on_updated_block_tip: Box::new(|| {
+            Box::pin(async move {
+                log::debug!("updated_block_tip notification received");
+            })
+        }),
+    }
+}
+
+fn wrap_publisher<T: 'static>(
+    nats: async_nats::Client,
+    variant: fn(T) -> IpcEvent,
+) -> Box<dyn Fn(T) -> EventFut> {
+    Box::new(move |value: T| {
+        let nats = nats.clone();
+        let event_inner = variant(value);
+        Box::pin(async move {
+            let event = match Event::new(PeerObserverEvent::IpcExtractor(ipc_extractor::Ipc {
+                ipc_event: Some(event_inner),
+            })) {
+                Ok(e) => e,
+                Err(e) => {
+                    log::error!("Event build failed: {e}");
+                    return;
+                }
+            };
+            if let Err(e) = nats
+                .publish(Subject::Ipc.to_string(), event.encode_to_vec().into())
+                .await
+            {
+                log::error!("NATS publish failed: {e}");
+            }
+        })
+    })
 }
