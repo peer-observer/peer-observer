@@ -13,7 +13,7 @@ use shared::{
         Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid, Witness, absolute,
         consensus, hashes::Hash, hex::DisplayHex, transaction,
     },
-    corepc_node,
+    bitcoind,
     futures::StreamExt,
     prost::Message,
     protobuf::{
@@ -41,7 +41,7 @@ const TEST_TIMEOUT_SECONDS: u64 = 5;
 
 async fn check(
     rpcs: EnabledRPCsInTest,
-    test_setup: fn(&corepc_node::Node, &corepc_node::Node),
+    test_setup: fn(&bitcoind::BitcoinD, &bitcoind::BitcoinD),
     check_expected: fn(PeerObserverEvent) -> (),
 ) {
     setup();

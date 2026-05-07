@@ -1,5 +1,5 @@
 use shared::{
-    corepc_node,
+    bitcoind,
     log::{self, info},
     nats_util::NatsArgs,
     simple_logger::SimpleLogger,
@@ -148,27 +148,27 @@ pub fn make_test_args(
     )
 }
 
-pub fn setup_node(conf: corepc_node::Conf) -> corepc_node::Node {
+pub fn setup_node(conf: bitcoind::Conf) -> bitcoind::BitcoinD {
     info!("env BITCOIND_EXE={:?}", std::env::var("BITCOIND_EXE"));
-    info!("exe_path={:?}", corepc_node::exe_path());
+    info!("exe_path={:?}", bitcoind::exe_path());
 
-    if let Ok(exe_path) = corepc_node::exe_path() {
+    if let Ok(exe_path) = bitcoind::exe_path() {
         info!("Using bitcoind at '{}'", exe_path);
-        return corepc_node::Node::with_conf(exe_path, &conf).unwrap();
+        return bitcoind::BitcoinD::with_conf(exe_path, &conf).unwrap();
     }
 
     info!("Trying to download a bitcoind..");
-    corepc_node::Node::from_downloaded_with_conf(&conf).unwrap()
+    bitcoind::BitcoinD::from_downloaded_with_conf(&conf).unwrap()
 }
 
-pub fn setup_two_connected_nodes() -> (corepc_node::Node, corepc_node::Node) {
+pub fn setup_two_connected_nodes() -> (bitcoind::BitcoinD, bitcoind::BitcoinD) {
     // node1 listens for p2p connections
-    let mut node1_conf = corepc_node::Conf::default();
-    node1_conf.p2p = corepc_node::P2P::Yes;
+    let mut node1_conf = bitcoind::Conf::default();
+    node1_conf.p2p = bitcoind::P2P::Yes;
     let node1 = setup_node(node1_conf);
 
     // node2 connects to node1
-    let mut node2_conf = corepc_node::Conf::default();
+    let mut node2_conf = bitcoind::Conf::default();
     node2_conf.p2p = node1.p2p_connect(true).unwrap();
     let node2 = setup_node(node2_conf);
 

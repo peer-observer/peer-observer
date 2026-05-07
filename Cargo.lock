@@ -109,7 +109,7 @@ dependencies = [
  "regex",
  "rustls-native-certs",
  "rustls-pki-types",
- "rustls-webpki 0.103.10",
+ "rustls-webpki",
  "serde",
  "serde_json",
  "serde_repr",
@@ -218,6 +218,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "bitcoind"
+version = "0.38.0"
+source = "git+https://github.com/0xb10c/corepc?rev=8798e7f9c240c626dc3aa61adadeaf42f8221e40#8798e7f9c240c626dc3aa61adadeaf42f8221e40"
+dependencies = [
+ "anyhow",
+ "bitcoin_hashes",
+ "bitreq",
+ "corepc-client",
+ "flate2",
+ "log",
+ "serde_json",
+ "tar",
+ "tempfile",
+ "which",
+ "zip",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -231,11 +249,11 @@ checksum = "843867be96c8daad0d758b57df9392b6d8d271134fce549de6ce169ff98a92af"
 
 [[package]]
 name = "bitreq"
-version = "0.3.4"
-source = "git+https://github.com/0xb10c/corepc?rev=9e4eb4d7181575ff75f9e0a6997b091bd5023b1d#9e4eb4d7181575ff75f9e0a6997b091bd5023b1d"
+version = "0.3.5"
+source = "git+https://github.com/0xb10c/corepc?rev=8798e7f9c240c626dc3aa61adadeaf42f8221e40#8798e7f9c240c626dc3aa61adadeaf42f8221e40"
 dependencies = [
- "rustls 0.21.12",
- "rustls-webpki 0.101.7",
+ "rustls",
+ "rustls-webpki",
  "serde",
  "serde_json",
  "webpki-roots",
@@ -440,8 +458,8 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "corepc-client"
-version = "0.12.0"
-source = "git+https://github.com/0xb10c/corepc?rev=9e4eb4d7181575ff75f9e0a6997b091bd5023b1d#9e4eb4d7181575ff75f9e0a6997b091bd5023b1d"
+version = "0.13.0"
+source = "git+https://github.com/0xb10c/corepc?rev=8798e7f9c240c626dc3aa61adadeaf42f8221e40#8798e7f9c240c626dc3aa61adadeaf42f8221e40"
 dependencies = [
  "bitcoin",
  "corepc-types",
@@ -452,27 +470,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "corepc-node"
-version = "0.12.0"
-source = "git+https://github.com/0xb10c/corepc?rev=9e4eb4d7181575ff75f9e0a6997b091bd5023b1d#9e4eb4d7181575ff75f9e0a6997b091bd5023b1d"
-dependencies = [
- "anyhow",
- "bitcoin_hashes",
- "bitreq",
- "corepc-client",
- "flate2",
- "log",
- "serde_json",
- "tar",
- "tempfile",
- "which",
- "zip",
-]
-
-[[package]]
 name = "corepc-types"
 version = "0.12.0"
-source = "git+https://github.com/0xb10c/corepc?rev=9e4eb4d7181575ff75f9e0a6997b091bd5023b1d#9e4eb4d7181575ff75f9e0a6997b091bd5023b1d"
+source = "git+https://github.com/0xb10c/corepc?rev=8798e7f9c240c626dc3aa61adadeaf42f8221e40#8798e7f9c240c626dc3aa61adadeaf42f8221e40"
 dependencies = [
  "bitcoin",
  "serde",
@@ -1078,8 +1078,8 @@ dependencies = [
 
 [[package]]
 name = "jsonrpc"
-version = "0.19.0"
-source = "git+https://github.com/0xb10c/corepc?rev=9e4eb4d7181575ff75f9e0a6997b091bd5023b1d#9e4eb4d7181575ff75f9e0a6997b091bd5023b1d"
+version = "0.20.0"
+source = "git+https://github.com/0xb10c/corepc?rev=8798e7f9c240c626dc3aa61adadeaf42f8221e40#8798e7f9c240c626dc3aa61adadeaf42f8221e40"
 dependencies = [
  "base64 0.22.1",
  "bitreq",
@@ -1691,24 +1691,14 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.21.12"
+version = "0.23.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f56a14d1f48b391359b22f731fd4bd7e43c97f3c50eee276f3aa09c94784d3e"
-dependencies = [
- "ring",
- "rustls-webpki 0.101.7",
- "sct",
-]
-
-[[package]]
-name = "rustls"
-version = "0.23.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47796c98c480fce5406ef69d1c76378375492c3b0a0de587be0c1d9feb12f395"
+checksum = "ef86cd5876211988985292b91c96a8f2d298df24e75989a43a3c73f2d4d8168b"
 dependencies = [
  "once_cell",
+ "ring",
  "rustls-pki-types",
- "rustls-webpki 0.102.8",
+ "rustls-webpki",
  "subtle",
  "zeroize",
 ]
@@ -1736,31 +1726,11 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.101.7"
+version = "0.103.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b6275d1ee7a1cd780b64aca7726599a1dbc893b1e64144529e55c3c2f745765"
+checksum = "61c429a8649f110dddef65e2a5ad240f747e85f7758a6bccc7e5777bd33f756e"
 dependencies = [
  "ring",
- "untrusted",
-]
-
-[[package]]
-name = "rustls-webpki"
-version = "0.102.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64ca1bc8749bd4cf37b5ce386cc146580777b4e8572c7b97baf22c83f444bee9"
-dependencies = [
- "ring",
- "rustls-pki-types",
- "untrusted",
-]
-
-[[package]]
-name = "rustls-webpki"
-version = "0.103.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df33b2b81ac578cabaf06b89b0631153a3f416b0a886e8a7a1707fb51abbd1ef"
-dependencies = [
  "rustls-pki-types",
  "untrusted",
 ]
@@ -1791,16 +1761,6 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
-
-[[package]]
-name = "sct"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da046153aa2352493d6cb7da4b6e5c0c057d8a1d0a9aa8560baffdd945acd414"
-dependencies = [
- "ring",
- "untrusted",
-]
 
 [[package]]
 name = "secp256k1"
@@ -1934,9 +1894,9 @@ dependencies = [
  "async-nats",
  "base32",
  "bitcoin",
+ "bitcoind",
  "clap",
  "corepc-client",
- "corepc-node",
  "futures",
  "hex",
  "lazy_static",
@@ -2196,7 +2156,7 @@ version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8e727b36a1a0e8b74c376ac2211e40c2c8af09fb4013c60d910495810f008e9b"
 dependencies = [
- "rustls 0.23.23",
+ "rustls",
  "tokio",
 ]
 
@@ -2435,9 +2395,12 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "0.25.4"
+version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
+checksum = "52f5ee44c96cf55f1b349600768e3ece3a8f26010c05265ab73f945bb1a2eb9d"
+dependencies = [
+ "rustls-pki-types",
+]
 
 [[package]]
 name = "websocket"

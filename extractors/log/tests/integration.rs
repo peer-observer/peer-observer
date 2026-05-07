@@ -5,7 +5,7 @@ use log_extractor::Args;
 use shared::{
     async_nats,
     bitcoin::{Block, consensus::Decodable, hashes::Hash, hex::FromHex},
-    corepc_node,
+    bitcoind,
     futures::StreamExt,
     log::{Level, LevelFilter, info},
     nats_util::NatsArgs,
@@ -128,19 +128,19 @@ fn make_test_args(nats_port: u16, bitcoind_pipe: String) -> Args {
 /// Starts a regtest `bitcoind` node with the given configuration.
 ///
 /// The binary is resolved from the `BITCOIND_EXE` environment variable
-/// (via `corepc_node::exe_path`); if unset, a pre-built binary is
+/// (via `bitcoind::exe_path`); if unset, a pre-built binary is
 /// downloaded automatically.
-fn setup_node(conf: corepc_node::Conf) -> corepc_node::Node {
+fn setup_node(conf: bitcoind::Conf) -> bitcoind::BitcoinD {
     info!("env BITCOIND_EXE={:?}", std::env::var("BITCOIND_EXE"));
-    info!("exe_path={:?}", corepc_node::exe_path());
+    info!("exe_path={:?}", bitcoind::exe_path());
 
-    if let Ok(exe_path) = corepc_node::exe_path() {
+    if let Ok(exe_path) = bitcoind::exe_path() {
         info!("Using bitcoind at '{}'", exe_path);
-        return corepc_node::Node::with_conf(exe_path, &conf).unwrap();
+        return bitcoind::BitcoinD::with_conf(exe_path, &conf).unwrap();
     }
 
     info!("Trying to download a bitcoind..");
-    corepc_node::Node::from_downloaded_with_conf(&conf).unwrap()
+    bitcoind::BitcoinD::from_downloaded_with_conf(&conf).unwrap()
 }
 
 /// Creates a two-node regtest topology:
@@ -149,10 +149,10 @@ fn setup_node(conf: corepc_node::Conf) -> corepc_node::Node {
 ///
 /// `node1_args` are appended as extra `bitcoind` CLI flags (e.g. `-debug=validation`) so tests
 /// can enable the specific logging needed to trigger the events they want to observe.
-fn setup_two_connected_nodes(node1_args: Vec<&str>) -> (corepc_node::Node, corepc_node::Node) {
+fn setup_two_connected_nodes(node1_args: Vec<&str>) -> (bitcoind::BitcoinD, bitcoind::BitcoinD) {
     // node1 listens for p2p connections
-    let mut node1_conf = corepc_node::Conf::default();
-    node1_conf.p2p = corepc_node::P2P::Yes;
+    let mut node1_conf = bitcoind::Conf::default();
+    node1_conf.p2p = bitcoind::P2P::Yes;
     for arg in node1_args {
         info!("Running node1 with arg: {}", arg);
         node1_conf.args.push(arg);
@@ -160,7 +160,7 @@ fn setup_two_connected_nodes(node1_args: Vec<&str>) -> (corepc_node::Node, corep
     let node1 = setup_node(node1_conf);
 
     // node2 connects to node1
-    let mut node2_conf = corepc_node::Conf::default();
+    let mut node2_conf = bitcoind::Conf::default();
     node2_conf.p2p = node1.p2p_connect(true).unwrap();
     let node2 = setup_node(node2_conf);
 
@@ -193,7 +193,7 @@ fn setup_two_connected_nodes(node1_args: Vec<&str>) -> (corepc_node::Node, corep
 ///    exit before returning.
 async fn check(
     args: Vec<&str>,
-    test_setup: fn(&corepc_node::Client),
+    test_setup: fn(&bitcoind::Client),
     check_event: fn(PeerObserverEvent) -> bool,
 ) {
     setup();

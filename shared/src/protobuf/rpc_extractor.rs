@@ -12,7 +12,7 @@ use corepc_client::types::v30::{
 };
 
 // Ideally, all type imports should use the generic mtype types.
-use corepc_node::mtype::{
+use bitcoind::mtype::{
     EstimateSmartFee as RPCEstimateSmartFee, GetBlockchainInfo, GetChainTxStats, GetMempoolInfo,
     GetNetworkInfo, GetNetworkInfoAddress, GetNetworkInfoNetwork, GetOrphanTxsVerboseTwo,
     GetOrphanTxsVerboseTwoEntry,
@@ -390,7 +390,7 @@ impl From<GetBlockchainInfo> for BlockchainInfo {
             size_on_disk: info.size_on_disk,
             pruned: info.pruned,
             prune_height: info.prune_height.unwrap_or_default(),
-            prune_target_size: info.prune_target_size.map(|s| s as u64).unwrap_or_default(),
+            prune_target_size: info.prune_target_size.unwrap_or_default(),
             warnings: info.warnings,
         }
     }

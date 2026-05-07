@@ -4,7 +4,7 @@
 use shared::{
     async_nats,
     bitcoin::{self, Amount},
-    corepc_node::{self},
+    bitcoind::{self},
     futures::StreamExt,
     log::{self, info},
     nats_util::NatsArgs,
@@ -72,21 +72,21 @@ fn make_test_args(
     )
 }
 
-fn setup_node(conf: corepc_node::Conf) -> corepc_node::Node {
+fn setup_node(conf: bitcoind::Conf) -> bitcoind::BitcoinD {
     info!("env BITCOIND_EXE={:?}", std::env::var("BITCOIND_EXE"));
-    info!("exe_path={:?}", corepc_node::exe_path());
+    info!("exe_path={:?}", bitcoind::exe_path());
 
-    if let Ok(exe_path) = corepc_node::exe_path() {
+    if let Ok(exe_path) = bitcoind::exe_path() {
         info!("Using bitcoind at '{}'", exe_path);
-        return corepc_node::Node::with_conf(exe_path, &conf).unwrap();
+        return bitcoind::BitcoinD::with_conf(exe_path, &conf).unwrap();
     }
 
     info!("Trying to download a bitcoind..");
-    corepc_node::Node::from_downloaded_with_conf(&conf).unwrap()
+    bitcoind::BitcoinD::from_downloaded_with_conf(&conf).unwrap()
 }
 
-fn configure_node() -> corepc_node::Node {
-    let mut node_conf = corepc_node::Conf::default();
+fn configure_node() -> bitcoind::BitcoinD {
+    let mut node_conf = bitcoind::Conf::default();
     node_conf.args = vec![
         "-regtest",
         "-debug=net",
@@ -100,7 +100,7 @@ fn configure_node() -> corepc_node::Node {
     // enabling this is useful for debugging, but enabling this by default will
     // be quite spammy.
     node_conf.view_stdout = false;
-    node_conf.p2p = corepc_node::P2P::Yes;
+    node_conf.p2p = bitcoind::P2P::Yes;
 
     setup_node(node_conf)
 }
@@ -110,7 +110,7 @@ async fn check(
     disable_addrv2: bool,
     disable_invs: bool,
     disable_feefilter: bool,
-    test_setup: fn(&corepc_node::Node),
+    test_setup: fn(&bitcoind::BitcoinD),
     mut check_expected: impl FnMut(PeerObserverEvent) -> bool,
 ) {
     setup();
