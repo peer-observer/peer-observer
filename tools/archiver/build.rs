@@ -1,13 +1,25 @@
 use std::process::Command;
 
 fn main() {
-    let output = Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .expect("failed to run git rev-parse HEAD");
-
-    let hash = String::from_utf8(output.stdout).unwrap();
-    let hash = hash.trim();
+    let hash = std::env::var("GIT_HASH")
+        .ok()
+        .filter(|h| h.len() >= 8)
+        .or_else(|| {
+            let output = Command::new("git")
+                .args(["rev-parse", "HEAD"])
+                .output()
+                .ok()?;
+            if !output.status.success() {
+                return None;
+            }
+            let h = String::from_utf8(output.stdout).ok()?.trim().to_string();
+            if h.len() >= 8 {
+                Some(h)
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| "00000000".to_string());
 
     let b0 = u8::from_str_radix(&hash[0..2], 16).unwrap();
     let b1 = u8::from_str_radix(&hash[2..4], 16).unwrap();
@@ -25,5 +37,6 @@ fn main() {
     )
     .unwrap();
 
+    println!("cargo:rerun-if-env-changed=GIT_HASH");
     println!("cargo:rerun-if-changed=../../.git/HEAD");
 }
