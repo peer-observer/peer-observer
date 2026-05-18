@@ -321,6 +321,16 @@ async fn test_integration_p2pextractor_inv_annoucement() {
                     .send_to_address(&REGTEST_ADDRESS, Amount::from_sat(10000))
                     .unwrap();
             }
+            // Bitcoin Core schedules tx invs to outbound peers via Poisson trickle
+            // (OUTBOUND_INVENTORY_BROADCAST_INTERVAL, mean 2s). Advance mocktime
+            // to force the next SendMessages cycle to fire the trickle immediately
+            // instead of relying on the timeout to outlast the Poisson tail.
+            node.client
+                .call::<()>(
+                    "setmocktime",
+                    &[(util::current_timestamp() + 60 * 10).into()],
+                )
+                .unwrap();
         },
         {
             let mut wtx_count = 0usize;
