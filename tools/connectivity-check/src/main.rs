@@ -1,7 +1,7 @@
 #![cfg_attr(feature = "strict", deny(warnings))]
 
 use crossbeam::channel::{unbounded, Receiver, Sender};
-use rand::Rng;
+use rand::RngExt;
 use shared::bitcoin::consensus::{encode, Decodable};
 use shared::bitcoin::p2p::message::NetworkMessage;
 use shared::bitcoin::p2p::message_network::VersionMessage;

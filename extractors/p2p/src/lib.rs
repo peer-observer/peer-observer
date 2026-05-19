@@ -21,7 +21,7 @@ use shared::{
         event::{Event, event::PeerObserverEvent},
         p2p_extractor,
     },
-    rand::{self, Rng},
+    rand::{self, RngExt},
     tokio::{
         io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader},
         net::{TcpListener, TcpStream, tcp::WriteHalf},

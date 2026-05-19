@@ -9,7 +9,7 @@ edition = "2021"
 shared = { path = "../../shared" }
 
 crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
-rand = "0.9.2"
+rand = "0.10.1"
 csv = "1.4.0"
 serde = { version = "1.0", features = ["derive"] }
 

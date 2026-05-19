@@ -34,7 +34,7 @@ use shared::{
             PeerInfos, UploadTarget,
         },
     },
-    rand::{self, Rng},
+    rand::{self, RngExt},
     simple_logger::SimpleLogger,
     testing::{
         metrics_fetcher::fetch_metrics_root, nats_publisher::NatsPublisherForTesting,

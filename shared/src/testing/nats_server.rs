@@ -8,7 +8,7 @@
 // - Renamed NatsServer to NatsServerForTesting
 // - Changed the function new() to attempt to find a working port for NATS and hardcode all other nats-server args
 
-use rand::Rng;
+use rand::RngExt;
 use std::{env, process::Stdio, time::Duration};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},

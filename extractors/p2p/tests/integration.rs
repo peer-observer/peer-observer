@@ -418,7 +418,7 @@ mod p2p_client {
             message_network::VersionMessage,
         },
     };
-    use shared::rand::Rng;
+    use shared::rand::RngExt;
     use shared::{log, rand, util};
 
     use std::io::{BufReader, Write};
