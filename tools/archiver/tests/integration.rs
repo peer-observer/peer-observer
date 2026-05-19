@@ -18,6 +18,7 @@ use shared::{
             Ebpf,
         },
         event::{event::PeerObserverEvent, Event},
+        ipc_extractor::{self, BlockTip},
         log_extractor::{self, LogDebugCategory},
         p2p_extractor, rpc_extractor,
     },
@@ -67,6 +68,7 @@ fn make_test_args(nats_port: u16, output_dir: &std::path::Path) -> Args {
         rpc: false,
         p2p_extractor: false,
         log_extractor: false,
+        ipc_extractor: false,
         compression_level: 3,
     }
 }
@@ -179,6 +181,17 @@ fn make_all_event_types() -> Vec<(Event, &'static str)> {
             .unwrap(),
             "log_extractor",
         ),
+        // 9. ipc_extractor
+        (
+            Event::new(PeerObserverEvent::IpcExtractor(ipc_extractor::Ipc {
+                ipc_event: Some(ipc_extractor::ipc::IpcEvent::BlockTip(BlockTip {
+                    height: 0,
+                    hash: vec![0u8; 32],
+                })),
+            }))
+            .unwrap(),
+            "ipc_extractor",
+        ),
     ];
 
     // Compile-time check: if a new PeerObserverEvent variant is added,
@@ -193,6 +206,7 @@ fn make_all_event_types() -> Vec<(Event, &'static str)> {
         PeerObserverEvent::RpcExtractor(_) => (),
         PeerObserverEvent::P2pExtractor(_) => (),
         PeerObserverEvent::LogExtractor(_) => (),
+        PeerObserverEvent::IpcExtractor(_) => (),
     }
 
     events
@@ -220,6 +234,7 @@ async fn run_filter_test(flag: &str, expected_count: usize) {
             "rpc" => args.rpc = true,
             "p2p_extractor" => args.p2p_extractor = true,
             "log_extractor" => args.log_extractor = true,
+            "ipc_extractor" => args.ipc_extractor = true,
             _ => {} // archive_all
         }
         archiver::run(args, shutdown_rx).await.unwrap();
@@ -269,7 +284,7 @@ async fn run_filter_test(flag: &str, expected_count: usize) {
 
 #[tokio::test]
 async fn test_filter_all() {
-    run_filter_test("all", 7).await;
+    run_filter_test("all", 8).await;
 }
 
 #[tokio::test]
@@ -305,6 +320,11 @@ async fn test_filter_p2p_extractor() {
 #[tokio::test]
 async fn test_filter_log_extractor() {
     run_filter_test("log_extractor", 1).await;
+}
+
+#[tokio::test]
+async fn test_filter_ipc() {
+    run_filter_test("ipc_extractor", 1).await;
 }
 
 #[tokio::test]
@@ -400,7 +420,7 @@ async fn test_file_rotation_with_compression() {
     println!("total events:  {}", total_events);
     println!("===================================\n");
 
-    assert_eq!(total_events, 7);
+    assert_eq!(total_events, 8);
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
 }

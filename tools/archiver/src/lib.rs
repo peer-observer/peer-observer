@@ -329,6 +329,10 @@ pub struct Args {
     #[arg(long)]
     pub log_extractor: bool,
 
+    /// If passed, archive ipc-extractor events.
+    #[arg(long)]
+    pub ipc_extractor: bool,
+
     /// Zstd compression level (0 = no compression, 1-22). Default: 22 (ultra).
     #[arg(long, default_value_t = 22)]
     pub compression_level: u32,
@@ -343,7 +347,8 @@ impl Args {
             || self.validation
             || self.rpc
             || self.p2p_extractor
-            || self.log_extractor)
+            || self.log_extractor
+            || self.ipc_extractor)
     }
 }
 
@@ -359,6 +364,7 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         log::info!("archiving rpc events:           {}", args.rpc);
         log::info!("archiving p2p_extractor events: {}", args.p2p_extractor);
         log::info!("archiving log_extractor events: {}", args.log_extractor);
+        log::info!("archiving ipc_extractor events: {}", args.ipc_extractor);
     }
 
     let nc = nats_util::prepare_connection(&args.nats)?
@@ -480,6 +486,7 @@ fn should_archive(event: &Event, args: &Args) -> bool {
         Some("rpc") => args.rpc,
         Some("p2p_extractor") => args.p2p_extractor,
         Some("log_extractor") => args.log_extractor,
+        Some("ipc_extractor") => args.ipc_extractor,
         _ => false,
     }
 }
@@ -495,6 +502,7 @@ fn event_type_name(event: &Event) -> Option<&'static str> {
         PeerObserverEvent::RpcExtractor(_) => "rpc",
         PeerObserverEvent::P2pExtractor(_) => "p2p_extractor",
         PeerObserverEvent::LogExtractor(_) => "log_extractor",
+        PeerObserverEvent::IpcExtractor(_) => "ipc_extractor",
     };
     Some(name)
 }

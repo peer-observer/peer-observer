@@ -95,6 +95,8 @@ Options:
           If passed, archive p2p-extractor events
       --log-extractor
           If passed, archive log-extractor events
+      --ipc-extractor
+          If passed, archive ipc-extractor events
       --compression-level <COMPRESSION_LEVEL>
           Zstd compression level (0 = no compression, 1-22). Default: 22 (ultra) [default: 22]
   -h, --help
