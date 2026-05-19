@@ -44,6 +44,9 @@ fn main() {
                         Some(PeerObserverEvent::LogExtractor(l)) => {
                             println!("[{n}] ts={ts} log: {}", l.log_event.as_ref().unwrap())
                         }
+                        Some(PeerObserverEvent::IpcExtractor(i)) => {
+                            println!("[{n}] ts={ts} ipc: {}", i.ipc_event.as_ref().unwrap())
+                        }
                         None => println!("[{n}] ts={ts} <unknown>"),
                     }
                 }
