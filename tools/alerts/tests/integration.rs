@@ -26,15 +26,28 @@ use shared::{
 
 use std::time::Duration;
 
-/// Builds an `Args` instance pointing at the given NATS server
-fn make_test_args(
-    nats_port: u16,
+struct AlertSettingsInTest {
     ping_threshold: usize,
     ping_window_secs: u64,
     addr_threshold: usize,
     addr_window_secs: u64,
     peer_stale_secs: u64,
-) -> Args {
+}
+
+impl Default for AlertSettingsInTest {
+    fn default() -> Self {
+        Self {
+            ping_threshold: 10,
+            ping_window_secs: 60,
+            addr_threshold: 5,
+            addr_window_secs: 60,
+            peer_stale_secs: 3600,
+        }
+    }
+}
+
+/// Builds an `Args` instance pointing at the given NATS server
+fn make_test_args(nats_port: u16, settings: AlertSettingsInTest) -> Args {
     Args {
         nats: nats_util::NatsArgs {
             address: format!("127.0.0.1:{}", nats_port),
@@ -42,12 +55,12 @@ fn make_test_args(
             password: None,
             password_file: None,
         },
-        ping_threshold,
-        ping_window_secs,
-        addr_threshold,
-        addr_window_secs,
+        ping_threshold: settings.ping_threshold,
+        ping_window_secs: settings.ping_window_secs,
+        addr_threshold: settings.addr_threshold,
+        addr_window_secs: settings.addr_window_secs,
         log_level: log::Level::Trace,
-        peer_stale_secs,
+        peer_stale_secs: settings.peer_stale_secs,
     }
 }
 
@@ -205,8 +218,16 @@ impl TestHarness {
 #[tokio::test]
 async fn test_ping_spammer() {
     let ping_threshold = 3;
-    let mut harness =
-        TestHarness::new(|port| make_test_args(port, ping_threshold, 60, 5, 60, 3600)).await;
+    let mut harness = TestHarness::new(|port| {
+        make_test_args(
+            port,
+            AlertSettingsInTest {
+                ping_threshold,
+                ..Default::default()
+            },
+        )
+    })
+    .await;
 
     let event = make_ping_event(1, "1.2.3.4:8333", true);
     let subject = Subject::NetMsg.to_string();
@@ -233,8 +254,16 @@ async fn test_ping_spammer() {
 #[tokio::test]
 async fn test_addr_spammer() {
     let addr_threshold = 2;
-    let mut harness =
-        TestHarness::new(|port| make_test_args(port, 10, 60, addr_threshold, 60, 3600)).await;
+    let mut harness = TestHarness::new(|port| {
+        make_test_args(
+            port,
+            AlertSettingsInTest {
+                addr_threshold,
+                ..Default::default()
+            },
+        )
+    })
+    .await;
 
     let event = make_addr_event(2, "5.6.7.8:8333");
     let subject = Subject::NetMsg.to_string();
@@ -261,8 +290,16 @@ async fn test_addr_spammer() {
 #[tokio::test]
 async fn test_addrv2_spammer() {
     let addr_threshold = 2;
-    let mut harness =
-        TestHarness::new(|port| make_test_args(port, 10, 60, addr_threshold, 60, 3600)).await;
+    let mut harness = TestHarness::new(|port| {
+        make_test_args(
+            port,
+            AlertSettingsInTest {
+                addr_threshold,
+                ..Default::default()
+            },
+        )
+    })
+    .await;
 
     let event = make_addrv2_event(3, "9.10.11.12:8333");
     let subject = Subject::NetMsg.to_string();
@@ -287,7 +324,16 @@ async fn test_addrv2_spammer() {
 /// Verifies that outbound pings are silently dropped and never trigger an alert
 #[tokio::test]
 async fn test_ping_spammer_outbound_ignored() {
-    let mut harness = TestHarness::new(|port| make_test_args(port, 3, 60, 5, 60, 3600)).await;
+    let mut harness = TestHarness::new(|port| {
+        make_test_args(
+            port,
+            AlertSettingsInTest {
+                ping_threshold: 3,
+                ..Default::default()
+            },
+        )
+    })
+    .await;
 
     for _ in 0..4 {
         harness
@@ -313,7 +359,7 @@ async fn test_integration_alerts_fail_if_no_nats() {
     let (_, shutdown_rx) = watch::channel(false);
     let (alerter, _rx) = IntegrationTestAlerter::new();
     let alerts_handle = tokio::spawn(async move {
-        let args = make_test_args(65535, 10, 60, 5, 60, 3600);
+        let args = make_test_args(65535, AlertSettingsInTest::default());
         match alerts::run(args, alerter, shutdown_rx.clone()).await {
             Ok(_) => panic!("We should fail when no NATS server is reachable."),
             Err(e) => match e {
@@ -331,7 +377,8 @@ async fn test_integration_alerts_fail_if_no_nats() {
 #[tokio::test]
 async fn test_closed_connection_cleans_state() {
     // threshold=10 so peer 99 never becomes a spammer
-    let mut harness = TestHarness::new(|port| make_test_args(port, 10, 60, 5, 60, 3600)).await;
+    let mut harness =
+        TestHarness::new(|port| make_test_args(port, AlertSettingsInTest::default())).await;
 
     harness
         .publisher
@@ -365,8 +412,16 @@ async fn test_closed_connection_cleans_state() {
 #[tokio::test]
 async fn test_ping_spammer_fires_only_once() {
     let ping_threshold = 3;
-    let mut harness =
-        TestHarness::new(|port| make_test_args(port, ping_threshold, 60, 5, 60, 3600)).await;
+    let mut harness = TestHarness::new(|port| {
+        make_test_args(
+            port,
+            AlertSettingsInTest {
+                ping_threshold,
+                ..Default::default()
+            },
+        )
+    })
+    .await;
 
     let event = make_ping_event(10, "20.21.22.23:8333", true);
     let subject = Subject::NetMsg.to_string();
@@ -398,8 +453,16 @@ async fn test_ping_spammer_fires_only_once() {
 #[tokio::test]
 async fn test_flagged_peer_disconnect_emits_disconnect_alert() {
     let ping_threshold = 3;
-    let mut harness =
-        TestHarness::new(|port| make_test_args(port, ping_threshold, 60, 5, 60, 3600)).await;
+    let mut harness = TestHarness::new(|port| {
+        make_test_args(
+            port,
+            AlertSettingsInTest {
+                ping_threshold,
+                ..Default::default()
+            },
+        )
+    })
+    .await;
 
     let event = make_ping_event(50, "50.51.52.53:8333", true);
     let subject = Subject::NetMsg.to_string();
@@ -440,8 +503,17 @@ async fn test_flagged_peer_disconnect_emits_disconnect_alert() {
 async fn test_stale_peer_cleanup_emits_disconnect_alert() {
     let ping_threshold = 3;
     // peer_stale_secs=1 so the cleanup tick evicts peer 60 quickly
-    let mut harness =
-        TestHarness::new(|port| make_test_args(port, ping_threshold, 60, 5, 60, 1)).await;
+    let mut harness = TestHarness::new(|port| {
+        make_test_args(
+            port,
+            AlertSettingsInTest {
+                ping_threshold,
+                peer_stale_secs: 1,
+                ..Default::default()
+            },
+        )
+    })
+    .await;
 
     let event = make_ping_event(60, "60.61.62.63:8333", true);
     let subject = Subject::NetMsg.to_string();
@@ -473,8 +545,16 @@ async fn test_stale_peer_cleanup_emits_disconnect_alert() {
 #[tokio::test]
 async fn test_undecodable_payload_does_not_kill_tool() {
     let ping_threshold = 3;
-    let mut harness =
-        TestHarness::new(|port| make_test_args(port, ping_threshold, 60, 5, 60, 3600)).await;
+    let mut harness = TestHarness::new(|port| {
+        make_test_args(
+            port,
+            AlertSettingsInTest {
+                ping_threshold,
+                ..Default::default()
+            },
+        )
+    })
+    .await;
 
     // Garbage payload first — must be logged and skipped, not propagated
     harness
