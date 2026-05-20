@@ -17,6 +17,7 @@ use shared::{
     futures::AsyncReadExt,
     protobuf::ipc_extractor::BlockTip,
     tokio::{self, net::UnixStream, task::JoinHandle},
+    tokio_util,
 };
 
 use crate::error::RuntimeError;

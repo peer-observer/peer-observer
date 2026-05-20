@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 shared = { path = "../../shared" }
-tokio-util = { version = "0.7", features = ["compat"] }
 
 [features]
 # Treat warnings as a build error.
