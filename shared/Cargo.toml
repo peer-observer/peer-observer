@@ -28,8 +28,8 @@ zstd = "0.13"
 # (branch 2026-05-corepc-0.12+custom-peer-observer-patches)
 # When updating the Bitcoin Core version used, grep for CORE_VERSION_GREP
 # and update the corepc_client::types::v* to the new version.
-bitcoind = { git = "https://github.com/0xb10c/corepc", rev = "8798e7f9c240c626dc3aa61adadeaf42f8221e40", features = ["download", "30_2"] }
-corepc-client = { git = "https://github.com/0xb10c/corepc", rev = "8798e7f9c240c626dc3aa61adadeaf42f8221e40", features = ["client-sync"]}
+bitcoind = { git = "https://github.com/0xb10c/corepc", rev = "3ceda10f34e945bbf8532f881d6dbc13d98a5d88", features = ["download", "31_0"] }
+corepc-client = { git = "https://github.com/0xb10c/corepc", rev = "3ceda10f34e945bbf8532f881d6dbc13d98a5d88", features = ["client-sync"]}
 
 [build-dependencies]
 prost-build = "0.14"
