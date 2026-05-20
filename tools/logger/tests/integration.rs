@@ -66,18 +66,34 @@ pub fn get_logged_messages() -> Vec<String> {
     LOGS.lock().unwrap().clone()
 }
 
-#[allow(clippy::too_many_arguments)]
-fn make_test_args(
-    nats_port: u16,
+#[derive(Default)]
+struct EnabledLoggersInTest {
     messages: bool,
     connections: bool,
     mempool: bool,
     validation: bool,
     rpc: bool,
+    ipc: bool,
     p2p_extractor: bool,
     log_extractor: bool,
-    ipc_extractor: bool,
-) -> Args {
+}
+
+impl EnabledLoggersInTest {
+    fn all() -> Self {
+        Self {
+            messages: true,
+            connections: true,
+            mempool: true,
+            validation: true,
+            rpc: true,
+            ipc: true,
+            p2p_extractor: true,
+            log_extractor: true,
+        }
+    }
+}
+
+fn make_test_args(nats_port: u16, loggers: EnabledLoggersInTest) -> Args {
     Args::new(
         nats_util::NatsArgs {
             address: format!("127.0.0.1:{}", nats_port),
@@ -86,14 +102,14 @@ fn make_test_args(
             password_file: None,
         },
         log::Level::Trace,
-        messages,
-        connections,
-        mempool,
-        validation,
-        rpc,
-        p2p_extractor,
-        log_extractor,
-        ipc_extractor,
+        loggers.messages,
+        loggers.connections,
+        loggers.mempool,
+        loggers.validation,
+        loggers.rpc,
+        loggers.ipc,
+        loggers.p2p_extractor,
+        loggers.log_extractor,
     )
 }
 
@@ -123,17 +139,7 @@ async fn publish_and_check(events: &[Event], subject: Subject, expected: &str) {
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
     let logger_handle = tokio::spawn(async move {
-        let args = make_test_args(
-            nats_server.port,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-        );
+        let args = make_test_args(nats_server.port, EnabledLoggersInTest::all());
         logger::run(args, shutdown_rx.clone()).await.unwrap();
     });
     // allow the logger tool to start
@@ -176,7 +182,7 @@ async fn test_integration_logger_fail_if_no_nats() {
     let logger_handle = tokio::spawn(async move {
         let args = make_test_args(
             65535, // There shouln't be a NATS server running on this port..
-            true, true, true, true, true, true, true, true,
+            EnabledLoggersInTest::all(),
         );
         match logger::run(args, shutdown_rx.clone()).await {
             Ok(_) => panic!("We should fail when no NATS server is reachable."),
