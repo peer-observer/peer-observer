@@ -46,14 +46,15 @@ fn setup() {
     });
 }
 
-fn make_test_args(
-    nats_port: u16,
-    p2p_address: String,
-    disable_ping: bool,
-    disable_addrv2: bool,
-    disable_invs: bool,
-    disable_feefilter: bool,
-) -> Args {
+#[derive(Default)]
+struct EnabledChecksInTest {
+    ping: bool,
+    addrv2: bool,
+    invs: bool,
+    feefilter: bool,
+}
+
+fn make_test_args(nats_port: u16, p2p_address: String, checks: EnabledChecksInTest) -> Args {
     Args::new(
         NatsArgs {
             address: format!("127.0.0.1:{}", nats_port),
@@ -65,10 +66,10 @@ fn make_test_args(
         p2p_address,
         Network::Regtest,
         PING_INTERVAL_SECONDS,
-        disable_ping,
-        disable_addrv2,
-        disable_invs,
-        disable_feefilter,
+        !checks.ping,
+        !checks.addrv2,
+        !checks.invs,
+        !checks.feefilter,
     )
 }
 
@@ -106,10 +107,7 @@ fn configure_node() -> bitcoind::BitcoinD {
 }
 
 async fn check(
-    disable_ping: bool,
-    disable_addrv2: bool,
-    disable_invs: bool,
-    disable_feefilter: bool,
+    checks: EnabledChecksInTest,
     test_setup: fn(&bitcoind::BitcoinD),
     mut check_expected: impl FnMut(PeerObserverEvent) -> bool,
 ) {
@@ -119,14 +117,7 @@ async fn check(
     let (addr_tx, addr_rx) = oneshot::channel();
 
     let mut p2p_extractor_handle = tokio::spawn(async move {
-        let args = make_test_args(
-            nats_server.port,
-            "127.0.0.1:0".to_string(),
-            disable_ping,
-            disable_addrv2,
-            disable_invs,
-            disable_feefilter,
-        );
+        let args = make_test_args(nats_server.port, "127.0.0.1:0".to_string(), checks);
         p2p_extractor::run(args, shutdown_rx.clone(), Some(addr_tx))
             .await
             .expect("p2p-extractor failed");
@@ -205,10 +196,10 @@ async fn test_integration_p2pextractor_ping_measurements() {
     println!("test that we receive Ping measurement P2P-extractor events");
 
     check(
-        false,
-        true,
-        true,
-        true,
+        EnabledChecksInTest {
+            ping: true,
+            ..Default::default()
+        },
         |_| (),
         |event| {
             match event {
@@ -240,10 +231,10 @@ async fn test_integration_p2pextractor_addr_annoucement() {
     println!("test that we receive AddressAnnouncement P2P-extractor events");
 
     check(
-        true,
-        false,
-        true,
-        true,
+        EnabledChecksInTest {
+            addrv2: true,
+            ..Default::default()
+        },
         |node| {
             // To self-announce our address, we need to be out ouf initial block download
             // Mine a block to get out of initial block download
@@ -301,10 +292,10 @@ async fn test_integration_p2pextractor_inv_annoucement() {
     const NUM_TX: usize = 5;
 
     check(
-        true,
-        true,
-        false,
-        true,
+        EnabledChecksInTest {
+            invs: true,
+            ..Default::default()
+        },
         |node| {
             // Mine to a wallet-owned address so the node has spendable UTXOs
             let address = node
@@ -378,10 +369,10 @@ async fn test_integration_p2pextractor_feefilter_annoucement() {
     println!("test that we receive FeefilterAnnouncement P2P-extractor events");
 
     check(
-        true,
-        true,
-        true,
-        false,
+        EnabledChecksInTest {
+            feefilter: true,
+            ..Default::default()
+        },
         |_node| {
             // No setup required as the node should automatically send a
             // feefilter message to us right after connecting.
@@ -531,10 +522,7 @@ async fn test_integration_p2p_testsshouldtimeout() {
     println!("test that we timeout long running tests");
 
     check(
-        true,
-        true,
-        true,
-        true,
+        EnabledChecksInTest::default(),
         |_node| {},
         |event| match event {
             PeerObserverEvent::P2pExtractor(_) => {
