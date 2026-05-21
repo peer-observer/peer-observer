@@ -19,7 +19,7 @@ use shared::{
     tokio::{
         self, select,
         sync::watch,
-        time::{Duration, sleep},
+        time::{Duration, Instant, sleep},
     },
 };
 use std::io::Write;
@@ -182,9 +182,9 @@ fn setup_two_connected_nodes(node1_args: Vec<&str>) -> (bitcoind::BitcoinD, bitc
 ///    into `debug.log` and waits for it to arrive via NATS, buffering any
 ///    events consumed before the marker. This proves the full
 ///    `debug.log -> tail -> pipe -> extractor -> NATS` path is live.
-/// 5. Calls `test_setup` against node1's RPC client so the test can trigger
-///    the specific node behaviour it wants to observe (mine a block, submit a
-///    transaction, etc.).
+/// 5. Calls `test_setup` against node1's and node2's RPC client so the test can
+///    trigger the specific node behaviour it wants to observe (mine a block,
+///    submit a transaction, etc.).
 /// 6. Replays buffered pre-marker events through `check_event`, then polls
 ///    live NATS messages. The loop breaks as soon as `check_event` returns
 ///    `true`.
@@ -193,11 +193,11 @@ fn setup_two_connected_nodes(node1_args: Vec<&str>) -> (bitcoind::BitcoinD, bitc
 ///    exit before returning.
 async fn check(
     args: Vec<&str>,
-    test_setup: fn(&bitcoind::Client),
+    test_setup: impl AsyncFn(&bitcoind::Client, &bitcoind::Client),
     check_event: fn(PeerObserverEvent) -> bool,
 ) {
     setup();
-    let (node1, _node2) = setup_two_connected_nodes(args);
+    let (node1, node2) = setup_two_connected_nodes(args);
     let nats_server = NatsServerForTesting::new(&[]).await;
     let nats_port = nats_server.port;
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
@@ -237,7 +237,7 @@ async fn check(
     write_marker(&log_path_main, &marker);
     let buffered = wait_for_marker(&mut sub, &marker, Duration::from_secs(10)).await;
 
-    test_setup(&node1.client);
+    test_setup(&node1.client, &node2.client).await;
 
     sleep(Duration::from_secs(1)).await;
 
@@ -285,7 +285,7 @@ async fn test_integration_logextractor_log_events() {
 
     check(
         vec![],
-        |_node1| (),
+        async |_node1, _node2| {},
         |event| match event {
             PeerObserverEvent::LogExtractor(r) => r.log_event.is_some(),
             _ => panic!("unexpected event {:?}", event),
@@ -300,7 +300,7 @@ async fn test_integration_logextractor_unknown_log_events() {
 
     check(
         vec![],
-        |_node1| (),
+        async |_node1, _node2| {},
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(r) => {
@@ -326,7 +326,7 @@ async fn test_integration_logextractor_block_connected() {
 
     check(
         vec!["-debug=validation"],
-        |node1| {
+        async |node1, _node2| {
             node1.generate_to_address(1, &REGTEST_ADDRESS).unwrap();
         },
         |event| {
@@ -354,7 +354,7 @@ async fn test_integration_logextractor_logtimemicros() {
 
     check(
         vec!["-logtimemicros=1"],
-        |_node1| {},
+        async |_node1, _node2| {},
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(r) => {
@@ -382,7 +382,7 @@ async fn test_integration_logextractor_extralogging() {
             "-logips=1",
             "-logtimemicros=1",
         ],
-        |node1| {
+        async |node1, _node2| {
             node1.generate_to_address(1, &REGTEST_ADDRESS).unwrap();
         },
         |event| {
@@ -410,7 +410,7 @@ async fn test_integration_logextractor_block_checked() {
 
     check(
         vec!["-debug=validation"],
-        |node1| {
+        async |node1, _node2| {
             node1.generate_to_address(1, &REGTEST_ADDRESS).unwrap();
         },
         |event| {
@@ -438,7 +438,7 @@ async fn test_integration_logextractor_mutated_block_bad_witness_nonce_size() {
 
     check(
         vec!["-debug=validation"],
-        |node1| {
+        async |node1, _node2| {
             let block = node1
                 .generate_block(&REGTEST_ADDRESS.to_string(), &[], false)
                 .unwrap();
@@ -486,7 +486,7 @@ async fn test_integration_logextractor_mutated_block_bad_txnmrklroot() {
 
     check(
         vec!["-debug=validation"],
-        |node1| {
+        async |node1, _node2| {
             let block = node1
                 .generate_block(&REGTEST_ADDRESS.to_string(), &[], false)
                 .unwrap();
@@ -532,7 +532,7 @@ async fn test_integration_logextractor_unknown_with_threadname() {
 
     check(
         vec!["-logthreadnames=1"],
-        |_node1| {},
+        async |_node1, _node2| {},
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(r) => {
@@ -560,7 +560,7 @@ async fn test_integration_logextractor_unknown_with_category() {
 
     check(
         vec!["-debug=net"],
-        |_node1| {},
+        async |_node1, _node2| {},
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(r) => {
@@ -587,7 +587,7 @@ async fn test_integration_logextractor_unknown_with_threadname_and_category() {
 
     check(
         vec!["-logthreadnames=1", "-debug=net"],
-        |_node1| {},
+        async |_node1, _node2| {},
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(r) => {
@@ -618,7 +618,7 @@ async fn test_integration_logextractor_unknown_with_all_metadata() {
 
     check(
         vec!["-logthreadnames=1", "-logsourcelocations=1", "-debug=net"],
-        |_node1| {},
+        async |_node1, _node2| {},
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(r) => {
@@ -650,7 +650,7 @@ async fn test_integration_logextractor_testsshouldtimeout() {
 
     check(
         vec![],
-        |_node1| {},
+        async |_node1, _node2| {},
         |event| {
             match event {
                 PeerObserverEvent::LogExtractor(_) => {
@@ -670,7 +670,7 @@ async fn test_integration_logextractor_log_bytes() {
 
     check(
         vec!["-debug=net"],
-        |_node1| {},
+        async |_node1, _node2| {},
         |event| match event {
             PeerObserverEvent::LogExtractor(r) => {
                 if let Some(log::LogEvent::UnknownLogMessage(_)) = r.log_event
@@ -681,6 +681,91 @@ async fn test_integration_logextractor_log_bytes() {
                         "Received log event with log_line_bytes={}",
                         r.log_line_bytes
                     );
+                    return true;
+                }
+                false
+            }
+            _ => panic!("unexpected event {:?}", event),
+        },
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_logextractor_saw_new_header() {
+    println!("test that we can parse saw new header logs");
+
+    check(
+        vec![],
+        async |node1, node2| {
+            // first chain tip
+            node2.generate_to_address(1, &REGTEST_ADDRESS).unwrap();
+            // wait for node1 to finish IBD
+            let loop_start = Instant::now();
+            while loop_start.elapsed() < Duration::from_secs(30)
+                && node1.get_blockchain_info().unwrap().initial_block_download
+            {
+                sleep(Duration::from_millis(50)).await;
+            }
+            // this block should trigger the SawNewHeaderLog
+            node2.generate_to_address(1, &REGTEST_ADDRESS).unwrap();
+        },
+        |event| match event {
+            PeerObserverEvent::LogExtractor(r) => {
+                if let Some(log::LogEvent::SawNewHeaderLog(block)) = r.log_event
+                    && r.category == LogDebugCategory::Unknown as i32
+                {
+                    assert!(
+                        !block.block_hash.is_empty(),
+                        "block_hash should not be empty"
+                    );
+                    assert_eq!(block.block_height, 2);
+                    assert_eq!(block.peer_id, 0);
+                    info!("SawNewHeaderLog event {}", block);
+                    return true;
+                }
+                false
+            }
+            _ => panic!("unexpected event {:?}", event),
+        },
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_logextractor_compact_block_reconstruction() {
+    println!("test that we can parse compact block reconstruction logs");
+
+    check(
+        vec!["-debug=cmpctblock"],
+        async |node1, node2| {
+            // first chain tip
+            node2.generate_to_address(1, &REGTEST_ADDRESS).unwrap();
+            // wait for node1 to finish IBD
+            let loop_start = Instant::now();
+            while loop_start.elapsed() < Duration::from_secs(30)
+                && node1.get_blockchain_info().unwrap().initial_block_download
+            {
+                sleep(Duration::from_millis(50)).await;
+            }
+            // this block should trigger the CompactBlockReconstructedLog
+            node2.generate_to_address(1, &REGTEST_ADDRESS).unwrap();
+        },
+        |event| match event {
+            PeerObserverEvent::LogExtractor(r) => {
+                if let Some(log::LogEvent::CompactBlockReconstructedLog(block)) = r.log_event
+                    && r.category == LogDebugCategory::Cmpctblock as i32
+                {
+                    assert!(
+                        !block.block_hash.is_empty(),
+                        "block_hash should not be empty"
+                    );
+                    assert_eq!(block.prefilled_txn_count, 1);
+                    assert_eq!(block.mempool_txn_count, 0);
+                    assert_eq!(block.extra_pool_txn_count, 0);
+                    assert_eq!(block.requested_txn_count, 0);
+                    assert_eq!(block.requested_txn_bytes, 0);
+                    info!("CompactBlockReconstructedLog event {}", block);
                     return true;
                 }
                 false
