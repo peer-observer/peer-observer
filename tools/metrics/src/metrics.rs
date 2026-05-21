@@ -578,7 +578,7 @@ impl Metrics {
         igv!(rpc_getrawaddrman_services, "Number of occurences per services in addrman by table.", ["table", "service"], registry);
         igv!(rpc_getrawaddrman_distinct_asns, "Number of distinct ASNs in addrman by table.", ["table"], registry);
         igv!(rpc_getrawaddrman_distinct_sources, "Number of distinct sources in addrman by table.", ["table"], registry);
-        igv!(rpc_getrawaddrman_distinct_source_asn, "Number of distinct sources in addrman by table.", ["table"], registry);
+        igv!(rpc_getrawaddrman_distinct_source_asn, "Number of distinct source ASNs in addrman by table.", ["table"], registry);
         icv!(rpc_getrawaddrman_added_entry, "Number of entries added since the last fetch to the addrman by table.", ["table"], registry);
         icv!(rpc_getrawaddrman_replaced_entry, "Number of entries replaced (by bucket/position) since the last fetch to the addrman by table.", ["table"], registry);
         icv!(rpc_getrawaddrman_changed_services, "Number of entries where the services changed since the last fetch to the addrman by table.", ["table"], registry);
