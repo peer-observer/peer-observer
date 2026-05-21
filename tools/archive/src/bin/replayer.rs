@@ -1,6 +1,7 @@
 use std::env;
 use std::path::Path;
 
+use archive::replayer;
 use shared::protobuf::event::event::PeerObserverEvent;
 
 fn main() {

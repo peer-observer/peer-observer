@@ -1,4 +1,4 @@
-use archiver::{run, Args};
+use archive::archiver::{run, Args};
 use shared::log;
 use shared::tokio::{self, signal, sync::watch};
 use shared::{clap::Parser, simple_logger};

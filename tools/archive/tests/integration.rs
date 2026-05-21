@@ -1,6 +1,7 @@
 #![cfg(feature = "nats_integration_tests")]
 
-use archiver::Args;
+use archive::archiver::{run, Args};
+use archive::replayer::read_archive;
 
 use sha2::Digest;
 use shared::{
@@ -237,7 +238,7 @@ async fn run_filter_test(flag: &str, expected_count: usize) {
             "ipc_extractor" => args.ipc_extractor = true,
             _ => {} // archive_all
         }
-        archiver::run(args, shutdown_rx).await.unwrap();
+        run(args, shutdown_rx).await.unwrap();
     });
 
     sleep(Duration::from_secs(1)).await;
@@ -343,7 +344,7 @@ async fn test_file_rotation_with_compression() {
         let mut args = make_test_args(nats_server.port, &dir);
         args.max_file_size = 1; // force rotation on every event
         args.compression_level = 1;
-        archiver::run(args, shutdown_rx).await.unwrap();
+        run(args, shutdown_rx).await.unwrap();
     });
 
     sleep(Duration::from_secs(1)).await;
@@ -440,7 +441,7 @@ async fn test_replayer_roundtrip() {
     let dir = tmp_dir.clone();
     let archiver_handle = tokio::spawn(async move {
         let args = make_test_args(nats_server.port, &dir);
-        archiver::run(args, shutdown_rx).await.unwrap();
+        run(args, shutdown_rx).await.unwrap();
     });
 
     sleep(Duration::from_secs(1)).await;
@@ -460,7 +461,7 @@ async fn test_replayer_roundtrip() {
         .into_iter()
         .next()
         .expect("expected a .<timestamp>.bin.zst file");
-    let archive = replayer::read_archive(&archive_path).unwrap();
+    let archive = read_archive(&archive_path).unwrap();
 
     assert_eq!(archive.header.version, 1);
     assert_eq!(archive.events.len(), all_events.len());
@@ -490,7 +491,7 @@ async fn test_replayer_roundtrip_uncompressed() {
     let archiver_handle = tokio::spawn(async move {
         let mut args = make_test_args(nats_server.port, &dir);
         args.compression_level = 0;
-        archiver::run(args, shutdown_rx).await.unwrap();
+        run(args, shutdown_rx).await.unwrap();
     });
 
     sleep(Duration::from_secs(1)).await;
@@ -510,7 +511,7 @@ async fn test_replayer_roundtrip_uncompressed() {
         .into_iter()
         .next()
         .expect("expected a .0.bin file");
-    let archive = replayer::read_archive(&archive_path).unwrap();
+    let archive = read_archive(&archive_path).unwrap();
 
     assert_eq!(archive.header.version, 1);
     assert_eq!(archive.events.len(), all_events.len());
@@ -538,7 +539,7 @@ async fn test_compression_integrity() {
         let mut args = make_test_args(nats_server.port, &dir);
         args.max_file_size = 100;
         args.compression_level = 3;
-        archiver::run(args, shutdown_rx).await.unwrap();
+        run(args, shutdown_rx).await.unwrap();
     });
 
     sleep(Duration::from_secs(1)).await;
@@ -620,7 +621,7 @@ async fn test_no_compression() {
     let archiver_handle = tokio::spawn(async move {
         let mut args = make_test_args(nats_server.port, &dir);
         args.compression_level = 0;
-        archiver::run(args, shutdown_rx).await.unwrap();
+        run(args, shutdown_rx).await.unwrap();
     });
 
     sleep(Duration::from_secs(1)).await;

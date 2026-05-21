@@ -1,4 +1,8 @@
-# `archiver` tool
+# Event archives
+
+Tooling to archive and replay peer-observer events.
+
+## `archiver`
 
 > archives peer-observer events to disk
 
@@ -6,7 +10,7 @@ A peer-observer tool that subscribes to a NATS server and persists events to bin
 By default, all event types are archived. Events can be filtered by type using flags, allowing
 multiple archiver instances to run simultaneously for different recording jobs.
 
-## File format
+### File format
 
 Events are stored as sequential length-delimited protobuf messages (using `encode_length_delimited`
 from `prost`), preceded by a 16-byte header:
@@ -21,13 +25,13 @@ from `prost`), preceded by a 16-byte header:
 The git commit hash in the header identifies the exact version of the protobuf definitions used
 to record the file, allowing future readers to check out that commit if needed.
 
-## Manifest
+### Manifest
 
 Each archive file has a corresponding `<base-name>.<timestamp>.manifest.toml` with its metadata
 (version, NATS address, event count, uncompressed size, SHA-256 checksum, event types,
 first/last timestamps).
 
-## Compression
+### Compression
 
 Archive files are compressed with zstd using streaming compression — the writer is wrapped in a
 `zstd::Encoder`, so files are written as `.bin.zst` directly. The default compression level is
@@ -35,7 +39,7 @@ Archive files are compressed with zstd using streaming compression — the write
 or `--compression-level 0` to skip compression. Rotation (`--max-file-size`) is checked against
 the compressed output stream. May overshoot slightly due to zstd internal buffering.
 
-## Example
+### Example
 
 Archive all events from a NATS server, rotating files at 100 MB, with zstd compression:
 
@@ -57,7 +61,7 @@ $ ./target/release/archiver \
     --messages --mempool
 ```
 
-## Usage
+### Usage
 
 ```
 Archive peer-observer events to disk
@@ -103,4 +107,38 @@ Options:
           Print help
   -V, --version
           Print version
+```
+
+
+## `replayer`
+
+Reads peer-observer archive files and prints decoded events to stdout.
+
+Supports:
+- `.bin`
+- `.bin.zst`
+
+### Usage
+
+```bash
+cargo run -p replayer -- archive/test.0.bin
+cargo run -p replayer -- archive/test.0.bin.zst
+cargo run -p replayer -- archive/test.0.bin archive/test.1.bin.zst
+```
+
+### Example output
+
+```text
+header: version=1 git=abcd1234
+[1] ts=1234567890 ebpf: ...
+[2] ts=1234567891 ebpf: ...
+total: 2 events
+```
+
+### Help
+
+```
+Read and display peer-observer archive files
+
+Usage: replayer <file.bin[.zst]> [file2.bin[.zst] ...]
 ```

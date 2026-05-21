@@ -174,21 +174,27 @@ jobs:
             continue
           fi
 
-          HELP_OUTPUT=$(cargo run --quiet --manifest-path "$MANIFEST" -- --help)
+          BINS=$(cargo metadata --no-deps --format-version 1 --manifest-path "$MANIFEST" \
+            | jq -r '.packages[0].targets[] | select(.kind | index("bin")) | .name')
 
-          MISSING_LINES=0
-          while IFS= read -r line; do
-            if ! grep -Fq "$line" "$README"; then
-              echo "::warning file=$README::Missing line in README for $TOOL: $line"
-              MISSING_LINES=1
+          for BIN in $BINS; do
+            echo "  ↳ Binary: $BIN"
+            HELP_OUTPUT=$(cargo run --quiet --manifest-path "$MANIFEST" --bin "$BIN" -- --help)
+
+            MISSING_LINES=0
+            while IFS= read -r line; do
+              if ! grep -Fq "$line" "$README"; then
+                echo "::warning file=$README::Missing line in README for $TOOL/$BIN: $line"
+                MISSING_LINES=1
+              fi
+            done <<< "$HELP_OUTPUT"
+
+            if [ "$MISSING_LINES" -ne 0 ]; then
+              echo "::error file=$README::Some help lines for '$BIN' are missing in $TOOL's README"
+              echo "📢 Have you forgotten to update the documentation for $TOOL/$BIN?"
+              MISSING=1
             fi
-          done <<< "$HELP_OUTPUT"
-
-          if [ "$MISSING_LINES" -ne 0 ]; then
-            echo "::error file=$README::Some help lines for '$TOOL' are missing in its README"
-            echo "📢 Have you forgotten to update the documentation for $TOOL?"
-            MISSING=1
-          fi
+          done
         done
 
         if [ "$MISSING" -ne 0 ]; then
