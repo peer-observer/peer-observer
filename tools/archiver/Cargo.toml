@@ -3,6 +3,9 @@ name = "archiver"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+path = "src/archiver/lib.rs"
+
 [dependencies]
 shared = { path = "../../shared" }
 time = { version = "0.3", features = ["formatting", "macros"] }

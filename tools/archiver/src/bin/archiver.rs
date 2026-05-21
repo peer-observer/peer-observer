@@ -1,4 +1,4 @@
-use archiver::Args;
+use archiver::{run, Args};
 use shared::log;
 use shared::tokio::{self, signal, sync::watch};
 use shared::{clap::Parser, simple_logger};
@@ -12,7 +12,7 @@ async fn main() {
     }
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
-    let mut archiver_handle = tokio::spawn(archiver::run(args, shutdown_rx));
+    let mut archiver_handle = tokio::spawn(run(args, shutdown_rx));
 
     tokio::select! {
         _ = signal::ctrl_c() => {
