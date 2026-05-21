@@ -13,6 +13,7 @@ pub extern crate prost;
 pub extern crate rand;
 pub extern crate serde;
 pub extern crate simple_logger;
+pub extern crate time;
 pub extern crate tokio;
 pub extern crate tokio_util;
 pub extern crate zstd;
