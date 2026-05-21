@@ -716,4 +716,47 @@ mod tests {
         let log_event = parse_log_event(log);
         assert_eq!(log_event.log_level, LogLevel::Warning as i32);
     }
+
+    #[test]
+    fn test_log_matcher_saw_new_header() {
+        let log = "2026-04-06T15:02:09.010720Z Saw new header hash=00000000000000000001405ace6e6e4abd39fd1e13d1b3434468ba99986b6ad5 height=943929 peer=498";
+        let log_event = parse_log_event(log);
+
+        assert_eq!(log_event.log_timestamp, 1775487729010720);
+        assert_eq!(log_event.category, LogDebugCategory::Unknown as i32);
+
+        if let Some(LogEvent::SawNewHeaderLog(event)) = log_event.log_event {
+            assert_eq!(
+                event.block_hash,
+                "00000000000000000001405ace6e6e4abd39fd1e13d1b3434468ba99986b6ad5"
+            );
+            assert_eq!(event.block_height, 943929);
+            assert_eq!(event.peer_id, 498);
+            return;
+        }
+        panic!("Expected SawNewHeaderLog event");
+    }
+
+    #[test]
+    fn test_log_matcher_compact_block_reconstruction() {
+        let log = "2026-04-06T15:02:09.404125Z [cmpctblock] Successfully reconstructed block 00000000000000000001405ace6e6e4abd39fd1e13d1b3434468ba99986b6ad5 with 1 txn prefilled, 2714 txn from mempool (incl at least 2 from extra pool) and 4 txn (886 bytes) requested";
+        let log_event = parse_log_event(log);
+
+        assert_eq!(log_event.log_timestamp, 1775487729404125);
+        assert_eq!(log_event.category, LogDebugCategory::Cmpctblock as i32);
+
+        if let Some(LogEvent::CompactBlockReconstructedLog(event)) = log_event.log_event {
+            assert_eq!(
+                event.block_hash,
+                "00000000000000000001405ace6e6e4abd39fd1e13d1b3434468ba99986b6ad5"
+            );
+            assert_eq!(event.prefilled_txn_count, 1);
+            assert_eq!(event.mempool_txn_count, 2714);
+            assert_eq!(event.extra_pool_txn_count, 2);
+            assert_eq!(event.requested_txn_count, 4);
+            assert_eq!(event.requested_txn_bytes, 886);
+            return;
+        }
+        panic!("Expected CompactBlockReconstructedLog event");
+    }
 }
