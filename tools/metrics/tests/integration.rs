@@ -41,6 +41,7 @@ use shared::{
         metrics_fetcher::fetch_metrics_root, nats_publisher::NatsPublisherForTesting,
         nats_server::NatsServerForTesting,
     },
+    time,
     tokio::{
         self,
         sync::{watch, Mutex},
@@ -128,7 +129,13 @@ fn check_metrics(port: u16, expected: &[&str]) -> Result<bool, std::io::Error> {
     Ok(no_lines_missing)
 }
 
-async fn publish_and_check(events: &[Event], subject: Subject, expected: &str) {
+async fn start_metrics_service() -> (
+    Arc<Mutex<u16>>,
+    NatsServerForTesting,
+    NatsPublisherForTesting,
+    watch::Sender<bool>,
+    tokio::task::JoinHandle<()>,
+) {
     let initial_metrics_port = setup();
     let metrics_port: Arc<Mutex<u16>> = Arc::new(Mutex::new(initial_metrics_port));
 
@@ -171,21 +178,45 @@ async fn publish_and_check(events: &[Event], subject: Subject, expected: &str) {
     // allow the metrics tool to start
     sleep(Duration::from_secs(1)).await;
 
-    for event in events {
-        debug!("publishing: {:?}", event);
-        nats_publisher
-            .publish(subject.to_string(), event.encode_to_vec())
-            .await;
-    }
+    (
+        metrics_port,
+        nats_server,
+        nats_publisher,
+        shutdown_tx,
+        metrics_handle,
+    )
+}
 
-    sleep(Duration::from_millis(100)).await;
+async fn handle_metrics(
+    callback: impl AsyncFnOnce(Arc<Mutex<u16>>, NatsPublisherForTesting) -> (),
+) {
+    let (metrics_port, _nats_server, nats_publisher, shutdown_tx, metrics_handle) =
+        start_metrics_service().await;
 
-    let expected_lines: Vec<&str> = expected.split('\n').collect();
-    let port = metrics_port.lock().await;
-    assert!(check_metrics(*port, &expected_lines).expect("Could not fetch metrics"));
+    callback(metrics_port, nats_publisher).await;
 
     shutdown_tx.send(true).unwrap();
     metrics_handle.await.unwrap();
+}
+
+async fn publish_and_check(events: &[Event], subject: Subject, expected: &str) {
+    handle_metrics(
+        |metrics_port: Arc<Mutex<u16>>, nats_publisher: NatsPublisherForTesting| async move {
+            for event in events {
+                debug!("publishing: {:?}", event);
+                nats_publisher
+                    .publish(subject.to_string(), event.encode_to_vec())
+                    .await;
+            }
+
+            sleep(Duration::from_millis(100)).await;
+
+            let expected_lines: Vec<&str> = expected.split('\n').collect();
+            let port = metrics_port.lock().await;
+            assert!(check_metrics(*port, &expected_lines).expect("Could not fetch metrics"));
+        },
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -3790,6 +3821,265 @@ async fn test_integration_metrics_ipc_block_tip() {
         r#"
         peerobserver_ipc_block_tip_height 867530
         "#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_compact_block_reconstruction_requested_bytes() {
+    println!("test that log-extractor compact block reconstruction requested bytes metric work");
+
+    publish_and_check(
+        &[
+            Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
+                category: LogDebugCategory::Unknown.into(),
+                log_timestamp: 1234,
+                threadname: String::new(),
+                log_level: log_extractor::LogLevel::Info.into(),
+                log_line_bytes: 4,
+                log_event: Some(log_extractor::log::LogEvent::CompactBlockReconstructedLog(
+                    log_extractor::CompactBlockReconstructedLog {
+                        block_hash:
+                            "000000000000000000015b62bd7219241b46793581d92e7df8ff11397b4e6f1b"
+                                .to_string(),
+                        prefilled_txn_count: 1,
+                        mempool_txn_count: 396,
+                        extra_pool_txn_count: 0,
+                        requested_txn_count: 0,
+                        requested_txn_bytes: 777,
+                    },
+                )),
+            }))
+            .unwrap(),
+        ],
+        Subject::LogExtractor,
+        r#"
+        peerobserver_log_compact_block_reconstruction_requested_bytes 777
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_compact_block_reconstruction_stats() {
+    println!("test that log-extractor compact block reconstruction stats metrics work");
+
+    let now_microsec = (time::OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000) as u64;
+
+    publish_and_check(
+        &[
+            Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
+                category: LogDebugCategory::Unknown.into(),
+                log_timestamp: now_microsec + 77777,
+                threadname: String::new(),
+                log_level: log_extractor::LogLevel::Info.into(),
+                log_line_bytes: 4,
+                log_event: Some(log_extractor::log::LogEvent::CompactBlockReconstructedLog(
+                    log_extractor::CompactBlockReconstructedLog {
+                        block_hash:
+                            "000000000000000000015b62bd7219241b46793581d92e7df8ff11397b4e6f1b"
+                                .to_string(),
+                        prefilled_txn_count: 1,
+                        mempool_txn_count: 396,
+                        extra_pool_txn_count: 6,
+                        requested_txn_count: 3,
+                        requested_txn_bytes: 444,
+                    },
+                )),
+            }))
+            .unwrap(),
+            Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
+                category: LogDebugCategory::Unknown.into(),
+                log_timestamp: now_microsec,
+                threadname: String::new(),
+                log_level: log_extractor::LogLevel::Info.into(),
+                log_line_bytes: 4,
+                log_event: Some(log_extractor::log::LogEvent::SawNewHeaderLog(
+                    log_extractor::SawNewHeaderLog {
+                        block_hash:
+                            "000000000000000000015b62bd7219241b46793581d92e7df8ff11397b4e6f1b"
+                                .to_string(),
+                        block_height: 944942,
+                        peer_id: 30350,
+                        is_cmpctblock: true,
+                    },
+                )),
+            }))
+            .unwrap(),
+            Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
+                category: LogDebugCategory::Unknown.into(),
+                log_timestamp: now_microsec + 37703,
+                threadname: String::new(),
+                log_level: log_extractor::LogLevel::Info.into(),
+                log_line_bytes: 4,
+                log_event: Some(log_extractor::log::LogEvent::CompactBlockReconstructedLog(
+                    log_extractor::CompactBlockReconstructedLog {
+                        block_hash:
+                            "00000000000000000000f8a34d18b93b9385019b57ec13896f8c18a1d4d0d853"
+                                .to_string(),
+                        prefilled_txn_count: 1,
+                        mempool_txn_count: 396,
+                        extra_pool_txn_count: 7,
+                        requested_txn_count: 1,
+                        requested_txn_bytes: 777,
+                    },
+                )),
+            }))
+            .unwrap(),
+            Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
+                category: LogDebugCategory::Unknown.into(),
+                log_timestamp: now_microsec,
+                threadname: String::new(),
+                log_level: log_extractor::LogLevel::Info.into(),
+                log_line_bytes: 4,
+                log_event: Some(log_extractor::log::LogEvent::SawNewHeaderLog(
+                    log_extractor::SawNewHeaderLog {
+                        block_hash:
+                            "00000000000000000000f8a34d18b93b9385019b57ec13896f8c18a1d4d0d853"
+                                .to_string(),
+                        block_height: 944942,
+                        peer_id: 30350,
+                        is_cmpctblock: false,
+                    },
+                )),
+            }))
+            .unwrap(),
+        ],
+        Subject::LogExtractor,
+        r#"
+        peerobserver_log_compact_block_reconstruction_time{bandwidth="low",tx_requested="true"} 37703
+        peerobserver_log_compact_block_reconstruction_time{bandwidth="high",tx_requested="true"} 77777
+        peerobserver_log_compact_block_reconstruction_count{bandwidth="low",tx_requested="true"} 1
+        peerobserver_log_compact_block_reconstruction_count{bandwidth="high",tx_requested="true"} 1
+        peerobserver_log_compact_block_reconstruction_txs_requested 1
+        peerobserver_log_compact_block_reconstruction_requested_bytes 777
+        peerobserver_log_compact_block_reconstruction_txs_extra_pool 7
+        "#,
+    )
+    .await;
+}
+
+/// Test Case:
+/// orphan start log -> metrics stores it
+/// 10 mins pass -> log is expired and should be cleaned up
+/// another start log arrives -> store this new one and the old one is cleaned up
+/// both end log arrives -> it should submit only one metric
+#[tokio::test()]
+async fn test_integration_metrics_compact_block_reconstruction_state_cleanup() {
+    println!("test that log-extractor compact block reconstruction state cleanup works");
+
+    let now_microsec = (time::OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000) as u64;
+
+    let subject = Subject::LogExtractor.to_string();
+    let event_orphan_start = Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
+        category: LogDebugCategory::Unknown.into(),
+        log_timestamp: now_microsec,
+        threadname: String::new(),
+        log_level: log_extractor::LogLevel::Info.into(),
+        log_line_bytes: 4,
+        log_event: Some(log_extractor::log::LogEvent::SawNewHeaderLog(
+            log_extractor::SawNewHeaderLog {
+                block_hash: "000000000000000000015b62bd7219241b46793581d92e7df8ff11397b4e6f1b"
+                    .to_string(),
+                block_height: 944942,
+                peer_id: 30350,
+                is_cmpctblock: true,
+            },
+        )),
+    }))
+    .unwrap();
+    let event_orphan_end = Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
+        category: LogDebugCategory::Unknown.into(),
+        log_timestamp: now_microsec + 77777,
+        threadname: String::new(),
+        log_level: log_extractor::LogLevel::Info.into(),
+        log_line_bytes: 4,
+        log_event: Some(log_extractor::log::LogEvent::CompactBlockReconstructedLog(
+            log_extractor::CompactBlockReconstructedLog {
+                block_hash: "000000000000000000015b62bd7219241b46793581d92e7df8ff11397b4e6f1b"
+                    .to_string(),
+                prefilled_txn_count: 1,
+                mempool_txn_count: 396,
+                extra_pool_txn_count: 0,
+                requested_txn_count: 1,
+                requested_txn_bytes: 777,
+            },
+        )),
+    }))
+    .unwrap();
+
+    let event_start = Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
+        category: LogDebugCategory::Unknown.into(),
+        log_timestamp: now_microsec,
+        threadname: String::new(),
+        log_level: log_extractor::LogLevel::Info.into(),
+        log_line_bytes: 4,
+        log_event: Some(log_extractor::log::LogEvent::SawNewHeaderLog(
+            log_extractor::SawNewHeaderLog {
+                block_hash: "000000000000000000015b62bd7219241b46793581d92e7df8ff11397b4e6f1a"
+                    .to_string(),
+                block_height: 944942,
+                peer_id: 30350,
+                is_cmpctblock: true,
+            },
+        )),
+    }))
+    .unwrap();
+    let event_end = Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
+        category: LogDebugCategory::Unknown.into(),
+        log_timestamp: now_microsec + 77777,
+        threadname: String::new(),
+        log_level: log_extractor::LogLevel::Info.into(),
+        log_line_bytes: 4,
+        log_event: Some(log_extractor::log::LogEvent::CompactBlockReconstructedLog(
+            log_extractor::CompactBlockReconstructedLog {
+                block_hash: "000000000000000000015b62bd7219241b46793581d92e7df8ff11397b4e6f1a"
+                    .to_string(),
+                prefilled_txn_count: 1,
+                mempool_txn_count: 396,
+                extra_pool_txn_count: 0,
+                requested_txn_count: 1,
+                requested_txn_bytes: 777,
+            },
+        )),
+    }))
+    .unwrap();
+
+    handle_metrics(
+        |metrics_port: Arc<Mutex<u16>>, nats_publisher: NatsPublisherForTesting| async move {
+            // orphan log
+            debug!("publishing: {:?}", event_orphan_start);
+            nats_publisher
+              .publish(subject.clone(), event_orphan_start.encode_to_vec())
+              .await;
+            sleep(Duration::from_millis(100)).await;
+
+            // simulate time passage
+            tokio::time::pause();
+            tokio::time::advance(Duration::from_mins(10)).await;
+            tokio::time::resume();
+
+            // cleanup trigger for orphan start log
+            debug!("publishing: {:?}", event_start);
+            nats_publisher
+                .publish(subject.clone(), event_start.encode_to_vec())
+                .await;
+            // submit trigger for second block hash
+            debug!("publishing: {:?}", event_end);
+            nats_publisher
+                .publish(subject.clone(), event_end.encode_to_vec())
+                .await;
+            // orphan end log arrives late, it should not submit nothing
+            debug!("publishing: {:?}", event_orphan_end);
+            nats_publisher
+                .publish(subject.clone(), event_orphan_end.encode_to_vec())
+                .await;
+            sleep(Duration::from_millis(100)).await;
+
+            let port = metrics_port.lock().await;
+            let expected = "peerobserver_log_compact_block_reconstruction_count{bandwidth=\"high\",tx_requested=\"true\"} 1";
+            assert!(check_metrics(*port, &[expected]).expect("Could not fetch metrics"));
+        },
     )
     .await;
 }
