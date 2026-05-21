@@ -10,8 +10,6 @@ toml = "0.8"
 sha2 = "0.10"
 
 [dev-dependencies]
-sha2 = "0.10"
-toml = "0.8"
 replayer = { path = "../replayer" }
 
 [features]
