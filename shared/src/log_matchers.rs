@@ -1,6 +1,7 @@
 use crate::protobuf::log_extractor::log::LogEvent;
 use crate::protobuf::log_extractor::{
-    BlockCheckedLog, BlockConnectedLog, Log, LogDebugCategory, LogLevel, UnknownLogMessage,
+    BlockCheckedLog, BlockConnectedLog, CompactBlockReconstructedLog, Log, LogDebugCategory,
+    LogLevel, SawNewHeaderLog, UnknownLogMessage,
 };
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -78,6 +79,18 @@ lazy_static! {
         VALIDATION_STATE_PATTERN
     ))
     .unwrap();
+
+    static ref SAW_NEW_HEADER_REGEX: Regex = Regex::new(&format!(
+        r"Saw new (?:cmpctblock )?header hash=({}) height=(\d+) peer=(\d+)",
+        BLOCK_HASH_PATTERN
+    ))
+    .unwrap();
+
+    static ref COMPACT_BLOCK_RECONSTRUCTED_REGEX: Regex = Regex::new(&format!(
+        r"Successfully reconstructed block ({}) with (\d+) txn prefilled, (\d+) txn from mempool \(incl at least (\d+) from extra pool\) and (\d+) txn \((\d+) bytes\) requested",
+        BLOCK_HASH_PATTERN
+    ))
+    .unwrap();
 }
 
 trait LogMatcher {
@@ -122,6 +135,47 @@ impl LogMatcher for BlockCheckedLog {
     }
 }
 
+impl LogMatcher for SawNewHeaderLog {
+    fn parse_event(line: &str) -> Option<LogEvent> {
+        let caps = SAW_NEW_HEADER_REGEX.captures(line)?;
+
+        let block_hash = caps.get(1)?.as_str().to_string();
+        let block_height = caps.get(2)?.as_str().parse::<u32>().ok()?;
+        let peer_id = caps.get(3)?.as_str().parse::<u32>().ok()?;
+        let is_cmpctblock = line.contains("cmpctblock");
+
+        Some(LogEvent::SawNewHeaderLog(SawNewHeaderLog {
+            block_hash,
+            block_height,
+            peer_id,
+            is_cmpctblock,
+        }))
+    }
+}
+
+impl LogMatcher for CompactBlockReconstructedLog {
+    fn parse_event(line: &str) -> Option<LogEvent> {
+        let caps = COMPACT_BLOCK_RECONSTRUCTED_REGEX.captures(line)?;
+
+        let block_hash = caps.get(1)?.as_str().to_string();
+        let prefilled_txn_count = caps.get(2)?.as_str().parse::<u32>().ok()?;
+        let mempool_txn_count = caps.get(3)?.as_str().parse::<u32>().ok()?;
+        let extra_pool_txn_count = caps.get(4)?.as_str().parse::<u32>().ok()?;
+        let requested_txn_count = caps.get(5)?.as_str().parse::<u32>().ok()?;
+        let requested_txn_bytes = caps.get(6)?.as_str().parse::<u32>().ok()?;
+        Some(LogEvent::CompactBlockReconstructedLog(
+            CompactBlockReconstructedLog {
+                block_hash,
+                prefilled_txn_count,
+                mempool_txn_count,
+                extra_pool_txn_count,
+                requested_txn_count,
+                requested_txn_bytes,
+            },
+        ))
+    }
+}
+
 impl BlockCheckedLog {
     pub fn is_mutated_block(&self) -> bool {
         matches!(
@@ -144,8 +198,12 @@ pub fn parse_log_event(line: &str) -> Log {
         message,
     } = parse_common_log_data(line);
 
-    let matchers: Vec<fn(&str) -> Option<LogEvent>> =
-        vec![BlockConnectedLog::parse_event, BlockCheckedLog::parse_event];
+    let matchers: Vec<fn(&str) -> Option<LogEvent>> = vec![
+        BlockConnectedLog::parse_event,
+        BlockCheckedLog::parse_event,
+        SawNewHeaderLog::parse_event,
+        CompactBlockReconstructedLog::parse_event,
+    ];
     for matcher in &matchers {
         if let Some(event) = matcher(&message) {
             return Log {

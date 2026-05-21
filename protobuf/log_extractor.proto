@@ -20,6 +20,8 @@ message log {
     UnknownLogMessage unknown_log_message = 4;
     BlockConnectedLog block_connected_log = 5;
     BlockCheckedLog block_checked_log = 6;
+    SawNewHeaderLog saw_new_header_log = 9;
+    CompactBlockReconstructedLog compact_block_reconstructed_log = 10;
   }
 }
 
@@ -72,4 +74,23 @@ message BlockCheckedLog {
   required string block_hash = 1;
   required string state = 2;
   required string debug_message = 3;
+}
+
+// 2026-04-06T15:02:09.010720Z Saw new header hash=00000000000000000001405ace6e6e4abd39fd1e13d1b3434468ba99986b6ad5 height=943929 peer=498
+// 2026-04-30T14:42:51.622131Z Saw new cmpctblock header hash=00000000000000000001f143db1e9a20f4ab523c2e9e2367d4780eae09cba1fa height=947303 peer=6709
+message SawNewHeaderLog {
+  required string block_hash = 1;
+  required uint32 block_height = 2;
+  required uint32 peer_id = 3;
+  required bool is_cmpctblock = 4;
+}
+
+// 2026-04-06T15:02:09.404125Z [cmpctblock] Successfully reconstructed block 00000000000000000001405ace6e6e4abd39fd1e13d1b3434468ba99986b6ad5 with 1 txn prefilled, 2714 txn from mempool (incl at least 2 from extra pool) and 4 txn (886 bytes) requested
+message CompactBlockReconstructedLog {
+  required string block_hash = 1;
+  required uint32 prefilled_txn_count = 2;
+  required uint32 mempool_txn_count = 3;
+  required uint32 extra_pool_txn_count = 4;
+  required uint32 requested_txn_count = 5;
+  required uint32 requested_txn_bytes = 6;
 }
