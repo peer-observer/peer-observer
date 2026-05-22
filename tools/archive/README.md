@@ -2,7 +2,7 @@
 
 Tooling to archive and replay peer-observer events.
 
-## `archiver`
+## archiver
 
 > archives peer-observer events to disk
 
@@ -44,7 +44,7 @@ the compressed output stream. May overshoot slightly due to zstd internal buffer
 Archive all events from a NATS server, rotating files at 100 MB, with zstd compression:
 
 ```
-$ cargo run -p archiver -- \
+$ cargo run --bin archiver -- \
     --nats-address 127.0.0.1:4222 \
     --output-dir ./archive \
     --base-name mainnet \
@@ -55,7 +55,7 @@ $ cargo run -p archiver -- \
 Archive only P2P messages and mempool events:
 
 ```
-$ ./target/release/archiver \
+$ cargo run --bin archiver \
     --nats-address 127.0.0.1:4222 \
     --output-dir ./archive \
     --messages --mempool
@@ -110,7 +110,7 @@ Options:
 ```
 
 
-## `replayer`
+## replayer
 
 Reads peer-observer archive files and prints decoded events to stdout.
 
@@ -121,9 +121,10 @@ Supports:
 ### Usage
 
 ```bash
-cargo run -p replayer -- archive/test.0.bin
-cargo run -p replayer -- archive/test.0.bin.zst
-cargo run -p replayer -- archive/test.0.bin archive/test.1.bin.zst
+  cargo run --bin replayer -- archive/test.0.bin
+  cargo run --bin replayer -- archive/test.0.bin.zst
+  cargo run --bin replayer -- archive/test.0.bin archive/test.1.bin.zst
+  
 ```
 
 ### Example output

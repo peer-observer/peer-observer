@@ -90,6 +90,8 @@ tool uses the events differently:
 | metrics               | produces prometheus metrics from events.                                         | `rust`       | [tools/metrics/](tools/metrics)         |
 | websocket             | publishes events into a websocket as JSON                                        | `rust`       | [tools/websocket/](tools/websocket)     |
 | connectivity-check    | connects to IP addresses received via `addr(v2)` messages and records the result | `rust`       | [tools/connectivity-check/](tools/connectivity-check)    |
+| archive: archiver     | archives peer-observer events to disk (experimental)                             | `rust`       | [tools/archive/](tools/archive#archiver)|
+| archive: replayer     | reads peer-observer archive files and prints to stdout (experimental)            | `rust`       | [tools/archive/](tools/archive#replayer)|
 
 ## Real-world usage
 
