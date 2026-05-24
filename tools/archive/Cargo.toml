@@ -7,10 +7,10 @@ edition = "2021"
 shared = { path = "../../shared" }
 time = { version = "0.3", features = ["formatting", "macros"] }
 toml = "0.8"
-sha2 = "0.10"
+sha2 = "0.11"
 
 [dev-dependencies]
-sha2 = "0.10"
+sha2 = "0.11"
 toml = "0.8"
 
 [features]
