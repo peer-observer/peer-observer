@@ -14,7 +14,6 @@ use shared::{
     log,
     nats_subjects::Subject,
     nats_util,
-    nats_util::NatsArgs,
     prost::Message,
     protobuf::{
         bitcoin_primitives,
@@ -127,34 +126,7 @@ pub struct Args {
     /// This allows disabling the feefilter annoucement events.
     #[arg(long, default_value_t = false)]
     pub disable_feefilter: bool,
-}
-
-impl Args {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        nats: NatsArgs,
-        log_level: log::Level,
-        p2p_address: String,
-        p2p_network: Network,
-        ping_interval: u64,
-        disable_ping: bool,
-        disable_addrv2: bool,
-        disable_invs: bool,
-        disable_feefilter: bool,
-    ) -> Args {
-        Self {
-            nats,
-            log_level,
-            p2p_address,
-            p2p_network,
-            ping_interval,
-            disable_ping,
-            disable_addrv2,
-            disable_invs,
-            disable_feefilter,
-            // when adding more disable_* args, make sure to update the disable_all below
-        }
-    }
+    // when adding more disable_* args, make sure to update the disable_all below
 }
 
 pub async fn run(

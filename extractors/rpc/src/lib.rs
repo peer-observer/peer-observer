@@ -6,7 +6,7 @@ use shared::corepc_client::client_sync::Auth;
 use shared::corepc_client::client_sync::v30::{Client, FeeEstimateMode};
 use shared::log;
 use shared::nats_subjects::Subject;
-use shared::nats_util::{self, NatsArgs};
+use shared::nats_util;
 use shared::prost::Message;
 use shared::protobuf::event::{Event, event::PeerObserverEvent};
 use shared::protobuf::rpc_extractor::{self, EstimateSmartFee};
@@ -121,56 +121,7 @@ pub struct Args {
     /// Disable querying and publishing of `estimatesmartfee` data.
     #[arg(long, default_value_t = false)]
     pub disable_estimatesmartfee: bool,
-}
-
-impl Args {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        nats: NatsArgs,
-        log_level: log::Level,
-        rpc_host: String,
-        rpc_cookie_file: String,
-        query_interval: u64,
-        query_interval_less_frequent: u64,
-        prometheus_address: String,
-        disable_getpeerinfo: bool,
-        disable_getmempoolinfo: bool,
-        disable_uptime: bool,
-        disable_getnettotals: bool,
-        disable_getmemoryinfo: bool,
-        disable_getaddrmaninfo: bool,
-        disable_getchaintxstats: bool,
-        disable_getnetworkinfo: bool,
-        disable_getblockchaininfo: bool,
-        disable_getorphantxs: bool,
-        disable_getrawaddrman: bool,
-        disable_estimatesmartfee: bool,
-    ) -> Args {
-        Self {
-            nats,
-            log_level,
-            rpc_host,
-            rpc_password: None,
-            rpc_user: None,
-            rpc_cookie_file: Some(rpc_cookie_file),
-            query_interval,
-            query_interval_less_frequent,
-            prometheus_address,
-            disable_getpeerinfo,
-            disable_getmempoolinfo,
-            disable_uptime,
-            disable_getnettotals,
-            disable_getmemoryinfo,
-            disable_getaddrmaninfo,
-            disable_getchaintxstats,
-            disable_getnetworkinfo,
-            disable_getblockchaininfo,
-            disable_getorphantxs,
-            disable_getrawaddrman,
-            disable_estimatesmartfee,
-            // when adding more disable_* args, make sure to update the disable_all below
-        }
-    }
+    // when adding more disable_* args, make sure to update the disable_all below
 }
 
 pub async fn run(

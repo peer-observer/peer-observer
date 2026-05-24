@@ -55,22 +55,22 @@ struct EnabledChecksInTest {
 }
 
 fn make_test_args(nats_port: u16, p2p_address: String, checks: EnabledChecksInTest) -> Args {
-    Args::new(
-        NatsArgs {
+    Args {
+        nats: NatsArgs {
             address: format!("127.0.0.1:{}", nats_port),
             username: None,
             password: None,
             password_file: None,
         },
-        log::Level::Trace,
+        log_level: log::Level::Trace,
         p2p_address,
-        Network::Regtest,
-        PING_INTERVAL_SECONDS,
-        !checks.ping,
-        !checks.addrv2,
-        !checks.invs,
-        !checks.feefilter,
-    )
+        p2p_network: Network::Regtest,
+        ping_interval: PING_INTERVAL_SECONDS,
+        disable_ping: !checks.ping,
+        disable_addrv2: !checks.addrv2,
+        disable_invs: !checks.invs,
+        disable_feefilter: !checks.feefilter,
+    }
 }
 
 fn setup_node(conf: bitcoind::Conf) -> bitcoind::BitcoinD {

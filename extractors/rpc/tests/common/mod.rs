@@ -105,36 +105,38 @@ impl EnabledRPCsInTest {
 
 pub fn make_test_args(
     nats_port: u16,
-    rpc_url: String,
+    rpc_host: String,
     cookie_file: String,
     rpcs: EnabledRPCsInTest,
 ) -> Args {
-    Args::new(
-        NatsArgs {
+    Args {
+        nats: NatsArgs {
             address: format!("127.0.0.1:{}", nats_port),
             username: None,
             password: None,
             password_file: None,
         },
-        log::Level::Trace,
-        rpc_url,
-        cookie_file,
-        QUERY_INTERVAL_SECONDS,
-        QUERY_INTERVAL_SECONDS, // query_interval_less_frequent, but don't fetch less frequently in tests
-        "127.0.0.1:0".to_string(),
-        !rpcs.getpeerinfo,
-        !rpcs.getmempoolinfo,
-        !rpcs.uptime,
-        !rpcs.getnettotals,
-        !rpcs.getmemoryinfo,
-        !rpcs.getaddrmaninfo,
-        !rpcs.getchaintxstats,
-        !rpcs.getnetworkinfo,
-        !rpcs.getblockchaininfo,
-        !rpcs.getorphantxs,
-        !rpcs.getrawaddrman,
-        !rpcs.estimatesmartfee,
-    )
+        log_level: log::Level::Trace,
+        rpc_host,
+        rpc_user: None,
+        rpc_password: None,
+        rpc_cookie_file: Some(cookie_file),
+        query_interval: QUERY_INTERVAL_SECONDS,
+        query_interval_less_frequent: QUERY_INTERVAL_SECONDS,
+        prometheus_address: "127.0.0.1:0".to_string(),
+        disable_getpeerinfo: !rpcs.getpeerinfo,
+        disable_getmempoolinfo: !rpcs.getmempoolinfo,
+        disable_uptime: !rpcs.uptime,
+        disable_getnettotals: !rpcs.getnettotals,
+        disable_getmemoryinfo: !rpcs.getmemoryinfo,
+        disable_getaddrmaninfo: !rpcs.getaddrmaninfo,
+        disable_getchaintxstats: !rpcs.getchaintxstats,
+        disable_getnetworkinfo: !rpcs.getnetworkinfo,
+        disable_getblockchaininfo: !rpcs.getblockchaininfo,
+        disable_getorphantxs: !rpcs.getorphantxs,
+        disable_getrawaddrman: !rpcs.getrawaddrman,
+        disable_estimatesmartfee: !rpcs.estimatesmartfee,
+    }
 }
 
 pub fn setup_node(conf: bitcoind::Conf) -> bitcoind::BitcoinD {

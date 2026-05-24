@@ -177,22 +177,6 @@ pub struct Args {
 }
 
 impl Args {
-    pub fn new(nats: nats_util::NatsArgs, bitcoind_path: String, bitcoind_pid: i32) -> Args {
-        Self {
-            nats,
-            bitcoind_path,
-            bitcoind_pid: Some(bitcoind_pid),
-            bitcoind_pid_file: None,
-            no_p2pmsg_tracepoints: false,
-            no_connection_tracepoints: false,
-            no_mempool_tracepoints: false,
-            no_validation_tracepoints: false,
-            log_level: log::Level::Debug,
-            libbpf_debug: false,
-            no_idle_exit: false,
-        }
-    }
-
     fn no_tracepoints_enabled(&self) -> bool {
         self.no_p2pmsg_tracepoints
             && self.no_connection_tracepoints

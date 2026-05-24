@@ -5,7 +5,6 @@ use shared::clap::Parser;
 use shared::futures::stream::StreamExt;
 use shared::log;
 use shared::nats_util;
-use shared::nats_util::NatsArgs;
 use shared::prost::Message;
 use shared::protobuf::ebpf_extractor::ebpf;
 use shared::protobuf::event::event::PeerObserverEvent;
@@ -79,33 +78,6 @@ impl Args {
             || self.ipc
             || self.p2p_extractor
             || self.log_extractor)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        nats_args: NatsArgs,
-        log_level: log::Level,
-        messages: bool,
-        connections: bool,
-        mempool: bool,
-        validation: bool,
-        rpc: bool,
-        ipc: bool,
-        p2p_extractor: bool,
-        log_extractor: bool,
-    ) -> Self {
-        Self {
-            nats: nats_args,
-            log_level,
-            messages,
-            connections,
-            mempool,
-            validation,
-            rpc,
-            ipc,
-            p2p_extractor,
-            log_extractor,
-        }
     }
 }
 

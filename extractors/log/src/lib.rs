@@ -5,7 +5,7 @@ use shared::clap::Parser;
 use shared::log;
 use shared::log_matchers::parse_log_event;
 use shared::nats_subjects::Subject;
-use shared::nats_util::{self, NatsArgs};
+use shared::nats_util;
 use shared::prost::Message;
 use shared::protobuf::event::Event;
 use shared::protobuf::event::event::PeerObserverEvent;
@@ -46,16 +46,6 @@ pub struct Args {
     /// "debug", "info", "warn", "error". See https://docs.rs/log/latest/log/enum.Level.html.
     #[arg(short, long, default_value_t = log::Level::Debug)]
     pub log_level: log::Level,
-}
-
-impl Args {
-    pub fn new(nats: NatsArgs, bitcoind_pipe: String, log_level: log::Level) -> Args {
-        Self {
-            nats,
-            bitcoind_pipe,
-            log_level,
-        }
-    }
 }
 
 pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(), RuntimeError> {

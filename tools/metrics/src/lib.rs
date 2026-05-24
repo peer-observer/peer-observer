@@ -6,7 +6,7 @@ use shared::clap::Parser;
 use shared::futures::StreamExt;
 use shared::log::{info, warn, Level};
 use shared::metricserver;
-use shared::nats_util::{self, NatsArgs};
+use shared::nats_util;
 use shared::prost::Message;
 use shared::protobuf::bitcoin_primitives;
 use shared::protobuf::{
@@ -51,21 +51,12 @@ pub struct Args {
 
     /// The metrics server address the tool should listen on.
     #[arg(short, long, default_value = "127.0.0.1:8282")]
-    metrics_address: String,
+    pub metrics_address: String,
+
     /// The log level the tool should run with. Valid log levels
     /// are "trace", "debug", "info", "warn", "error". See https://docs.rs/log/latest/log/enum.Level.html
     #[arg(short, long, default_value_t = Level::Debug)]
     pub log_level: Level,
-}
-
-impl Args {
-    pub fn new(nats: NatsArgs, metrics_address: String, log_level: Level) -> Self {
-        Self {
-            nats,
-            metrics_address,
-            log_level,
-        }
-    }
 }
 
 /// State that's between processing events.

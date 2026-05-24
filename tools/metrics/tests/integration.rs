@@ -87,16 +87,16 @@ fn setup() -> u16 {
 }
 
 fn make_test_args(nats_port: u16, metrics_port: u16) -> Args {
-    Args::new(
-        NatsArgs {
+    Args {
+        nats: NatsArgs {
             address: format!("127.0.0.1:{}", nats_port),
             username: None,
             password: None,
             password_file: None,
         },
-        format!("127.0.0.1:{}", metrics_port),
-        Level::Trace,
-    )
+        metrics_address: format!("127.0.0.1:{}", metrics_port),
+        log_level: Level::Trace,
+    }
 }
 
 fn check_metrics(port: u16, expected: &[&str]) -> Result<bool, std::io::Error> {

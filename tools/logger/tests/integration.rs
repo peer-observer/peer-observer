@@ -94,23 +94,23 @@ impl EnabledLoggersInTest {
 }
 
 fn make_test_args(nats_port: u16, loggers: EnabledLoggersInTest) -> Args {
-    Args::new(
-        nats_util::NatsArgs {
+    Args {
+        nats: nats_util::NatsArgs {
             address: format!("127.0.0.1:{}", nats_port),
             username: None,
             password: None,
             password_file: None,
         },
-        log::Level::Trace,
-        loggers.messages,
-        loggers.connections,
-        loggers.mempool,
-        loggers.validation,
-        loggers.rpc,
-        loggers.ipc,
-        loggers.p2p_extractor,
-        loggers.log_extractor,
-    )
+        log_level: log::Level::Trace,
+        messages: loggers.messages,
+        connections: loggers.connections,
+        mempool: loggers.mempool,
+        validation: loggers.validation,
+        rpc: loggers.rpc,
+        ipc: loggers.ipc,
+        p2p_extractor: loggers.p2p_extractor,
+        log_extractor: loggers.log_extractor,
+    }
 }
 
 fn check_logs(expected: &[&str]) -> Result<bool, std::io::Error> {

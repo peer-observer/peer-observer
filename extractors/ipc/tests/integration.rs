@@ -27,17 +27,17 @@ pub const QUERY_INTERVAL_SECONDS: u64 = 1;
 const TEST_TIMEOUT_SECONDS: u64 = 5;
 
 pub fn make_test_args(nats_port: u16, ipc_socket_path: String) -> Args {
-    Args::new(
-        NatsArgs {
+    Args {
+        nats: NatsArgs {
             address: format!("127.0.0.1:{}", nats_port),
             username: None,
             password: None,
             password_file: None,
         },
-        log::Level::Trace,
+        log_level: log::Level::Trace,
         ipc_socket_path,
-        QUERY_INTERVAL_SECONDS,
-    )
+        query_interval: QUERY_INTERVAL_SECONDS,
+    }
 }
 
 static INIT: Once = Once::new();

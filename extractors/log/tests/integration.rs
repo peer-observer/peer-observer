@@ -113,16 +113,16 @@ fn spawn_pipe(log_path: String, pipe_path: String) {
 }
 
 fn make_test_args(nats_port: u16, bitcoind_pipe: String) -> Args {
-    Args::new(
-        NatsArgs {
+    Args {
+        nats: NatsArgs {
             address: format!("127.0.0.1:{}", nats_port),
             username: None,
             password: None,
             password_file: None,
         },
         bitcoind_pipe,
-        Level::Trace,
-    )
+        log_level: Level::Trace,
+    }
 }
 
 /// Starts a regtest `bitcoind` node with the given configuration.

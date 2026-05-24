@@ -3,7 +3,7 @@ use shared::{
     clap::{self, Parser},
     log,
     nats_subjects::Subject,
-    nats_util::{self, NatsArgs},
+    nats_util,
     prost::Message,
     protobuf::{
         event::{Event, event::PeerObserverEvent},
@@ -46,23 +46,6 @@ pub struct Args {
     /// Interval (in seconds) in which to query from the Bitcoin Core IPC interface.
     #[arg(long, default_value_t = 10)]
     pub query_interval: u64,
-}
-
-impl Args {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        nats: NatsArgs,
-        log_level: log::Level,
-        ipc_socket_path: String,
-        query_interval: u64,
-    ) -> Args {
-        Self {
-            nats,
-            log_level,
-            ipc_socket_path,
-            query_interval,
-        }
-    }
 }
 
 pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(), RuntimeError> {
