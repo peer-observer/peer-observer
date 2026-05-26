@@ -380,8 +380,12 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         ArchiveFile::new(&args.output_dir, &args.base_name, args.compression_level)?;
     log::info!("Created archive file: {}", current_file.path.display());
 
+<<<<<<< HEAD
     let mut total_events: u64 = 0;
     let mut total_files: u64 = 0;
+=======
+    let mut total_files: u64 = 1;
+>>>>>>> 90d1986 (fixup! fix: finalize the current file when shutting down)
 
     loop {
         shared::tokio::select! {
@@ -438,6 +442,7 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
 
     total_events += close_file(current_file, &args)?;
     total_files += 1;
+    current_file.finalize()?;
 
     log::info!(
         "shutting down. total events archived: {}, files: {}",
