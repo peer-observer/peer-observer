@@ -40,6 +40,8 @@ Options:
           The log level the extractor should run with. Valid log levels are "trace", "debug", "info", "warn", "error". See https://docs.rs/log/latest/log/enum.Level.html [default: DEBUG]
       --query-interval <QUERY_INTERVAL>
           Interval (in seconds) in which to query from the Bitcoin Core IPC interface [default: 10]
+      --prometheus-address <PROMETHEUS_ADDRESS>
+          Address to serve Prometheus metrics on [default: 127.0.0.1:8285]
   -h, --help
           Print help
   -V, --version

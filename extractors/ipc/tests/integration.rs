@@ -37,6 +37,7 @@ pub fn make_test_args(nats_port: u16, ipc_socket_path: String) -> Args {
         log_level: log::Level::Trace,
         ipc_socket_path,
         query_interval: QUERY_INTERVAL_SECONDS,
+        prometheus_address: "127.0.0.1:0".to_string(),
     }
 }
 

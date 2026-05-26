@@ -19,7 +19,10 @@ use shared::{
 use std::io;
 
 mod error;
+mod metrics;
+
 use error::RuntimeError;
+use metrics::Metrics;
 
 mod ipc;
 use ipc::IpcClient;
@@ -46,6 +49,10 @@ pub struct Args {
     /// Interval (in seconds) in which to query from the Bitcoin Core IPC interface.
     #[arg(long, default_value_t = 10)]
     pub query_interval: u64,
+
+    /// Address to serve Prometheus metrics on.
+    #[arg(long, default_value = "127.0.0.1:8285")]
+    pub prometheus_address: String,
 }
 
 pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(), RuntimeError> {
@@ -69,6 +76,9 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
 
     let mut ipc_session = IpcClient::init(stream).await?;
 
+    let metrics = Metrics::new();
+    shared::metricserver::start(&args.prometheus_address, Some(metrics.registry.clone()))?;
+
     let duration_sec = Duration::from_secs(args.query_interval);
     let mut interval = time::interval(duration_sec);
     log::info!(
@@ -79,7 +89,7 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
     loop {
         tokio::select! {
             _ = interval.tick() => {
-                if let Err(e) = fetch_and_publish_tip(&ipc_session, &nats_client).await {
+                if let Err(e) = fetch_and_publish_tip(&ipc_session, &nats_client, &metrics).await {
                     log::error!("Could not fetch and publish 'BlockTip': {}", e);
                 }
             }
@@ -115,11 +125,36 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
     Ok(())
 }
 
+async fn measure_ipc_call<T, E, Fut>(method_name: &str, metrics: &Metrics, fut: Fut) -> Result<T, E>
+where
+    Fut: std::future::Future<Output = Result<T, E>>,
+{
+    let timer = metrics
+        .ipc_fetch_duration
+        .with_label_values(&[method_name])
+        .start_timer();
+    let res = fut.await;
+    match &res {
+        Ok(_) => {
+            timer.stop_and_record();
+        }
+        Err(_) => {
+            timer.stop_and_discard();
+            metrics
+                .ipc_fetch_errors
+                .with_label_values(&[method_name])
+                .inc();
+        }
+    }
+    res
+}
+
 async fn fetch_and_publish_tip(
     ipc_client: &IpcClient,
     nats_client: &async_nats::Client,
+    metrics: &Metrics,
 ) -> Result<(), RuntimeError> {
-    let tip = match ipc_client.get_tip().await? {
+    let tip = match measure_ipc_call("get_tip", metrics, ipc_client.get_tip()).await? {
         Some(t) => t,
         None => return Ok(()), // the node has no tip loaded yet, skip NATS publish
     };
@@ -129,6 +164,12 @@ async fn fetch_and_publish_tip(
     }))?;
     nats_client
         .publish(Subject::Ipc.to_string(), proto.encode_to_vec().into())
-        .await?;
+        .await
+        .inspect_err(|_| {
+            metrics
+                .nats_publish_errors
+                .with_label_values(&["get_tip"])
+                .inc();
+        })?;
     Ok(())
 }
