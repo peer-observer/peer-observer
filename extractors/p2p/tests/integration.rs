@@ -17,7 +17,7 @@ use shared::{
         },
     },
     simple_logger::SimpleLogger,
-    testing::{REGTEST_ADDRESS, nats_server::NatsServerForTesting},
+    testing::{REGTEST_ADDRESS, nats_server::NatsServerForTesting, node::mine_and_wait_for_tip},
     tokio::{
         self, select,
         sync::{oneshot, watch},
@@ -236,18 +236,8 @@ async fn test_integration_p2pextractor_addr_annoucement() {
             ..Default::default()
         },
         |node| {
-            // To self-announce our address, we need to be out ouf initial block download
-            // Mine a block to get out of initial block download
-            node.client
-                .generate_to_address(1, &REGTEST_ADDRESS)
-                .unwrap();
-            assert!(
-                !node
-                    .client
-                    .get_blockchain_info()
-                    .unwrap()
-                    .initial_block_download
-            );
+            // To self-announce our address, we need to be out of initial block download.
+            mine_and_wait_for_tip(&node.client);
 
             // Connects to the Bitcoin node, announces one address to it, and disconnect.
             // The node will then relay that address to the p2p-extractor eventually.

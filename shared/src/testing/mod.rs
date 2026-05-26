@@ -17,3 +17,5 @@ pub mod metrics_fetcher;
 pub mod nats_publisher;
 /// A NATS server runnner to be used in integration tests.
 pub mod nats_server;
+/// Utilities for driving Bitcoin Core nodes in integration tests.
+pub mod node;

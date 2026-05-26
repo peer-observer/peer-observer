@@ -24,7 +24,7 @@ use shared::{
             },
         },
     },
-    testing::{REGTEST_ADDRESS, nats_server::NatsServerForTesting},
+    testing::{REGTEST_ADDRESS, nats_server::NatsServerForTesting, node::mine_and_wait_for_tip},
     tokio::{
         self, select,
         sync::{oneshot, watch},
@@ -480,10 +480,7 @@ async fn test_integration_rpc_getorphantxs() {
                 .collect();
 
             // The receiving node needs to be out of IBD to start accepting transactions.
-            node1
-                .client
-                .generate_to_address(1, &REGTEST_ADDRESS)
-                .expect("failed to generate to address");
+            mine_and_wait_for_tip(&node1.client);
 
             // node1 is peer=0 of node2
             const PEER_ID: u64 = 0;
