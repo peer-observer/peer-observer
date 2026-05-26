@@ -1,0 +1,86 @@
+name: Free disk space on Ubuntu runners
+description: >
+  Remove preinstalled SDKs, large apt packages, and Docker images that
+  the peer-observer CI jobs don't use, freeing headroom on ubuntu-latest
+  for the cargo cache restore and subsequent build.
+runs:
+  using: composite
+  steps:
+    - name: Free disk space
+      shell: bash
+      run: |
+        set -eo pipefail
+
+        avail_bytes() {
+          df --output=avail -B1 / | tail -1 | tr -dc '0-9'
+        }
+        to_mib() { echo $(( $1 / 1024 / 1024 )); }
+        to_gib() { echo $(( $1 / 1024 / 1024 / 1024 )); }
+
+        banner() {
+          echo
+          echo "===================================================================="
+          echo ">>> $1"
+          echo "===================================================================="
+        }
+
+        report_delta() {
+          local label="$1" pre="$2"
+          local post delta_bytes
+          post=$(avail_bytes)
+          delta_bytes=$(( post - pre ))
+          echo
+          df -h /
+          printf -- "--> %s reclaimed: +%d MiB (avail now: %d MiB / %d GiB)\n" \
+            "$label" "$(to_mib "$delta_bytes")" "$(to_mib "$post")" "$(to_gib "$post")"
+        }
+
+        PRE_TOTAL=$(avail_bytes)
+
+        banner "Initial disk usage"
+        df -h /
+
+        banner "Remove preinstalled SDKs"
+        PRE=$(avail_bytes)
+        for d in \
+          /usr/local/lib/android \
+          /opt/hostedtoolcache/CodeQL \
+          /opt/ghc \
+          /usr/local/.ghcup \
+          /usr/share/dotnet \
+          /usr/share/swift \
+          /usr/share/miniconda \
+          /usr/local/share/powershell \
+          /usr/local/share/chromium ; do
+          sudo rm -rf "$d" || true
+        done
+        sudo rm -rf /opt/hostedtoolcache/Java_*_x64 || true
+        report_delta "SDK removal" "$PRE"
+
+        banner "Purge large apt packages"
+        PRE=$(avail_bytes)
+        # Drop apt's noisy "Package 'X' is not installed, so not removed" lines:
+        # apt expands quoted globs (e.g. 'mysql-*') against its full package DB,
+        # printing one line per known-but-uninstalled match.
+        sudo apt-get purge -y --auto-remove \
+          azure-cli google-cloud-cli google-cloud-sdk \
+          microsoft-edge-stable firefox google-chrome-stable \
+          'mysql-*' 'postgresql-*' 'mongodb-*' \
+          'temurin-*-jdk' 2>&1 \
+          | grep -v 'is not installed, so not removed' || true
+        sudo apt-get autoremove -y
+        sudo apt-get clean
+        report_delta "Apt purge" "$PRE"
+
+        banner "Docker prune"
+        PRE=$(avail_bytes)
+        sudo docker image prune --all --force || true
+        sudo docker builder prune -a --force || true
+        report_delta "Docker prune" "$PRE"
+
+        banner "Cleanup summary"
+        POST_TOTAL=$(avail_bytes)
+        DELTA_TOTAL_GIB=$(( (POST_TOTAL - PRE_TOTAL) / 1024 / 1024 / 1024 ))
+        df -h /
+        printf -- "==> Total reclaimed: +%d GiB (avail now: %d GiB)\n" \
+          "$DELTA_TOTAL_GIB" "$(to_gib "$POST_TOTAL")"

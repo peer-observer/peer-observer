@@ -4,6 +4,9 @@ description: Install dependencies and setup Rust cache
 runs:
   using: composite
   steps:
+    - name: Free disk space
+      uses: ./.github/actions/free-disk-space
+
     - name: Install build dependecies
       shell: bash
       run: |
@@ -19,8 +22,12 @@ runs:
           elfutils \
           gcc-multilib \
           libcapnp-dev \
-          capnproto 
-    
+          capnproto \
+          pkg-config \
+          make \
+          git \
+          jq
+
     - name: Cache cargo
       uses: actions/cache@v3
       with:
@@ -31,3 +38,24 @@ runs:
         key: ${{ runner.os }}-ubuntu-cargo-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-ubuntu-cargo-
+
+    - name: Report disk usage after cargo cache restore
+      shell: bash
+      run: |
+        set -eo pipefail
+
+        avail_bytes() {
+          df --output=avail -B1 / | tail -1 | tr -dc '0-9'
+        }
+        to_gib() { echo $(( $1 / 1024 / 1024 / 1024 )); }
+
+        echo
+        echo "===================================================================="
+        echo ">>> Disk usage after cargo cache restore"
+        echo "===================================================================="
+        df -h /
+        echo
+        du -sh ~/.cargo/registry ~/.cargo/git target 2>/dev/null || true
+        du -sh target/debug/deps target/debug/incremental target/debug/build 2>/dev/null || true
+        AVAIL=$(avail_bytes)
+        printf -- "==> Avail after cache restore: %d GiB\n" "$(to_gib "$AVAIL")"
