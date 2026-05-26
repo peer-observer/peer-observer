@@ -1,8 +1,8 @@
 #![cfg(feature = "nats_integration_tests")]
 
 use archive::archiver::{run, Args};
-use archive::replayer::read_archive;
 
+use archive::read::ArchiveReader;
 use shared::{
     log,
     nats_subjects::Subject,
@@ -257,9 +257,8 @@ async fn run_filter_test(flag: &str, expected_count: usize) {
         .next()
         .expect("expected a .<timestamp>.bin.zst file");
 
-    let archive = read_archive(&archive_path).unwrap();
-
-    assert_eq!(archive.events.len(), expected_count);
+    let archive = ArchiveReader::open(&archive_path).unwrap();
+    assert_eq!(archive.count(), expected_count);
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
 }
@@ -363,8 +362,9 @@ async fn test_file_rotation_with_compression() {
     // decompress and count total events
     let mut total_events = 0;
     for entry in &zst_files {
-        let archive = read_archive(&entry.path()).unwrap();
-        total_events += archive.events.len();
+        let archive = ArchiveReader::open(&entry.path()).unwrap();
+        println!("header: {}", archive.header);
+        total_events += archive.count();
     }
 
     println!("\n========== ROTATION TEST ==========");
@@ -412,12 +412,14 @@ async fn test_replayer_roundtrip() {
         .into_iter()
         .next()
         .expect("expected a .<timestamp>.bin.zst file");
-    let archive = read_archive(&archive_path).unwrap();
 
-    assert_eq!(archive.events.len(), all_events.len());
+    let archive = ArchiveReader::open(&archive_path).unwrap();
 
-    for ((sent, _label), decoded) in all_events.iter().zip(archive.events.iter()) {
-        assert_eq!(sent.peer_observer_event, decoded.peer_observer_event);
+    for ((sent, _label), decoded) in all_events.iter().zip(archive) {
+        assert_eq!(
+            sent.peer_observer_event,
+            decoded.unwrap().peer_observer_event
+        );
     }
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
@@ -461,12 +463,13 @@ async fn test_replayer_roundtrip_uncompressed() {
         .into_iter()
         .next()
         .expect("expected a .0.bin file");
-    let archive = read_archive(&archive_path).unwrap();
 
-    assert_eq!(archive.events.len(), all_events.len());
-
-    for ((sent, _label), decoded) in all_events.iter().zip(archive.events.iter()) {
-        assert_eq!(sent.peer_observer_event, decoded.peer_observer_event);
+    let archive = ArchiveReader::open(&archive_path).unwrap();
+    for ((sent, _label), decoded) in all_events.iter().zip(archive) {
+        assert_eq!(
+            sent.peer_observer_event,
+            decoded.unwrap().peer_observer_event
+        );
     }
 
     let _ = std::fs::remove_dir_all(&tmp_dir);

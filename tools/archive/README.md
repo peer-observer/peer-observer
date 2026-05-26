@@ -17,7 +17,7 @@ preceded by a protobuf `ArchiveHeader` from `protobuf/archive/header.proto`. The
 protobuf messages are encoded using `encode_length_delimited` from `prost`.
 
 ```
-[ varint length ][ protobuf ArhiveHeader bytes ]
+[ varint length ][ protobuf ArchiveHeader bytes ]
 [ varint length ][ protobuf Event bytes ]
 [ varint length ][ protobuf Event bytes ]
 ...
