@@ -6,12 +6,7 @@ edition = "2021"
 [dependencies]
 shared = { path = "../../shared" }
 time = { version = "0.3", features = ["formatting", "macros"] }
-toml = "0.8"
-sha2 = "0.10"
 
-[dev-dependencies]
-sha2 = "0.10"
-toml = "0.8"
 
 [features]
 # Treat warnings as a build error.

@@ -25,12 +25,6 @@ from `prost`), preceded by a 16-byte header:
 The git commit hash in the header identifies the exact version of the protobuf definitions used
 to record the file, allowing future readers to check out that commit if needed.
 
-### Manifest
-
-Each archive file has a corresponding `<base-name>.<timestamp>.manifest.toml` with its metadata
-(version, NATS address, event count, uncompressed size, SHA-256 checksum, event types,
-first/last timestamps).
-
 ### Compression
 
 Archive files are compressed with zstd using streaming compression — the writer is wrapped in a
