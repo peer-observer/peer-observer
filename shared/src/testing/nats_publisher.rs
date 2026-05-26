@@ -14,6 +14,7 @@ impl NatsPublisherForTesting {
     }
 
     pub async fn publish(&self, subject: String, payload: Vec<u8>) {
+        log::trace!("publishing {} ({} bytes)", subject, payload.len());
         self.client
             .publish(subject, payload.into())
             .await

@@ -44,7 +44,7 @@ fn find_files(dir: &std::path::Path, suffix: &str) -> Vec<std::path::PathBuf> {
 fn setup() {
     INIT.call_once(|| {
         simple_logger::SimpleLogger::new()
-            .with_level(log::LevelFilter::Info)
+            .with_level(log::LevelFilter::Trace)
             .init()
             .unwrap();
     });

@@ -234,6 +234,7 @@ impl ArchiveFile {
 
     fn write_event(&mut self, event: &Event) -> std::io::Result<()> {
         let buf = event.encode_length_delimited_to_vec();
+        log::trace!("writing {:?} ({} bytes)", event, buf.len());
         self.writer.write_all(&buf)?;
         self.hasher.update(&buf);
         self.bytes_written += buf.len() as u64;
