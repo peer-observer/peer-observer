@@ -16,7 +16,7 @@ async fn main() {
     LocalSet::new()
         .run_until(async move {
             let (shutdown_tx, shutdown_rx) = watch::channel(false);
-            let run_future = ipc_extractor::run(args, shutdown_rx);
+            let run_future = ipc_extractor::run(args, shutdown_rx, None);
             tokio::pin!(run_future);
 
             tokio::select! {

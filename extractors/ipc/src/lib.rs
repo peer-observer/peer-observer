@@ -12,11 +12,12 @@ use shared::{
     tokio::{
         self,
         net::UnixStream,
-        sync::watch,
+        sync::{oneshot, watch},
         time::{self, Duration},
     },
 };
 use std::io;
+use std::net::SocketAddr;
 
 mod error;
 mod metrics;
@@ -55,7 +56,11 @@ pub struct Args {
     pub prometheus_address: String,
 }
 
-pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(), RuntimeError> {
+pub async fn run(
+    args: Args,
+    mut shutdown_rx: watch::Receiver<bool>,
+    bound_addr_tx: Option<oneshot::Sender<SocketAddr>>,
+) -> Result<(), RuntimeError> {
     let nats_client = nats_util::prepare_connection(&args.nats)?
         .connect(&args.nats.address)
         .await?;
@@ -77,7 +82,11 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
     let mut ipc_session = IpcClient::init(stream).await?;
 
     let metrics = Metrics::new();
-    shared::metricserver::start(&args.prometheus_address, Some(metrics.registry.clone()))?;
+    let local_addr =
+        shared::metricserver::start(&args.prometheus_address, Some(metrics.registry.clone()))?;
+    if let Some(tx) = bound_addr_tx {
+        let _ = tx.send(local_addr);
+    }
 
     let duration_sec = Duration::from_secs(args.query_interval);
     let mut interval = time::interval(duration_sec);
