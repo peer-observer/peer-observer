@@ -12,18 +12,16 @@ multiple archiver instances to run simultaneously for different recording jobs.
 
 ### File format
 
-Events are stored as sequential length-delimited protobuf messages (using `encode_length_delimited`
-from `prost`), preceded by a 16-byte header:
+Events are stored as sequential length-delimited protobuf events from `protobuf/event.proto`,
+preceded by a protobuf `ArchiveHeader` from `protobuf/archive/header.proto`. The
+protobuf messages are encoded using `encode_length_delimited` from `prost`.
 
 ```
-[ 2B magic "PA" ][ 1B version ][ 4B git commit hash ][ 9B reserved ]
+[ varint length ][ protobuf ArhiveHeader bytes ]
 [ varint length ][ protobuf Event bytes ]
 [ varint length ][ protobuf Event bytes ]
 ...
 ```
-
-The git commit hash in the header identifies the exact version of the protobuf definitions used
-to record the file, allowing future readers to check out that commit if needed.
 
 ### Compression
 
@@ -124,7 +122,7 @@ Supports:
 ### Example output
 
 ```text
-header: version=1 git=abcd1234
+header: ArchiveHeader(created=1780140481)
 [1] ts=1234567890 ebpf: ...
 [2] ts=1234567891 ebpf: ...
 total: 2 events

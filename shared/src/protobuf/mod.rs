@@ -1,3 +1,6 @@
+/// Protobuf types for the archives.
+pub mod archive;
+
 /// Protobuf types for some bitcoin primitives.
 pub mod bitcoin_primitives;
 

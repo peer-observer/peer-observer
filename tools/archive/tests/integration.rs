@@ -25,9 +25,8 @@ use shared::{
     simple_logger,
     testing::{nats_publisher::NatsPublisherForTesting, nats_server::NatsServerForTesting},
     tokio::{self, sync::watch, time::sleep},
-    zstd,
 };
-use std::{fs::File, io::Read, sync::Once, time::Duration};
+use std::{sync::Once, time::Duration};
 
 static INIT: Once = Once::new();
 
@@ -257,27 +256,10 @@ async fn run_filter_test(flag: &str, expected_count: usize) {
         .into_iter()
         .next()
         .expect("expected a .<timestamp>.bin.zst file");
-    let file = File::open(archive_path).unwrap();
-    let mut reader = zstd::Decoder::new(file).unwrap();
 
-    let mut header = [0u8; 16];
-    reader.read_exact(&mut header).unwrap();
-    assert_eq!(&header[0..2], b"PA");
+    let archive = read_archive(&archive_path).unwrap();
 
-    let mut buf = Vec::new();
-    reader.read_to_end(&mut buf).unwrap();
-
-    let mut decoded_events = Vec::new();
-    let mut cursor = 0;
-    while cursor < buf.len() {
-        let event = Event::decode_length_delimited(&buf[cursor..]).unwrap();
-        let size = event.encoded_len();
-        let varint_len = shared::prost::length_delimiter_len(size);
-        cursor += varint_len + size;
-        decoded_events.push(event);
-    }
-
-    assert_eq!(decoded_events.len(), expected_count);
+    assert_eq!(archive.events.len(), expected_count);
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
 }
@@ -381,24 +363,8 @@ async fn test_file_rotation_with_compression() {
     // decompress and count total events
     let mut total_events = 0;
     for entry in &zst_files {
-        let file = File::open(entry.path()).unwrap();
-        let mut reader = zstd::Decoder::new(file).unwrap();
-
-        let mut header = [0u8; 16];
-        reader.read_exact(&mut header).unwrap();
-        assert_eq!(&header[0..2], b"PA");
-
-        let mut buf = Vec::new();
-        reader.read_to_end(&mut buf).unwrap();
-
-        let mut cursor = 0;
-        while cursor < buf.len() {
-            let event = Event::decode_length_delimited(&buf[cursor..]).unwrap();
-            let size = event.encoded_len();
-            let varint_len = shared::prost::length_delimiter_len(size);
-            cursor += varint_len + size;
-            total_events += 1;
-        }
+        let archive = read_archive(&entry.path()).unwrap();
+        total_events += archive.events.len();
     }
 
     println!("\n========== ROTATION TEST ==========");
@@ -448,7 +414,6 @@ async fn test_replayer_roundtrip() {
         .expect("expected a .<timestamp>.bin.zst file");
     let archive = read_archive(&archive_path).unwrap();
 
-    assert_eq!(archive.header.version, 1);
     assert_eq!(archive.events.len(), all_events.len());
 
     for ((sent, _label), decoded) in all_events.iter().zip(archive.events.iter()) {
@@ -498,7 +463,6 @@ async fn test_replayer_roundtrip_uncompressed() {
         .expect("expected a .0.bin file");
     let archive = read_archive(&archive_path).unwrap();
 
-    assert_eq!(archive.header.version, 1);
     assert_eq!(archive.events.len(), all_events.len());
 
     for ((sent, _label), decoded) in all_events.iter().zip(archive.events.iter()) {

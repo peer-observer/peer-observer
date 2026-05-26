@@ -1,0 +1,7 @@
+syntax = "proto2";
+
+package header;
+
+message ArchiveHeader {
+  required      uint64      created = 1;      // Timestamp (seconds since UNIX epoch) when the archive was created.
+}

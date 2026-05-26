@@ -19,16 +19,7 @@ fn main() {
         }
         match replayer::read_archive(Path::new(path)) {
             Ok(archive) => {
-                println!(
-                    "header: version={} git={}",
-                    archive.header.version,
-                    archive
-                        .header
-                        .git_hash
-                        .iter()
-                        .map(|b| format!("{:02x}", b))
-                        .collect::<String>()
-                );
+                println!("header: {}", archive.header);
                 for (i, event) in archive.events.iter().enumerate() {
                     let n = i + 1;
                     let ts = event.timestamp;

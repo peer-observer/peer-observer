@@ -18,43 +18,12 @@ use shared::futures::stream::StreamExt;
 use shared::log;
 use shared::nats_util;
 use shared::prost::Message;
+use shared::protobuf::archive::ArchiveHeader;
 use shared::protobuf::ebpf_extractor::ebpf;
 use shared::protobuf::event::event::PeerObserverEvent;
 use shared::protobuf::event::Event;
 use shared::tokio::sync::watch;
 use shared::zstd;
-
-const MAGIC: [u8; 2] = *b"PA";
-const VERSION: u8 = 1;
-const HEADER_SIZE: usize = 16;
-include!(concat!(env!("OUT_DIR"), "/git_hash.rs"));
-
-struct ArchiveHeader {
-    magic: [u8; 2],
-    version: u8,
-    git_hash: [u8; 4],
-    reserved: [u8; 9],
-}
-
-impl ArchiveHeader {
-    fn new(git_hash: [u8; 4]) -> Self {
-        Self {
-            magic: MAGIC,
-            version: VERSION,
-            git_hash,
-            reserved: [0u8; 9],
-        }
-    }
-
-    fn to_bytes(&self) -> [u8; HEADER_SIZE] {
-        let mut buf = [0u8; HEADER_SIZE];
-        buf[0..2].copy_from_slice(&self.magic);
-        buf[2] = self.version;
-        buf[3..7].copy_from_slice(&self.git_hash);
-        buf[7..16].copy_from_slice(&self.reserved);
-        buf
-    }
-}
 
 struct TrackingWriter {
     inner: BufWriter<File>,
@@ -172,8 +141,7 @@ impl ArchiveFile {
             }
         };
         let mut writer = ArchiveWriter::new(file, compression_level)?;
-        // header: 16 bytes = MAGIC "PA" (2B) + VERSION (1B) + GIT_HASH (4B) + reserved (9B)
-        let header_bytes = ArchiveHeader::new(GIT_HASH).to_bytes();
+        let header_bytes = ArchiveHeader::new().to_bytes();
         writer.write_all(&header_bytes)?;
         writer.flush()?;
 
@@ -182,7 +150,7 @@ impl ArchiveFile {
         Ok(Self {
             path,
             writer,
-            bytes_written: HEADER_SIZE as u64,
+            bytes_written: header_bytes.len() as u64,
         })
     }
 

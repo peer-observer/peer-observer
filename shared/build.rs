@@ -7,7 +7,13 @@ fn main() {
     if let Err(e) = prost_build::Config::new()
         .compile_well_known_types()
         .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
-        .compile_protos(&["../protobuf/event.proto"], &["../protobuf/"])
+        .compile_protos(
+            &[
+                "../protobuf/event.proto",
+                "../protobuf/archive/header.proto",
+            ],
+            &["../protobuf/"],
+        )
     {
         println!("Error while compiling protos: {}", e);
         panic!("Failed to code-gen the Rust structs from the Protobuf definitions");

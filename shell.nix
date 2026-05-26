@@ -13,9 +13,6 @@ pkgs.mkShell {
       pkgs.clippy
       pkgs.cmake
       pkgs.protobuf
-
-      # needed for the archiver to figure out the current git commit
-      pkgs.git
  
       pkgs.rustfmt
 
