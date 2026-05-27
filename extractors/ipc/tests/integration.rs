@@ -164,3 +164,61 @@ async fn test_integration_ipc() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn test_integration_ipc_node_shutdown() {
+    println!("test that the ipc-extractor shuts down when the node is stopped");
+
+    setup();
+    let mut node = configure_node();
+    let nats_server = NatsServerForTesting::new(&[]).await;
+
+    let ipc_socket_path = node
+        .workdir()
+        .as_path()
+        .join("regtest")
+        .join("node.sock")
+        .to_str()
+        .unwrap()
+        .into();
+
+    let args = make_test_args(nats_server.port, ipc_socket_path);
+
+    let local = LocalSet::new();
+    local
+        .run_until(async move {
+            let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+
+            let ipc_extractor_future = ipc_extractor::run(args, shutdown_rx.clone());
+            tokio::pin!(ipc_extractor_future);
+
+            let nc = async_nats::connect(format!("127.0.0.1:{}", nats_server.port))
+                .await
+                .unwrap();
+            let mut sub = nc.subscribe("*").await.unwrap();
+
+            tokio::select! {
+                _ = sleep(Duration::from_secs(TEST_TIMEOUT_SECONDS)) => {
+                    panic!("timed out waiting for check() to complete");
+                }
+                msg = sub.next() => {
+                    if let Some(msg) = msg {
+                        let unwrapped = Event::decode(msg.payload).unwrap();
+                        if unwrapped.peer_observer_event.is_some() {
+                            // After we received the first message from the ipc-extractor,
+                            // we shut down the node.
+                            node.stop().unwrap();
+                        }
+                    } else {
+                        panic!("subscription ended");
+                    }
+                }
+                result = &mut ipc_extractor_future => {
+                    panic!("ipc_extractor stopped unexpectedly: {:?}", result);
+                }
+            }
+
+            assert_eq!(ipc_extractor_future.await.unwrap(), ());
+        })
+        .await;
+}
