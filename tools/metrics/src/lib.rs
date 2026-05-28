@@ -24,7 +24,9 @@ use shared::protobuf::{
     p2p_extractor::p2p,
     rpc_extractor::{rpc, Addrman, AddrmanBucket, FeeEstimateMode},
 };
+use shared::time::Duration;
 use shared::tokio::sync::watch;
+use shared::tokio::time::Instant;
 use shared::util::{self, is_on_linkinglion_banlist};
 use shared::{async_nats, clap};
 use std::cmp::{max, min};
@@ -59,6 +61,34 @@ pub struct Args {
     pub log_level: Level,
 }
 
+
+#[derive(Clone, Debug)]
+enum BandwidthMode {
+    Unknown,
+    High,
+    Low,
+}
+
+impl std::fmt::Display for BandwidthMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BandwidthMode::Unknown => write!(f, "unknown"),
+            BandwidthMode::High => write!(f, "high"),
+            BandwidthMode::Low => write!(f, "low"),
+        }
+    }
+}
+
+/// Compact block reconstruction state tracking
+#[derive(Clone, Debug)]
+struct CompactBlockReconstruction {
+    started_at_microsec: Option<u64>,
+    ended_at_microsec: Option<u64>,
+    requested_txn_count: u32,
+    bandwidth_mode: BandwidthMode,
+    created_at: Instant,
+}
+
 /// State that's between processing events.
 /// This allows tracking differences between two statefull events.
 #[derive(Default, Debug)]
@@ -66,6 +96,9 @@ struct State {
     // Map of wtxid to bytes
     orphanage: HashMap<String, u64>,
     addrman: Addrman,
+
+    // block hash to compact block reconstruction state
+    compact_block_reconstruction: HashMap<String, CompactBlockReconstruction>,
 }
 
 /// runs the metrics tool
@@ -155,7 +188,7 @@ fn handle_event(
                 }
             }
             PeerObserverEvent::LogExtractor(l) => {
-                handle_log_event(&l, metrics);
+                handle_log_event(&l, state_arc, metrics);
             }
             PeerObserverEvent::IpcExtractor(ipc) => {
                 if let Some(e) = ipc.ipc_event {
@@ -1422,7 +1455,7 @@ fn handle_p2p_message(msg: &message::MessageEvent, timestamp_ms: u64, metrics: m
     }
 }
 
-fn handle_log_event(log: &Log, metrics: metrics::Metrics) {
+fn handle_log_event(log: &Log, state_arc: Arc<Mutex<State>>, metrics: metrics::Metrics) {
     let category = LogDebugCategory::try_from(log.category)
         .unwrap_or(LogDebugCategory::Unknown)
         .as_str_name()
@@ -1460,6 +1493,42 @@ fn handle_log_event(log: &Log, metrics: metrics::Metrics) {
                     .inc();
             }
         }
+        log::LogEvent::SawNewHeaderLog(block) => {
+            handle_compact_block_reconstruction_state(
+                block.block_hash.clone(),
+                |reconstruction| {
+                    reconstruction.started_at_microsec = Some(log.log_timestamp);
+                    reconstruction.bandwidth_mode = if block.is_cmpctblock {
+                        BandwidthMode::High
+                    } else {
+                        BandwidthMode::Low
+                    };
+                },
+                state_arc.clone(),
+                metrics.clone(),
+            );
+        }
+        log::LogEvent::CompactBlockReconstructedLog(block) => {
+            handle_compact_block_reconstruction_state(
+                block.block_hash.clone(),
+                |reconstruction| {
+                    reconstruction.ended_at_microsec = Some(log.log_timestamp);
+                    reconstruction.requested_txn_count = block.requested_txn_count;
+                },
+                state_arc.clone(),
+                metrics.clone(),
+            );
+
+            metrics
+                .log_compact_block_reconstruction_txs_requested
+                .set(block.requested_txn_count.into());
+            metrics
+                .log_compact_block_reconstruction_requested_bytes
+                .set(block.requested_txn_bytes.into());
+            metrics
+                .log_compact_block_reconstruction_txs_extra_pool
+                .set(block.extra_pool_txn_count.into());
+        }
     }
 }
 
@@ -1469,4 +1538,56 @@ fn handle_ipc_event(e: &ipc_extractor::ipc::IpcEvent, metrics: metrics::Metrics)
             metrics.ipc_block_tip_height.set(tip.height as i64);
         }
     }
+}
+
+fn handle_compact_block_reconstruction_state(
+    block_hash: String,
+    update_reconstruction: impl FnOnce(&mut CompactBlockReconstruction),
+    state_arc: Arc<Mutex<State>>,
+    metrics: metrics::Metrics,
+) {
+    let mut state = state_arc.lock().expect("should be able to lock state_arc");
+    let reconstruction = state
+        .compact_block_reconstruction
+        .entry(block_hash.clone())
+        .or_insert_with(|| CompactBlockReconstruction {
+            started_at_microsec: None,
+            ended_at_microsec: None,
+            requested_txn_count: 0,
+            bandwidth_mode: BandwidthMode::Unknown,
+            created_at: Instant::now(),
+        });
+
+    update_reconstruction(reconstruction);
+
+    if let (Some(start), Some(end)) = (
+        reconstruction.started_at_microsec,
+        reconstruction.ended_at_microsec,
+    ) {
+        let tx_requested = reconstruction.requested_txn_count > 0;
+        let tx_requested_label = if tx_requested { "true" } else { "false" };
+        let duration_microsec = end.saturating_sub(start);
+
+        metrics
+            .log_compact_block_reconstruction_count
+            .with_label_values(&[
+                tx_requested_label,
+                &reconstruction.bandwidth_mode.to_string(),
+            ])
+            .inc();
+        metrics
+            .log_compact_block_reconstruction_time
+            .with_label_values(&[
+                tx_requested_label,
+                &reconstruction.bandwidth_mode.to_string(),
+            ])
+            .set(duration_microsec as i64);
+        state.compact_block_reconstruction.remove(&block_hash);
+    }
+
+    // if entries are older than 5 minutes, remove them to avoid unbounded
+    // growth of the hashmap in case of missing events
+    state
+        .compact_block_reconstruction
+        .retain(|_, reconstruction| reconstruction.created_at.elapsed() < Duration::minutes(5));
 }
