@@ -34,9 +34,10 @@ fn wait_for_tip_post_ibd(node: &bitcoind::Client, expected_tip: BlockHash) {
     }
 }
 
-/// Mines one block on `node` and waits until that block is its active post-IBD tip.
-pub fn mine_and_wait_for_tip(node: &bitcoind::Client) {
-    let generated = node
+/// Mines one block on `miner` and waits until `observer` has that block as its
+/// active post-IBD tip.
+pub fn mine_and_wait_for_tip(miner: &bitcoind::Client, observer: &bitcoind::Client) {
+    let generated = miner
         .generate_to_address(1, &REGTEST_ADDRESS)
         .expect("failed to generate block while waiting for post-IBD tip");
     let block_hash = generated
@@ -47,5 +48,5 @@ pub fn mine_and_wait_for_tip(node: &bitcoind::Client) {
         .next()
         .expect("generatetoaddress returned no block hashes");
 
-    wait_for_tip_post_ibd(node, block_hash);
+    wait_for_tip_post_ibd(observer, block_hash);
 }

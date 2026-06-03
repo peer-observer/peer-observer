@@ -495,7 +495,7 @@ async fn test_integration_rpc_getorphantxs() {
                 .collect();
 
             // The receiving node needs to be out of IBD to start accepting transactions.
-            mine_and_wait_for_tip(&node1.client);
+            mine_and_wait_for_tip(&node1.client, &node1.client);
 
             // node1 is peer=0 of node2
             const PEER_ID: u64 = 0;

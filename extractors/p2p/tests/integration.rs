@@ -237,7 +237,7 @@ async fn test_integration_p2pextractor_addr_annoucement() {
         },
         |node| {
             // To self-announce our address, we need to be out of initial block download.
-            mine_and_wait_for_tip(&node.client);
+            mine_and_wait_for_tip(&node.client, &node.client);
 
             // Connects to the Bitcoin node, announces one address to it, and disconnect.
             // The node will then relay that address to the p2p-extractor eventually.
