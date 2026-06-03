@@ -39,6 +39,8 @@ pub const LABEL_RPC_ASN: &str = "ASN";
 pub const LABEL_LOG_CATEGORY: &str = "category";
 pub const LABEL_LOG_LEVEL: &str = "level";
 pub const LABEL_LOG_MUTATED_BLOCK_STATUS: &str = "status";
+pub const LABEL_LOG_COMPACT_BLOCK_RECONSTRUCTION_TX_REQUESTED: &str = "tx_requested";
+pub const LABEL_LOG_COMPACT_BLOCK_RECONSTRUCTION_BANDWIDTH: &str = "bandwidth";
 
 pub const BUCKETS_ADDR_ADDRESS_COUNT: [f64; 30] = [
     0f64, 1f64, 2f64, 3f64, 4f64, 5f64, 6f64, 7f64, 8f64, 9f64, 10f64, 15f64, 20f64, 25f64, 30f64,
@@ -387,6 +389,11 @@ pub struct Metrics {
     pub log_block_connected_events: IntCounter,
     pub log_block_checked_events: IntCounter,
     pub log_mutated_blocks: IntCounterVec,
+    pub log_compact_block_reconstruction_count: IntCounterVec,
+    pub log_compact_block_reconstruction_time: IntGaugeVec,
+    pub log_compact_block_reconstruction_requested_bytes: IntCounter,
+    pub log_compact_block_reconstruction_txs_requested: IntCounter,
+    pub log_compact_block_reconstruction_txs_extra_pool: IntCounter,
 }
 
 impl Metrics {
@@ -605,6 +612,11 @@ impl Metrics {
         ic!(log_block_connected_events, "Number of block connected log events received.", registry);
         ic!(log_block_checked_events, "Number of block checked log events received.", registry);
         icv!(log_mutated_blocks, "Number of mutated blocks detected by status.", [LABEL_LOG_MUTATED_BLOCK_STATUS], registry);
+        icv!(log_compact_block_reconstruction_count, "Indicates how many times compact block reconstruction happened, with or without transaction requests and bandwidth mode.", [LABEL_LOG_COMPACT_BLOCK_RECONSTRUCTION_TX_REQUESTED, LABEL_LOG_COMPACT_BLOCK_RECONSTRUCTION_BANDWIDTH], registry);
+        igv!(log_compact_block_reconstruction_time, "Indicates how much time (microseconds) was spent reconstructing a compact block, with or without transaction requests and bandwidth mode.", [LABEL_LOG_COMPACT_BLOCK_RECONSTRUCTION_TX_REQUESTED, LABEL_LOG_COMPACT_BLOCK_RECONSTRUCTION_BANDWIDTH], registry);
+        ic!(log_compact_block_reconstruction_requested_bytes, "The number of bytes requested for compact block reconstruction.", registry);
+        ic!(log_compact_block_reconstruction_txs_requested, "The number of transactions requested for compact block reconstruction.", registry);
+        ic!(log_compact_block_reconstruction_txs_extra_pool, "The number of transactions requested for compact block reconstruction that were found in the extra transaction pool.", registry);
 
         Self {
             registry,
@@ -813,12 +825,18 @@ impl Metrics {
             p2pextractor_invs_size,
             p2pextractor_feefilter_messages,
             p2pextractor_feefilter_last,
+
             // log-extractor
             log_events,
             log_bytes,
             log_block_connected_events,
             log_block_checked_events,
             log_mutated_blocks,
+            log_compact_block_reconstruction_count,
+            log_compact_block_reconstruction_time,
+            log_compact_block_reconstruction_requested_bytes,
+            log_compact_block_reconstruction_txs_requested,
+            log_compact_block_reconstruction_txs_extra_pool,
         }
     }
 }
