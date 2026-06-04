@@ -59,11 +59,10 @@ pub fn configure_node() -> bitcoind::BitcoinD {
     info!("Using bitcoin-node at '{}'", exe_path);
 
     let mut conf = bitcoind::Conf::default();
-    conf.args = vec!["-regtest", "-ipcbind=unix"];
+    conf.args = vec!["-regtest", "-ipcbind=unix", "-fallbackfee=0.00001"];
     conf.view_stdout = false;
-    // bitcoin-node has no wallet capabilities. Disable to avoid the
-    // default wallet creation attempt.
-    // conf.wallet = None;
+    // Disable default wallet auto-creation. Create it manually in tests requiring wallet.
+    conf.wallet = None;
 
     bitcoind::BitcoinD::with_conf(exe_path, &conf).unwrap()
 }

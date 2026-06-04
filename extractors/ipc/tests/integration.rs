@@ -7,7 +7,7 @@ use common::{configure_node, ipc_socket_path, make_test_args, setup};
 
 use shared::{
     async_nats,
-    bitcoin::{Address, BlockHash, Network, PubkeyHash, hashes::Hash},
+    bitcoin::{Address, Amount, BlockHash, Network, PubkeyHash, hashes::Hash},
     bitcoind,
     futures::StreamExt,
     prost::Message,
@@ -167,6 +167,74 @@ async fn test_integration_block_disconnected() {
     let block = bd.block;
     assert_eq!(block.height, 2);
     assert_eq!(block.hash.len(), 32);
+}
+
+#[tokio::test]
+async fn test_integration_tx_added_to_mempool() {
+    println!("test that we receive a TransactionAddedToMempool event after submitting a tx");
+
+    let event = check(
+        |e| matches!(e, IpcEvent::TransactionAddedToMempool(_)),
+        |node| {
+            node.client.create_wallet("default").expect("create wallet");
+
+            let mining_address = node.client.new_address().expect("new address");
+            node.client
+                .generate_to_address(101, &mining_address)
+                .expect("generate 101 blocks to mature a coinbase");
+
+            let dest = regtest_burn_address();
+            let amount = Amount::from_btc(1.0).unwrap();
+            node.client
+                .send_to_address(&dest, amount)
+                .expect("send_to_address");
+        },
+    )
+    .await;
+
+    let IpcEvent::TransactionAddedToMempool(t) = event else {
+        unreachable!()
+    };
+    assert_eq!(t.tx.txid.len(), 32);
+    assert_eq!(t.tx.wtxid.len(), 32);
+    assert!(t.tx.raw.is_some());
+}
+
+#[tokio::test]
+async fn test_integration_tx_removed_from_mempool() {
+    println!(
+        "test that we receive a TransactionRemovedFromMempool event when a tx is replaced via RBF"
+    );
+
+    let event = check(
+        |e| matches!(e, IpcEvent::TransactionRemovedFromMempool(_)),
+        |node| {
+            node.client.create_wallet("default").expect("create wallet");
+
+            let mining_address = node.client.new_address().expect("new address");
+            node.client
+                .generate_to_address(101, &mining_address)
+                .expect("generate 101 blocks to mature a coinbase");
+
+            let dest = regtest_burn_address();
+            let amount = Amount::from_btc(1.0).unwrap();
+            let original_txid = node
+                .client
+                .send_to_address(&dest, amount)
+                .expect("send_to_address");
+
+            node.client
+                .bump_fee(original_txid.txid().expect("send_to_address txid"))
+                .expect("bumpfee");
+        },
+    )
+    .await;
+
+    let IpcEvent::TransactionRemovedFromMempool(t) = event else {
+        unreachable!()
+    };
+    assert_eq!(t.tx.txid.len(), 32);
+    assert_eq!(t.tx.wtxid.len(), 32);
 }
 
 #[tokio::test]
