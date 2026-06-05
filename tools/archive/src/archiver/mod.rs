@@ -1,9 +1,5 @@
 #![cfg_attr(feature = "strict", deny(warnings))]
 
-mod error;
-
-pub use error::RuntimeError;
-
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -12,6 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use time::macros::format_description;
 use time::OffsetDateTime;
 
+use shared::anyhow::{Context, Result};
 use shared::clap;
 use shared::clap::Parser;
 use shared::futures::stream::StreamExt;
@@ -248,7 +245,7 @@ impl Args {
     }
 }
 
-pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(), RuntimeError> {
+pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<()> {
     if args.archive_all() {
         log::info!("archiving all events: {}", args.archive_all());
     } else {
@@ -263,16 +260,23 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         log::info!("archiving ipc_extractor events: {}", args.ipc_extractor);
     }
 
-    let nc = nats_util::prepare_connection(&args.nats)?
+    let nc = nats_util::prepare_connection(&args.nats)
+        .context("preparing NATS connection")?
         .connect(&args.nats.address)
-        .await?;
+        .await
+        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
 
-    let mut sub = nc.subscribe("*").await?;
+    let mut sub = nc
+        .subscribe("*")
+        .await
+        .context("subscribing to all NATS subjects")?;
     log::info!("Connected to NATS-server at {}", args.nats.address);
 
-    fs::create_dir_all(&args.output_dir)?;
+    fs::create_dir_all(&args.output_dir)
+        .with_context(|| format!("creating output directory {}", args.output_dir.display()))?;
     let mut current_file =
-        ArchiveFile::new(&args.output_dir, &args.base_name, args.compression_level)?;
+        ArchiveFile::new(&args.output_dir, &args.base_name, args.compression_level)
+            .context("creating the initial archive file")?;
 
     let mut total_files: u64 = 0;
 
@@ -294,16 +298,9 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
                         }
 
                         if current_file.needs_rotation(args.max_file_size) {
-                            match rotate(current_file, &args) {
-                                Ok(new_file) => {
-                                    total_files += 1;
-                                    current_file = new_file;
-                                }
-                                Err(e) => {
-                                    log::error!("failed to rotate archive: {}", e);
-                                    return Err(e.into());
-                                }
-                            }
+                            current_file = rotate(current_file, &args)
+                                .context("rotating the archive file")?;
+                            total_files += 1;
                         }
                     }
                 } else {
@@ -329,7 +326,9 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
     }
 
     total_files += 1;
-    current_file.finalize()?;
+    current_file
+        .finalize()
+        .context("finalizing the last archive file")?;
 
     log::info!("shutting down. total files: {}", total_files);
     Ok(())
