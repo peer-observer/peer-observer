@@ -22,6 +22,7 @@ futures = "0.3.31"
 rand = "0.10.1"
 time = { version = "0.3.47", features = ["parsing"] }
 regex = "1.12"
+anyhow = "1.0.102"
 zstd = "0.13"
 
 # Use custom commit to support:

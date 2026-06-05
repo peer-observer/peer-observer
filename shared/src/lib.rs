@@ -1,5 +1,6 @@
 #![cfg_attr(feature = "strict", deny(warnings))]
 
+pub extern crate anyhow;
 pub extern crate async_nats;
 pub extern crate bitcoin;
 pub extern crate bitcoind;
