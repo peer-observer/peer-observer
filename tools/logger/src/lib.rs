@@ -1,5 +1,6 @@
 #![cfg_attr(feature = "strict", deny(warnings))]
 
+use shared::anyhow::{self, Context};
 use shared::clap;
 use shared::clap::Parser;
 use shared::futures::stream::StreamExt;
@@ -11,10 +12,6 @@ use shared::protobuf::event::event::PeerObserverEvent;
 use shared::protobuf::event::{self, Event};
 use shared::protobuf::log_extractor::LogDebugCategory;
 use shared::tokio::sync::watch;
-
-use crate::error::RuntimeError;
-
-pub mod error;
 
 // Note: when modifying this struct, make sure to also update the usage
 // instructions in the README of this tool.
@@ -81,7 +78,7 @@ impl Args {
     }
 }
 
-pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(), RuntimeError> {
+pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> anyhow::Result<()> {
     if args.show_all() {
         log::info!("logging all events: {}", args.show_all());
     } else {
@@ -96,18 +93,23 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         log::info!("logging log_extractor events: {}", args.log_extractor);
     }
 
-    let nc = nats_util::prepare_connection(&args.nats)?
+    let nc = nats_util::prepare_connection(&args.nats)
+        .context("preparing NATS connection")?
         .connect(&args.nats.address)
-        .await?;
+        .await
+        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
 
-    let mut sub = nc.subscribe("*").await?;
+    let mut sub = nc
+        .subscribe("*")
+        .await
+        .context("subscribing to all NATS subjects")?;
     log::info!("Connected to NATS-server at {}", args.nats.address);
 
     loop {
         shared::tokio::select! {
             maybe_msg = sub.next() => {
                 if let Some(msg) = maybe_msg {
-                    let event = event::Event::decode(msg.payload)?;
+                    let event = event::Event::decode(msg.payload).context("decoding event")?;
                     log_event(event, args.clone());
                 } else {
                     break; // subscription ended

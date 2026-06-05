@@ -1,8 +1,9 @@
 #![cfg(feature = "nats_integration_tests")]
 
-use logger::{error::RuntimeError, Args};
+use logger::Args;
 
 use shared::{
+    async_nats::ConnectErrorKind,
     log::{self, Level, Record, SetLoggerError},
     nats_subjects::Subject,
     nats_util,
@@ -261,9 +262,11 @@ async fn test_integration_logger_fail_if_no_nats() {
         );
         match logger::run(args, shutdown_rx.clone()).await {
             Ok(_) => panic!("We should fail when no NATS server is reachable."),
-            Err(e) => match e {
-                RuntimeError::NatsConnect(_) => (),
-                _ => panic!("Expected NatsConnect error since the NATS server isn't reachable."),
+            Err(e) => match e.downcast::<shared::async_nats::error::Error<ConnectErrorKind>>() {
+                Ok(_) => (),
+                Err(other_error) => {
+                    panic!("Expected NatsConnect error since the NATS server isn't reachable but received error - {other_error:?}.")
+                }
             },
         };
     });
