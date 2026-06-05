@@ -1,8 +1,10 @@
 #![cfg(feature = "nats_integration_tests")]
 
-use alerts::{alerter::IntegrationTestAlerter, error::RuntimeError, Alert, Args, SpammerKind};
+use alerts::{alerter::IntegrationTestAlerter, Alert, Args, SpammerKind};
 
 use shared::{
+    anyhow,
+    async_nats::ConnectError,
     log,
     nats_subjects::Subject,
     nats_util,
@@ -183,7 +185,7 @@ struct TestHarness {
     publisher: NatsPublisherForTesting,
     rx: UnboundedReceiver<Alert>,
     shutdown_tx: watch::Sender<bool>,
-    handle: tokio::task::JoinHandle<Result<(), RuntimeError>>,
+    handle: tokio::task::JoinHandle<anyhow::Result<()>>,
     _server: NatsServerForTesting,
 }
 
@@ -362,9 +364,11 @@ async fn test_integration_alerts_fail_if_no_nats() {
         let args = make_test_args(65535, AlertSettingsInTest::default());
         match alerts::run(args, alerter, shutdown_rx.clone()).await {
             Ok(_) => panic!("We should fail when no NATS server is reachable."),
-            Err(e) => match e {
-                RuntimeError::NatsConnect(_) => (),
-                _ => panic!("Expected NatsConnect error since the NATS server isn't reachable."),
+            Err(e) => match e.downcast::<ConnectError>() {
+                Ok(_) => (),
+                Err(other_error) => panic!(
+                    "Expected NatsConnect error since the NATS server isn't reachable but received error - {other_error:?}."
+                ),
             },
         };
     });

@@ -1,5 +1,6 @@
 #![cfg_attr(feature = "strict", deny(warnings))]
 
+use shared::anyhow::{Context, Result};
 use shared::clap;
 use shared::clap::Parser;
 use shared::futures::stream::StreamExt;
@@ -16,10 +17,7 @@ use shared::tokio::sync::watch;
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
-use crate::error::RuntimeError;
-
 pub mod alerter;
-pub mod error;
 
 pub use crate::alerter::{Alert, Alerter, LoggingAlerter, SpammerKind};
 
@@ -178,15 +176,23 @@ pub async fn run<A: Alerter>(
     args: Args,
     alerter: A,
     mut shutdown_rx: watch::Receiver<bool>,
-) -> Result<(), RuntimeError> {
+) -> Result<()> {
     log::info!("starting alerts with {:?}", args);
 
-    let nc = nats_util::prepare_connection(&args.nats)?
+    let nc = nats_util::prepare_connection(&args.nats)
+        .context("preparing NATS connection")?
         .connect(&args.nats.address)
-        .await?;
+        .await
+        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
 
-    let netmsg_sub = nc.subscribe(Subject::NetMsg.to_string()).await?;
-    let netconn_sub = nc.subscribe(Subject::NetConn.to_string()).await?;
+    let netmsg_sub = nc
+        .subscribe(Subject::NetMsg.to_string())
+        .await
+        .context("subscribing to the NetMsg subject")?;
+    let netconn_sub = nc
+        .subscribe(Subject::NetConn.to_string())
+        .await
+        .context("subscribing to the NetConn subject")?;
     let mut sub = shared::futures::stream::select(netmsg_sub, netconn_sub);
     log::info!("Connected to NATS-server at {}", args.nats.address);
 
