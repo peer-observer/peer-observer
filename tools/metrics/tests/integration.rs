@@ -3,6 +3,7 @@
 use metrics::Args;
 
 use shared::{
+    async_nats,
     log::{debug, Level, LevelFilter},
     nats_subjects::Subject,
     nats_util::NatsArgs,
@@ -245,10 +246,11 @@ async fn test_integration_metrics_no_nats_connection() {
     if let Err(ref e) = result {
         println!("error: {}", e);
     }
-    assert!(matches!(
-        result,
-        Err(metrics::error::RuntimeError::NatsConnect(_))
-    ))
+    // allows for easier debugging if it's not a Io error..
+    assert!(result
+        .unwrap_err()
+        .downcast::<async_nats::error::Error<async_nats::ConnectErrorKind>>()
+        .is_ok());
 }
 
 #[tokio::test]

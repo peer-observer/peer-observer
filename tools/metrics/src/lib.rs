@@ -2,6 +2,7 @@
 // Allow for more metric macros in metrics.rs
 #![recursion_limit = "256"]
 
+use shared::anyhow::{self, Context};
 use shared::clap::Parser;
 use shared::futures::StreamExt;
 use shared::log::{info, warn, Level};
@@ -32,7 +33,6 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
-pub mod error;
 mod metrics;
 mod stat_util;
 
@@ -75,18 +75,24 @@ pub async fn run(
     args: Args,
     mut shutdown_rx: watch::Receiver<bool>,
     bound_addr_tx: Option<oneshot::Sender<SocketAddr>>,
-) -> Result<(), error::RuntimeError> {
+) -> anyhow::Result<()> {
     info!(target: LOG_TARGET, "Starting metrics-server...",);
 
     let metrics = metrics::Metrics::new();
 
-    let nc = nats_util::prepare_connection(&args.nats)?
+    let nc = nats_util::prepare_connection(&args.nats)
+        .context("preparing NATS connection")?
         .connect(&args.nats.address)
-        .await?;
+        .await
+        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
     info!("Connected to NATS-server at {}", args.nats.address);
-    let mut sub = nc.subscribe("*").await?;
+    let mut sub = nc
+        .subscribe("*")
+        .await
+        .context("subscribing to all NATS subjects")?;
 
-    let metrics_addr = metricserver::start(&args.metrics_address, Some(metrics.registry.clone()))?;
+    let metrics_addr = metricserver::start(&args.metrics_address, Some(metrics.registry.clone()))
+        .context("starting metrics server")?;
 
     // Notify the caller of the actual bound address (used in tests with port 0).
     // Tests still need an end-to-end readiness barrier before publishing real
@@ -136,8 +142,8 @@ fn handle_event(
     msg: async_nats::Message,
     state_arc: Arc<Mutex<State>>,
     metrics: metrics::Metrics,
-) -> Result<(), error::RuntimeError> {
-    let unwrapped = Event::decode(msg.payload)?;
+) -> anyhow::Result<()> {
+    let unwrapped = Event::decode(msg.payload).context("decoding event")?;
     if let Some(event) = unwrapped.peer_observer_event {
         match event {
             PeerObserverEvent::EbpfExtractor(ebpf) => match ebpf.ebpf_event.unwrap() {
