@@ -1,4 +1,5 @@
 use shared::{
+    anyhow::{Context, Result, bail},
     async_nats,
     bitcoin::{
         Network as BitcoinNetwork,
@@ -34,10 +35,6 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     time::{SystemTime, UNIX_EPOCH},
 };
-
-mod error;
-
-use error::{BitcoinMsgDecodeError, RuntimeError};
 
 const USER_AGENT: &str = "/p2p-extractor:0.1/";
 
@@ -133,7 +130,7 @@ pub async fn run(
     args: Args,
     mut shutdown_rx: watch::Receiver<bool>,
     bound_addr_tx: Option<oneshot::Sender<SocketAddr>>,
-) -> Result<(), RuntimeError> {
+) -> Result<()> {
     log::info!("Using network magic for: {}", args.p2p_network);
     let network: BitcoinNetwork = args.p2p_network.clone().into();
     log::info!("Ping measurements enabled: {}", !args.disable_ping);
@@ -148,14 +145,20 @@ pub async fn run(
         log::warn!("No P2P measurement enabled!");
     }
 
-    let nats_client = nats_util::prepare_connection(&args.nats)?
+    let nats_client = nats_util::prepare_connection(&args.nats)
+        .context("preparing NATS connection")?
         .connect(&args.nats.address)
-        .await?;
+        .await
+        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
     log::info!("Connected to NATS server at {}", &args.nats.address);
 
     log::debug!("Starting TCP listener on {}..", args.p2p_address);
-    let listener = TcpListener::bind(args.p2p_address.clone()).await?;
-    let local_addr = listener.local_addr()?;
+    let listener = TcpListener::bind(args.p2p_address.as_str())
+        .await
+        .with_context(|| format!("TCP listener binding on {}", args.p2p_address))?;
+    let local_addr = listener
+        .local_addr()
+        .context("getting local address of TCP listener")?;
     log::info!("P2P-extractor listening on {}", local_addr);
 
     // Notify the caller of the actual bound address (used in tests with port 0).
@@ -303,7 +306,7 @@ async fn handle_connection(
                         }
                     }
                     Err(e) => {
-                        log::warn!(target: addr, "error decoding message: {}", e);
+                        log::warn!(target: addr, "error decoding message: {:#}", e);
                         break;
                     }
                 }
@@ -432,7 +435,7 @@ async fn read_and_decode_message<R: AsyncRead + Unpin>(
     reader: &mut BufReader<R>,
     network: BitcoinNetwork,
     addr: &str,
-) -> Result<RawNetworkMessage, BitcoinMsgDecodeError> {
+) -> Result<RawNetworkMessage> {
     let mut header = [0u8; 24];
     if let Err(e) = reader.read_exact(&mut header).await {
         log::debug!(
@@ -440,7 +443,7 @@ async fn read_and_decode_message<R: AsyncRead + Unpin>(
             addr,
             e
         );
-        return Err(BitcoinMsgDecodeError::HeaderReadError(e));
+        bail!("Failed to read message header: {e}")
     }
 
     // We only accept v1 connections. To filter out V2 connections, error on everything
@@ -450,10 +453,17 @@ async fn read_and_decode_message<R: AsyncRead + Unpin>(
         log::debug!(target: addr,
             "mismatch in the P2P message magic: this could mean the node is on a different network or it's attempting a P2Pv2 connection..",
         );
-        return Err(BitcoinMsgDecodeError::MagicError(
-            network.magic().to_bytes(),
-            header_magic,
-        ));
+        bail!(
+            "Network magic mismatch: got={}, expected={}",
+            header_magic
+                .iter()
+                .fold(String::new(), |a, b| a + &format!("{:02x}", b)),
+            network
+                .magic()
+                .to_bytes()
+                .iter()
+                .fold(String::new(), |a, b| a + &format!("{:02x}", b))
+        );
     }
 
     let payload_length = u32::from_le_bytes(header[16..20].try_into()?);
@@ -463,7 +473,7 @@ async fn read_and_decode_message<R: AsyncRead + Unpin>(
             "reading the P2P message payload failed: {}",
             e
         );
-        return Err(BitcoinMsgDecodeError::PayloadReadError(e));
+        bail!("Failed to read message payload: {}", e)
     }
 
     let mut full_msg_bytes = Vec::with_capacity(24 + payload.len());
@@ -471,7 +481,8 @@ async fn read_and_decode_message<R: AsyncRead + Unpin>(
     full_msg_bytes.extend_from_slice(&payload);
 
     let mut cursor = BitcoinCursor::new(full_msg_bytes);
-    let msg = RawNetworkMessage::consensus_decode(&mut cursor)?;
+    let msg = RawNetworkMessage::consensus_decode(&mut cursor)
+        .context("decoding the P2P network message")?;
 
     Ok(msg)
 }
