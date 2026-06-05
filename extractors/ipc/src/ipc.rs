@@ -1,18 +1,11 @@
-#[allow(dead_code)]
-mod generated {
-    capnp::generated_code!(pub mod proxy_capnp, "capnp/mp/proxy_capnp.rs");
-    capnp::generated_code!(pub mod common_capnp, "capnp/common_capnp.rs");
-    capnp::generated_code!(pub mod mining_capnp, "capnp/mining_capnp.rs");
-    capnp::generated_code!(pub mod echo_capnp, "capnp/echo_capnp.rs");
-    capnp::generated_code!(pub mod init_capnp, "capnp/init_capnp.rs");
-}
-use generated::*;
+use bitcoin_capnp_types::{
+    capnp::Error as CapnpError,
+    capnp_rpc::{Disconnector, RpcSystem, rpc_twoparty_capnp, twoparty},
+    init_capnp::init::Client as InitClient,
+    mining_capnp::mining::Client as MiningClient,
+    proxy_capnp::{self, thread::Client as ThreadClient},
+};
 
-use init_capnp::init::Client as InitClient;
-use mining_capnp::mining::Client as MiningClient;
-use proxy_capnp::thread::Client as ThreadClient;
-
-use capnp_rpc::{Disconnector, RpcSystem, rpc_twoparty_capnp, twoparty};
 use shared::{
     futures::AsyncReadExt,
     protobuf::ipc_extractor::BlockTip,
@@ -25,7 +18,7 @@ use crate::error::RuntimeError;
 pub struct IpcClient {
     pub mining: MiningClient,
     pub thread: ThreadClient,
-    pub rpc_task: JoinHandle<Result<(), capnp::Error>>,
+    pub rpc_task: JoinHandle<Result<(), CapnpError>>,
     pub disconnector: Disconnector<rpc_twoparty_capnp::Side>,
 }
 

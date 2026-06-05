@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-capnp = "0.26.0"
-capnp-rpc = "0.26.0"
+# Import the Cap'N Proto schemas for Bitcoin Core v31.0.
+bitcoin-capnp-types = "0.2.1"
 shared = { path = "../../shared" }
 
 [features]
@@ -17,6 +17,3 @@ nats_integration_tests = []
 
 # Run integration tests needing a Bitcoin Core node.
 node_integration_tests = []
-
-[build-dependencies]
-capnpc = "0.26.0"

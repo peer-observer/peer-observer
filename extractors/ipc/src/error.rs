@@ -1,3 +1,4 @@
+use bitcoin_capnp_types::capnp::Error as CapnpError;
 use shared::async_nats::{self, ConnectErrorKind};
 use shared::log::SetLoggerError;
 use std::error;
@@ -9,7 +10,7 @@ use std::time::SystemTimeError;
 pub enum RuntimeError {
     SetLogger(SetLoggerError),
     Io(io::Error),
-    IpcCall(capnp::Error),
+    IpcCall(CapnpError),
     SystemTime(SystemTimeError),
     NatsConnect(async_nats::error::Error<ConnectErrorKind>),
     NatsPublish(async_nats::error::Error<async_nats::client::PublishErrorKind>),
@@ -41,8 +42,8 @@ impl error::Error for RuntimeError {
     }
 }
 
-impl From<capnp::Error> for RuntimeError {
-    fn from(e: capnp::Error) -> Self {
+impl From<CapnpError> for RuntimeError {
+    fn from(e: CapnpError) -> Self {
         RuntimeError::IpcCall(e)
     }
 }
