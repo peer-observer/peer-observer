@@ -1,15 +1,14 @@
 use ebpf_extractor::Args;
+use shared::anyhow::{Context, Result};
 use shared::log;
 use shared::tokio::{self, signal, sync::watch};
 use shared::{clap::Parser, simple_logger};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     let args = Args::parse();
 
-    if let Err(e) = simple_logger::init_with_level(args.log_level) {
-        eprintln!("ebpf extractor error: {}", e);
-    }
+    simple_logger::init_with_level(args.log_level).context("could not initialize logger")?;
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
@@ -24,6 +23,8 @@ async fn main() {
     });
 
     if let Err(e) = ebpf_extractor::run(args, shutdown_rx).await {
-        log::error!("Fatal error during extractor runtime: {}", e);
+        log::error!("ebpf-extractor failed: {:#}", e);
+        std::process::exit(1);
     }
+    Ok(())
 }

@@ -1,8 +1,8 @@
 #![cfg_attr(feature = "strict", deny(warnings))]
 
-use error::RuntimeError;
 use libbpf_rs::skel::{OpenSkel, Skel, SkelBuilder};
 use libbpf_rs::{Link, Map, MapCore, Object, ProgramMut, RingBuffer, RingBufferBuilder};
+use shared::anyhow::{bail, Context, Result};
 use shared::clap::Parser;
 use shared::log::{self, error};
 use shared::nats_subjects::Subject;
@@ -17,6 +17,7 @@ use shared::protobuf::event::event::PeerObserverEvent;
 use shared::protobuf::event::Event;
 use shared::tokio::sync::watch;
 use shared::{async_nats, clap, nats_util, tokio};
+use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::mem::MaybeUninit;
@@ -25,7 +26,6 @@ use std::path::Path;
 use std::time::Duration;
 use std::time::SystemTime;
 
-pub mod error;
 #[path = "tracing.gen.rs"]
 mod tracing;
 
@@ -225,26 +225,50 @@ fn process_exists(pid: i32) -> bool {
 }
 
 /// Find the BPF program with the given name
-pub fn find_prog_mut<'obj>(
-    object: &'obj Object,
-    name: &str,
-) -> Result<ProgramMut<'obj>, RuntimeError> {
+pub fn find_prog_mut<'obj>(object: &'obj Object, name: &str) -> Result<ProgramMut<'obj>> {
     match object.progs_mut().find(|prog| prog.name() == name) {
         Some(prog) => Ok(prog),
-        None => Err(RuntimeError::NoSuchBPFProg(name.to_string())),
+        None => bail!("could not find the BPF program {name}"),
     }
 }
 
 /// Find the BPF map with the given name
-pub fn find_map<'obj>(object: &'obj Object, name: &str) -> Result<Map<'obj>, RuntimeError> {
+pub fn find_map<'obj>(object: &'obj Object, name: &str) -> Result<Map<'obj>> {
     match object.maps().find(|map| map.name() == name) {
         Some(map) => Ok(map),
-        None => Err(RuntimeError::NoSuchBPFMap(name.to_string())),
+        None => bail!("could not find the BPF map {name}"),
     }
 }
 
+/// Errors that are expected to be transient while bitcoind is (re)starting:
+/// the process might not be running (yet), or its pid file might not exist
+/// (yet). The run loop swallows these and keeps retrying instead of exiting.
+///
+/// These are attached as `anyhow` context so they keep their underlying source
+/// error while staying discoverable via `downcast_ref`.
+#[derive(Debug)]
+enum TransientStartupError {
+    NoProcessWithPid(i32),
+    NoPidFile(String),
+}
+
+impl fmt::Display for TransientStartupError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TransientStartupError::NoProcessWithPid(pid) => {
+                write!(f, "could not find process with PID {pid}")
+            }
+            TransientStartupError::NoPidFile(path) => {
+                write!(f, "could not open pid file from {path}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for TransientStartupError {}
+
 /// Returns the bitcoind pid from the args or from the file supplied in the args
-fn bitcoind_pid(args: &Args) -> Result<i32, RuntimeError> {
+fn bitcoind_pid(args: &Args) -> Result<i32> {
     // The clap arg group "pid" takes care that one of bitcoind_pid or
     // bitcoind_pid_file is set
     if let Some(pid) = args.bitcoind_pid {
@@ -261,11 +285,16 @@ fn bitcoind_pid(args: &Args) -> Result<i32, RuntimeError> {
         .clone()
         .expect("pid file path should be set");
 
-    let file = File::open(&path).map_err(|e| RuntimeError::NoPidFile((path.clone(), e)))?;
+    let file = File::open(&path).with_context(|| TransientStartupError::NoPidFile(path.clone()))?;
     let mut reader = BufReader::new(file);
     let mut content = String::new();
-    reader.read_to_string(&mut content)?;
-    let pid: i32 = content.trim().parse()?;
+    reader
+        .read_to_string(&mut content)
+        .with_context(|| format!("reading pid file from {path}"))?;
+    let pid: i32 = content
+        .trim()
+        .parse()
+        .with_context(|| format!("parsing the pid from pid file {path}"))?;
     Ok(pid)
 }
 
@@ -277,7 +306,7 @@ fn pid_comes_from_file(args: &Args) -> bool {
 
 /// Returns the pid of the bitcoind process, by deriving it from the args. It also checks
 /// that the process with that pid exists.
-fn try_get_running_process_pid(args: &Args) -> Result<i32, RuntimeError> {
+fn try_get_running_process_pid(args: &Args) -> Result<i32> {
     let pid = bitcoind_pid(args)?;
 
     if process_exists(pid) {
@@ -292,7 +321,7 @@ fn try_get_running_process_pid(args: &Args) -> Result<i32, RuntimeError> {
         }
         Ok(pid)
     } else {
-        Err(RuntimeError::NoProcessWithPid(pid))
+        Err(TransientStartupError::NoProcessWithPid(pid).into())
     }
 }
 
@@ -302,21 +331,22 @@ fn init_bpf_listener<'a, 'b>(
     pid: i32,
     nc: &'a async_nats::Client,
     obj_container: &'b mut MaybeUninit<libbpf_rs::OpenObject>,
-) -> Result<
-    (
-        i32,
-        LogDropCall<tracing::TracingSkel<'b>>,
-        LogDropCall<RingBuffer<'a>>,
-        LogDropCall<Vec<Link>>,
-    ),
-    RuntimeError,
-> {
+) -> Result<(
+    i32,
+    LogDropCall<tracing::TracingSkel<'b>>,
+    LogDropCall<RingBuffer<'a>>,
+    LogDropCall<Vec<Link>>,
+)> {
     let mut skel_builder = tracing::TracingSkelBuilder::default();
     skel_builder.obj_builder.debug(args.libbpf_debug);
     log::info!("Opening BPF skeleton with debug={}..", args.libbpf_debug);
-    let open_skel: tracing::OpenTracingSkel = skel_builder.open(obj_container)?;
+    let open_skel: tracing::OpenTracingSkel = skel_builder
+        .open(obj_container)
+        .context("opening the BPF skeleton")?;
     log::info!("Loading BPF functions and maps into kernel..");
-    let skel: tracing::TracingSkel = open_skel.load()?;
+    let skel: tracing::TracingSkel = open_skel
+        .load()
+        .context("loading the BPF programs and maps into the kernel")?;
     let obj = skel.object();
 
     // Update the ebpf-extractor docs in the README.md when editing the active_tracepoints.
@@ -399,7 +429,9 @@ fn init_bpf_listener<'a, 'b>(
         );
     }
 
-    let ring_buffers = ringbuff_builder.build()?;
+    let ring_buffers = ringbuff_builder
+        .build()
+        .context("building the BPF ring buffers")?;
     log::info!(
         "Startup successful. Starting to extract events from '{}'..",
         args.bitcoind_path
@@ -413,7 +445,7 @@ fn init_bpf_listener<'a, 'b>(
     ))
 }
 
-pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<(), RuntimeError> {
+pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<()> {
     if args.no_tracepoints_enabled() {
         log::error!("No tracepoints enabled.");
         return Ok(());
@@ -421,9 +453,11 @@ pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<(), R
 
     let pid = try_get_running_process_pid(&args)?;
 
-    let nc = nats_util::prepare_connection(&args.nats)?
+    let nc = nats_util::prepare_connection(&args.nats)
+        .context("preparing NATS connection")?
         .connect(&args.nats.address)
-        .await?;
+        .await
+        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
     log::info!("Connected to NATS server at {}", &args.nats.address);
 
     let mut obj_container = MaybeUninit::uninit();
@@ -486,14 +520,17 @@ pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<(), R
                     drop(_loaded_obj);
                     drop(ring_buffers);
                     (pid, _loaded_obj, ring_buffers, _links) =
-                        init_bpf_listener(&args, new_pid, &nc, &mut obj_container).unwrap();
+                        init_bpf_listener(&args, new_pid, &nc, &mut obj_container)
+                            .context("re-initializing the BPF listener after bitcoind restart")?;
                     last_event_timestamp = SystemTime::now();
                     has_warned_about_no_events = false;
                 }
-                // Restarting the bitcoind process can take some time
-                Err(RuntimeError::NoProcessWithPid(_) | RuntimeError::NoPidFile(_)) => {}
+                // Restarting the bitcoind process can take some time, so keep
+                // retrying on transient errors and only bail on real failures.
                 Err(e) => {
-                    return Err(e);
+                    if e.downcast_ref::<TransientStartupError>().is_none() {
+                        return Err(e);
+                    }
                 }
             }
         }
