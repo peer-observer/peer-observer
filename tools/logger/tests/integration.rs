@@ -23,12 +23,15 @@ use shared::{
         rpc_extractor::{self, PeerInfo, PeerInfos},
     },
     testing::{nats_publisher::NatsPublisherForTesting, nats_server::NatsServerForTesting},
-    tokio::{self, sync::watch, time::sleep},
+    tokio::{self, select, sync::watch, task::JoinHandle, time::sleep},
 };
 
 use std::{
     collections::HashMap,
-    sync::{Mutex as StdMutex, Once},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex as StdMutex, Once,
+    },
     time::Duration,
 };
 
@@ -62,7 +65,7 @@ fn init_logger() -> Result<(), SetLoggerError> {
     Ok(())
 }
 
-pub fn get_logged_messages() -> Vec<String> {
+fn get_logged_messages() -> Vec<String> {
     LOGS.lock().unwrap().clone()
 }
 
@@ -113,21 +116,83 @@ fn make_test_args(nats_port: u16, loggers: EnabledLoggersInTest) -> Args {
     }
 }
 
-fn check_logs(expected: &[&str]) -> Result<bool, std::io::Error> {
-    let logs = get_logged_messages();
+// silent: the poll loop calls this every iteration
+fn all_lines_present(logs: &[String], expected: &[&str]) -> bool {
+    expected.iter().all(|line| {
+        let line = line.trim();
+        line.is_empty() || logs.iter().any(|l| l == line)
+    })
+}
 
-    let mut no_lines_missing = true;
+fn print_logger_failure(logs: &[String], expected: &[&str]) {
     for line in expected {
         let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        if !logs.contains(&String::from(line)) {
+        if !line.is_empty() && !logs.iter().any(|l| l == line) {
             println!("log does not contain line: '{}'", line);
-            no_lines_missing = false;
         }
     }
-    Ok(no_lines_missing)
+}
+
+// unique id per call: LOGS is one buffer shared by all tests, so a fixed
+// marker could match another test's logger
+static MARKER_SEQ: AtomicU64 = AtomicU64::new(0);
+
+// NATS drops anything published before the SUB registers (#456), so
+// re-publish a marker until it lands in the log before sending real events.
+async fn wait_for_logger_ready(
+    publisher: &NatsPublisherForTesting,
+    logger_handle: &mut JoinHandle<()>,
+) {
+    let seq = MARKER_SEQ.fetch_add(1, Ordering::Relaxed);
+    let token = format!("logger-readiness-marker-{seq}");
+    // This log format matches logger::log_event log-extractor events format
+    let marker_log_line = format!("log event: 0 [unknown] UnknownLogMessage({token})");
+    let marker_event = Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
+        category: LogDebugCategory::Unknown.into(),
+        log_timestamp: 0,
+        threadname: String::new(),
+        log_level: log_extractor::LogLevel::Info.into(),
+        log_line_bytes: 0,
+        log_event: Some(log_extractor::log::LogEvent::UnknownLogMessage(
+            log_extractor::UnknownLogMessage {
+                raw_message: token.clone(),
+            },
+        )),
+    }))
+    .unwrap();
+
+    select! {
+        _ = async {
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            loop {
+                publisher
+                    .publish(Subject::LogExtractor.to_string(), marker_event.encode_to_vec())
+                    .await;
+
+                // If the publish raced ahead of subscribe("*"), NATS dropped it.
+                // Wait briefly for possible delivery, then publish the marker again.
+                let inner_deadline = tokio::time::Instant::now() + Duration::from_millis(200);
+                loop {
+                    if get_logged_messages().iter().any(|line| line == &marker_log_line) {
+                        return;
+                    }
+                    if tokio::time::Instant::now() >= inner_deadline {
+                        break;
+                    }
+                    // Don't hammer the NATS server
+                    sleep(Duration::from_millis(20)).await;
+                }
+
+                if tokio::time::Instant::now() >= deadline {
+                    panic!("logger did not become ready: marker '{token}' not logged within 5s");
+                }
+            }
+        } => {}
+        result = logger_handle => {
+            result.unwrap();
+            unreachable!("logger task exited before the readiness marker became visible");
+        }
+    }
 }
 
 async fn publish_and_check(events: &[Event], subject: Subject, expected: &str) {
@@ -135,15 +200,16 @@ async fn publish_and_check(events: &[Event], subject: Subject, expected: &str) {
 
     let nats_server = NatsServerForTesting::new(&[]).await;
     let nats_publisher = NatsPublisherForTesting::new(nats_server.port).await;
+    let nats_port = nats_server.port;
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
-    let logger_handle = tokio::spawn(async move {
-        let args = make_test_args(nats_server.port, EnabledLoggersInTest::all());
-        logger::run(args, shutdown_rx.clone()).await.unwrap();
+    let mut logger_handle = tokio::spawn(async move {
+        let args = make_test_args(nats_port, EnabledLoggersInTest::all());
+        logger::run(args, shutdown_rx).await.unwrap();
     });
-    // allow the logger tool to start
-    sleep(Duration::from_secs(1)).await;
+
+    wait_for_logger_ready(&nats_publisher, &mut logger_handle).await;
 
     for event in events {
         log::debug!("publishing: {:?}", event);
@@ -152,10 +218,19 @@ async fn publish_and_check(events: &[Event], subject: Subject, expected: &str) {
             .await;
     }
 
-    sleep(Duration::from_millis(100)).await;
-
     let expected_lines: Vec<&str> = expected.split('\n').collect();
-    assert!(check_logs(&expected_lines).expect("Could not check logs"));
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        let logs = get_logged_messages();
+        if all_lines_present(&logs, &expected_lines) {
+            break;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            print_logger_failure(&logs, &expected_lines);
+            panic!("timed out waiting for expected log lines");
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
 
     shutdown_tx.send(true).unwrap();
     logger_handle.await.unwrap();
