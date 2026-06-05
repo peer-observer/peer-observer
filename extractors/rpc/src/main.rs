@@ -1,15 +1,14 @@
 use rpc_extractor::Args;
+use shared::anyhow::{Context, Result};
 use shared::log;
 use shared::tokio::{self, signal, sync::watch};
 use shared::{clap::Parser, simple_logger};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     let args = Args::parse();
 
-    if let Err(e) = simple_logger::init_with_level(args.log_level) {
-        eprintln!("rpc extractor error: {}", e);
-    }
+    simple_logger::init_with_level(args.log_level).context("could not initialize logger")?;
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     // No bound address notification needed in production (used in tests to
@@ -19,13 +18,17 @@ async fn main() {
     tokio::select! {
         _ = signal::ctrl_c() => {
             log::info!("Received Ctrl+C. Stopping...");
-            let _ = shutdown_tx.send(true);
+            shutdown_tx.send(true).context("sending shutdown signal")
         }
         result = rpc_handle => {
-            match result.unwrap() {
-                Ok(_) => log::info!("rpc-extractor task completed."),
-                Err(e) => log::error!("rpc-extractor task failed: {e}"),
+            match result.context("rpc-extractor runtime")? {
+                Ok(()) => log::info!("rpc-extractor finished"),
+                Err(e) => {
+                    log::error!("rpc-extractor failed: {:#}", e);
+                    std::process::exit(1);
+                }
             }
+            Ok(())
         }
     }
 }

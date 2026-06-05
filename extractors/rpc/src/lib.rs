@@ -1,6 +1,4 @@
-use shared::bitcoind::mtype::{
-    GetBlockchainInfo, GetChainTxStats, GetNetworkInfo, GetOrphanTxsVerboseTwo,
-};
+use shared::anyhow::{Context, Result};
 use shared::clap::{ArgGroup, Parser};
 use shared::corepc_client::client_sync::Auth;
 use shared::corepc_client::client_sync::v30::{Client, FeeEstimateMode};
@@ -15,10 +13,8 @@ use shared::tokio::time::{self, Duration};
 use shared::{async_nats, clap};
 use std::net::SocketAddr;
 
-mod error;
 pub mod metrics;
 
-use error::{FetchOrPublishError, RuntimeError};
 use metrics::Metrics;
 
 /// The peer-observer rpc-extractor periodically queries data from the
@@ -128,9 +124,8 @@ pub async fn run(
     args: Args,
     mut shutdown_rx: watch::Receiver<bool>,
     bound_addr_tx: Option<oneshot::Sender<SocketAddr>>,
-) -> Result<(), RuntimeError> {
-    // Create metrics instance with its own registry
-    let metrics = Metrics::new();
+) -> Result<()> {
+    let metrics = Metrics::new().context("creating metrics registry")?;
 
     let auth: Auth = match args.rpc_cookie_file {
         Some(path) => Auth::CookieFile(path.into()),
@@ -139,11 +134,14 @@ pub async fn run(
             args.rpc_password.expect("need an RPC password"),
         ),
     };
-    let rpc_client = Client::new_with_auth(&format!("http://{}", args.rpc_host), auth)?;
+    let rpc_client = Client::new_with_auth(&format!("http://{}", args.rpc_host), auth)
+        .context("creating new RPC client")?;
 
-    let nats_client = nats_util::prepare_connection(&args.nats)?
+    let nats_client = nats_util::prepare_connection(&args.nats)
+        .context("preparing NATS connection")?
         .connect(&args.nats.address)
-        .await?;
+        .await
+        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
     log::info!("Connected to NATS server at {}", &args.nats.address);
 
     // Start the metric server with our custom registry. This happens after
@@ -152,7 +150,8 @@ pub async fn run(
     // bound_addr_tx against the extractor task handle) instead of leaving
     // the test to time out. Matches the order used in p2p_extractor::run.
     let local_addr =
-        shared::metricserver::start(&args.prometheus_address, Some(metrics.registry.clone()))?;
+        shared::metricserver::start(&args.prometheus_address, Some(metrics.registry.clone()))
+            .context("starting metrics server")?;
 
     // Notify the caller of the actual bound address (used in tests with port 0).
     if let Some(tx) = bound_addr_tx {
@@ -236,60 +235,41 @@ pub async fn run(
         log::warn!("No RPC configured to be queried!");
     }
 
+    // Runs `$func` against the RPC and NATS clients unless its `disable_*` flag
+    // is set, logging (but not propagating) any error. `rpc_client`,
+    // `nats_client` and `metrics` are captured from this scope.
+    macro_rules! fetch {
+        ($disabled:expr, $func:ident) => {
+            if !$disabled {
+                if let Err(e) = $func(&rpc_client, &nats_client, &metrics).await {
+                    log::error!(
+                        "Could not fetch and publish '{}': {:#}",
+                        stringify!($func),
+                        e
+                    );
+                }
+            }
+        };
+    }
+
     loop {
         shared::tokio::select! {
             _ = interval.tick() => {
-                if !args.disable_getpeerinfo
-                    && let Err(e) = getpeerinfo(&rpc_client, &nats_client, &metrics).await {
-                        log::error!("Could not fetch and publish 'getpeerinfo': {}", e)
-                    }
-                if !args.disable_getmempoolinfo
-                    && let Err(e) = getmempoolinfo(&rpc_client, &nats_client, &metrics).await {
-                        log::error!("Could not fetch and publish 'getmempoolinfo': {}", e)
-                    }
-                if !args.disable_uptime
-                    && let Err(e) = uptime(&rpc_client, &nats_client, &metrics).await {
-                        log::error!("Could not fetch and publish 'uptime': {}", e)
-                    }
-                if !args.disable_getnettotals
-                    && let Err(e) = getnettotals(&rpc_client, &nats_client, &metrics).await {
-                        log::error!("Could not fetch and publish 'getnettotals': {}", e)
-                    }
-                if !args.disable_getmemoryinfo
-                    && let Err(e) = getmemoryinfo(&rpc_client, &nats_client, &metrics).await {
-                        log::error!("Could not fetch and publish 'getmemoryinfo': {}", e)
-                    }
-                if !args.disable_getaddrmaninfo
-                    && let Err(e) = getaddrmaninfo(&rpc_client, &nats_client, &metrics).await {
-                        log::error!("Could not fetch and publish 'getaddrmaninfo': {}", e)
-                    }
-                if !args.disable_getnetworkinfo
-                    && let Err(e) = getnetworkinfo(&rpc_client, &nats_client, &metrics).await {
-                        log::error!("Could not fetch and publish 'getnetworkinfo': {}", e)
-                }
-                if !args.disable_getorphantxs
-                    && let Err(e) = getorphantxs(&rpc_client, &nats_client, &metrics).await {
-                        log::error!("Could not fetch and publish 'getorphantxs': {}", e)
-                }
-                if !args.disable_estimatesmartfee
-                    && let Err(e) = estimatesmartfee(&rpc_client, &nats_client, &metrics).await {
-                        log::error!("Could not fetch and publish 'estimatesmartfee': {}", e)
-                }
+                fetch!(args.disable_getpeerinfo, getpeerinfo);
+                fetch!(args.disable_getmempoolinfo, getmempoolinfo);
+                fetch!(args.disable_uptime, uptime);
+                fetch!(args.disable_getnettotals, getnettotals);
+                fetch!(args.disable_getmemoryinfo, getmemoryinfo);
+                fetch!(args.disable_getaddrmaninfo, getaddrmaninfo);
+                fetch!(args.disable_getnetworkinfo, getnetworkinfo);
+                fetch!(args.disable_getorphantxs, getorphantxs);
+                fetch!(args.disable_estimatesmartfee, estimatesmartfee);
             }
             _ = less_frequent_interval.tick() => {
                 // make sure to update the Args docs when changing these:
-                if !args.disable_getchaintxstats
-                    && let Err(e) = getchaintxstats(&rpc_client, &nats_client, &metrics).await {
-                        log::error!("Could not fetch and publish 'getchaintxstats': {}", e)
-                }
-                if !args.disable_getblockchaininfo
-                    && let Err(e) = getblockchaininfo(&rpc_client, &nats_client, &metrics).await {
-                        log::error!("Could not fetch and publish 'getblockchaininfo': {}", e)
-                }
-                if !args.disable_getrawaddrman
-                    && let Err(e) = getrawaddrman(&rpc_client, &nats_client, &metrics).await {
-                        log::error!("Could not fetch and publish 'getrawaddrman': {}", e)
-                }
+                fetch!(args.disable_getchaintxstats, getchaintxstats);
+                fetch!(args.disable_getblockchaininfo, getblockchaininfo);
+                fetch!(args.disable_getrawaddrman, getrawaddrman);
             }
             res = shutdown_rx.changed() => {
                 match res {
@@ -335,289 +315,254 @@ where
     res
 }
 
-async fn getpeerinfo(
-    rpc_client: &Client,
+async fn publish_to_nats(
+    event: &Event,
     nats_client: &async_nats::Client,
     metrics: &Metrics,
-) -> Result<(), FetchOrPublishError> {
-    let peer_info = measure_rpc_call("getpeerinfo", metrics, || rpc_client.get_peer_info())?;
-
-    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
-        rpc_event: Some(rpc_extractor::rpc::RpcEvent::PeerInfos(peer_info.into())),
-    }))?;
-
+    method_name: &str,
+) -> Result<()> {
     nats_client
-        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
+        .publish(Subject::Rpc.to_string(), event.encode_to_vec().into())
         .await
         .inspect_err(|_| {
             metrics
                 .nats_publish_errors
-                .with_label_values(&["getpeerinfo"])
+                .with_label_values(&[method_name])
                 .inc();
-        })?;
-    Ok(())
+        })
+        .with_context(|| format!("publishing {method_name} result to NATS"))
+}
+
+/// Fetches data via `call`, turns the raw RPC response into an `RpcEvent` using
+/// `to_event` (which applies `.into_model()` / `.into()` as needed), wraps it in
+/// a protobuf `Event`, and publishes it to NATS.
+///
+/// Errors are recorded against the per-stage metrics counters: a fetch failure
+/// via [`measure_rpc_call`] (`rpc_fetch_errors`), a `to_event` failure (e.g. a
+/// model conversion) via `rpc_model_errors`, and a publish failure via
+/// `nats_publish_errors`.
+async fn fetch_and_publish<R, E, F, M>(
+    method_name: &str,
+    nats_client: &async_nats::Client,
+    metrics: &Metrics,
+    call: F,
+    to_event: M,
+) -> Result<()>
+where
+    F: FnOnce() -> Result<R, E>,
+    E: std::error::Error + Send + Sync + 'static,
+    M: FnOnce(R) -> Result<rpc_extractor::rpc::RpcEvent>,
+{
+    let response = measure_rpc_call(method_name, metrics, call)
+        .with_context(|| format!("measuring the {method_name} RPC call"))?;
+
+    let rpc_event = to_event(response)
+        .inspect_err(|_| {
+            metrics
+                .rpc_model_errors
+                .with_label_values(&[method_name])
+                .inc();
+        })
+        .with_context(|| format!("building the {method_name} event payload"))?;
+
+    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+        rpc_event: Some(rpc_event),
+    }))
+    .with_context(|| format!("creating the protobuf {method_name} event"))?;
+
+    publish_to_nats(&proto, nats_client, metrics, method_name).await
+}
+
+async fn getpeerinfo(
+    rpc_client: &Client,
+    nats_client: &async_nats::Client,
+    metrics: &Metrics,
+) -> Result<()> {
+    fetch_and_publish(
+        "getpeerinfo",
+        nats_client,
+        metrics,
+        || rpc_client.get_peer_info(),
+        |r| Ok(rpc_extractor::rpc::RpcEvent::PeerInfos(r.into())),
+    )
+    .await
 }
 
 async fn getmempoolinfo(
     rpc_client: &Client,
     nats_client: &async_nats::Client,
     metrics: &Metrics,
-) -> Result<(), FetchOrPublishError> {
-    let mempool_info =
-        measure_rpc_call("getmempoolinfo", metrics, || rpc_client.get_mempool_info())?
-            .into_model()?;
-
-    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
-        rpc_event: Some(rpc_extractor::rpc::RpcEvent::MempoolInfo(
-            mempool_info.into(),
-        )),
-    }))?;
-
-    nats_client
-        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
-        .await
-        .inspect_err(|_| {
-            metrics
-                .nats_publish_errors
-                .with_label_values(&["getmempoolinfo"])
-                .inc();
-        })?;
-    Ok(())
+) -> Result<()> {
+    fetch_and_publish(
+        "getmempoolinfo",
+        nats_client,
+        metrics,
+        || rpc_client.get_mempool_info(),
+        |r| {
+            Ok(rpc_extractor::rpc::RpcEvent::MempoolInfo(
+                r.into_model()?.into(),
+            ))
+        },
+    )
+    .await
 }
 
 async fn uptime(
     rpc_client: &Client,
     nats_client: &async_nats::Client,
     metrics: &Metrics,
-) -> Result<(), FetchOrPublishError> {
-    let uptime_seconds = measure_rpc_call("uptime", metrics, || rpc_client.uptime())?;
-
-    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
-        rpc_event: Some(rpc_extractor::rpc::RpcEvent::Uptime(uptime_seconds)),
-    }))?;
-
-    nats_client
-        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
-        .await
-        .inspect_err(|_| {
-            metrics
-                .nats_publish_errors
-                .with_label_values(&["uptime"])
-                .inc();
-        })?;
-    Ok(())
+) -> Result<()> {
+    fetch_and_publish(
+        "uptime",
+        nats_client,
+        metrics,
+        || rpc_client.uptime(),
+        |r| Ok(rpc_extractor::rpc::RpcEvent::Uptime(r)),
+    )
+    .await
 }
 
 async fn getnettotals(
     rpc_client: &Client,
     nats_client: &async_nats::Client,
     metrics: &Metrics,
-) -> Result<(), FetchOrPublishError> {
-    let net_totals = measure_rpc_call("getnettotals", metrics, || rpc_client.get_net_totals())?;
-
-    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
-        rpc_event: Some(rpc_extractor::rpc::RpcEvent::NetTotals(net_totals.into())),
-    }))?;
-
-    nats_client
-        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
-        .await
-        .inspect_err(|_| {
-            metrics
-                .nats_publish_errors
-                .with_label_values(&["getnettotals"])
-                .inc();
-        })?;
-    Ok(())
+) -> Result<()> {
+    fetch_and_publish(
+        "getnettotals",
+        nats_client,
+        metrics,
+        || rpc_client.get_net_totals(),
+        |r| Ok(rpc_extractor::rpc::RpcEvent::NetTotals(r.into())),
+    )
+    .await
 }
 
 async fn getmemoryinfo(
     rpc_client: &Client,
     nats_client: &async_nats::Client,
     metrics: &Metrics,
-) -> Result<(), FetchOrPublishError> {
-    let memory_info = measure_rpc_call("getmemoryinfo", metrics, || rpc_client.get_memory_info())?;
-
-    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
-        rpc_event: Some(rpc_extractor::rpc::RpcEvent::MemoryInfo(memory_info.into())),
-    }))?;
-
-    nats_client
-        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
-        .await
-        .inspect_err(|_| {
-            metrics
-                .nats_publish_errors
-                .with_label_values(&["getmemoryinfo"])
-                .inc();
-        })?;
-    Ok(())
+) -> Result<()> {
+    fetch_and_publish(
+        "getmemoryinfo",
+        nats_client,
+        metrics,
+        || rpc_client.get_memory_info(),
+        |r| Ok(rpc_extractor::rpc::RpcEvent::MemoryInfo(r.into())),
+    )
+    .await
 }
 
 async fn getaddrmaninfo(
     rpc_client: &Client,
     nats_client: &async_nats::Client,
     metrics: &Metrics,
-) -> Result<(), FetchOrPublishError> {
-    let addrman_info =
-        measure_rpc_call("getaddrmaninfo", metrics, || rpc_client.get_addr_man_info())?;
-
-    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
-        rpc_event: Some(rpc_extractor::rpc::RpcEvent::AddrmanInfo(
-            addrman_info.into(),
-        )),
-    }))?;
-
-    nats_client
-        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
-        .await
-        .inspect_err(|_| {
-            metrics
-                .nats_publish_errors
-                .with_label_values(&["getaddrmaninfo"])
-                .inc();
-        })?;
-    Ok(())
+) -> Result<()> {
+    fetch_and_publish(
+        "getaddrmaninfo",
+        nats_client,
+        metrics,
+        || rpc_client.get_addr_man_info(),
+        |r| Ok(rpc_extractor::rpc::RpcEvent::AddrmanInfo(r.into())),
+    )
+    .await
 }
 
 async fn getchaintxstats(
     rpc_client: &Client,
     nats_client: &async_nats::Client,
     metrics: &Metrics,
-) -> Result<(), FetchOrPublishError> {
-    let chain_tx_stats: GetChainTxStats = measure_rpc_call("getchaintxstats", metrics, || {
-        rpc_client.get_chain_tx_stats()
-    })?
-    .into_model()?;
-
-    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
-        rpc_event: Some(rpc_extractor::rpc::RpcEvent::ChainTxStats(
-            chain_tx_stats.into(),
-        )),
-    }))?;
-
-    nats_client
-        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
-        .await
-        .inspect_err(|_| {
-            metrics
-                .nats_publish_errors
-                .with_label_values(&["getchaintxstats"])
-                .inc();
-        })?;
-    Ok(())
+) -> Result<()> {
+    fetch_and_publish(
+        "getchaintxstats",
+        nats_client,
+        metrics,
+        || rpc_client.get_chain_tx_stats(),
+        |r| {
+            Ok(rpc_extractor::rpc::RpcEvent::ChainTxStats(
+                r.into_model()?.into(),
+            ))
+        },
+    )
+    .await
 }
 
 async fn getnetworkinfo(
     rpc_client: &Client,
     nats_client: &async_nats::Client,
     metrics: &Metrics,
-) -> Result<(), FetchOrPublishError> {
-    let network_info: GetNetworkInfo =
-        measure_rpc_call("getnetworkinfo", metrics, || rpc_client.get_network_info())?
-            .into_model()?;
-
-    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
-        rpc_event: Some(rpc_extractor::rpc::RpcEvent::NetworkInfo(
-            network_info.into(),
-        )),
-    }))?;
-
-    nats_client
-        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
-        .await
-        .inspect_err(|_| {
-            metrics
-                .nats_publish_errors
-                .with_label_values(&["getnetworkinfo"])
-                .inc();
-        })?;
-    Ok(())
+) -> Result<()> {
+    fetch_and_publish(
+        "getnetworkinfo",
+        nats_client,
+        metrics,
+        || rpc_client.get_network_info(),
+        |r| {
+            Ok(rpc_extractor::rpc::RpcEvent::NetworkInfo(
+                r.into_model()?.into(),
+            ))
+        },
+    )
+    .await
 }
 
 async fn getblockchaininfo(
     rpc_client: &Client,
     nats_client: &async_nats::Client,
     metrics: &Metrics,
-) -> Result<(), FetchOrPublishError> {
-    let blockchain_info: GetBlockchainInfo =
-        measure_rpc_call("getblockchaininfo", metrics, || {
-            rpc_client.get_blockchain_info()
-        })?
-        .into_model()?;
-
-    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
-        rpc_event: Some(rpc_extractor::rpc::RpcEvent::BlockchainInfo(
-            blockchain_info.into(),
-        )),
-    }))?;
-
-    nats_client
-        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
-        .await
-        .inspect_err(|_| {
-            metrics
-                .nats_publish_errors
-                .with_label_values(&["getblockchaininfo"])
-                .inc();
-        })?;
-    Ok(())
+) -> Result<()> {
+    fetch_and_publish(
+        "getblockchaininfo",
+        nats_client,
+        metrics,
+        || rpc_client.get_blockchain_info(),
+        |r| {
+            Ok(rpc_extractor::rpc::RpcEvent::BlockchainInfo(
+                r.into_model()?.into(),
+            ))
+        },
+    )
+    .await
 }
 
 async fn getorphantxs(
     rpc_client: &Client,
     nats_client: &async_nats::Client,
     metrics: &Metrics,
-) -> Result<(), FetchOrPublishError> {
-    let orphans: GetOrphanTxsVerboseTwo = measure_rpc_call("getorphantxs", metrics, || {
-        rpc_client.get_orphan_txs_verbosity_2()
-    })?
-    .into_model()?;
-
-    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
-        rpc_event: Some(rpc_extractor::rpc::RpcEvent::OrphanTxs(orphans.into())),
-    }))?;
-
-    nats_client
-        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
-        .await
-        .inspect_err(|_| {
-            metrics
-                .nats_publish_errors
-                .with_label_values(&["getorphantxs"])
-                .inc();
-        })?;
-    Ok(())
+) -> Result<()> {
+    fetch_and_publish(
+        "getorphantxs",
+        nats_client,
+        metrics,
+        || rpc_client.get_orphan_txs_verbosity_2(),
+        |r| {
+            Ok(rpc_extractor::rpc::RpcEvent::OrphanTxs(
+                r.into_model()?.into(),
+            ))
+        },
+    )
+    .await
 }
 
 async fn getrawaddrman(
     rpc_client: &Client,
     nats_client: &async_nats::Client,
     metrics: &Metrics,
-) -> Result<(), FetchOrPublishError> {
-    let addrman = measure_rpc_call("getrawaddrman", metrics, || rpc_client.get_raw_addrman())?;
-
-    let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
-        rpc_event: Some(rpc_extractor::rpc::RpcEvent::Addrman(addrman.into())),
-    }))?;
-
-    nats_client
-        .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
-        .await
-        .inspect_err(|_| {
-            metrics
-                .nats_publish_errors
-                .with_label_values(&["getrawaddrman"])
-                .inc();
-        })?;
-    Ok(())
+) -> Result<()> {
+    fetch_and_publish(
+        "getrawaddrman",
+        nats_client,
+        metrics,
+        || rpc_client.get_raw_addrman(),
+        |r| Ok(rpc_extractor::rpc::RpcEvent::Addrman(r.into())),
+    )
+    .await
 }
 
 async fn estimatesmartfee(
     rpc_client: &Client,
     nats_client: &async_nats::Client,
     metrics: &Metrics,
-) -> Result<(), FetchOrPublishError> {
+) -> Result<()> {
     const BLOCKS_10MIN: u32 = 1;
     const BLOCKS_1HOUR: u32 = 6;
     const BLOCKS_1DAY: u32 = 144;
@@ -628,26 +573,19 @@ async fn estimatesmartfee(
 
     for target in BLOCK_TARGETS {
         for mode in MODES {
-            let estimate = measure_rpc_call("estimatesmartfee", metrics, || {
-                rpc_client.estimate_smart_fee_with_mode(target, mode)
-            })?;
-            let estimate = estimate.into_model().unwrap();
-
-            let proto = Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
-                rpc_event: Some(rpc_extractor::rpc::RpcEvent::EstimateSmartFee(
-                    EstimateSmartFee::from_rpc(estimate, target, mode.into()),
-                )),
-            }))?;
-
-            nats_client
-                .publish(Subject::Rpc.to_string(), proto.encode_to_vec().into())
-                .await
-                .inspect_err(|_| {
-                    metrics
-                        .nats_publish_errors
-                        .with_label_values(&["estimatesmartfee"])
-                        .inc();
-                })?;
+            fetch_and_publish(
+                "estimatesmartfee",
+                nats_client,
+                metrics,
+                || rpc_client.estimate_smart_fee_with_mode(target, mode),
+                |r| {
+                    let estimate = r.into_model()?;
+                    Ok(rpc_extractor::rpc::RpcEvent::EstimateSmartFee(
+                        EstimateSmartFee::from_rpc(estimate, target, mode.into()),
+                    ))
+                },
+            )
+            .await?;
         }
     }
 
