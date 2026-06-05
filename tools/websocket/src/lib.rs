@@ -1,5 +1,6 @@
 #![cfg_attr(feature = "strict", deny(warnings))]
 
+use shared::anyhow::{Context, Result};
 use shared::clap::Parser;
 use shared::futures::{stream::SplitSink, SinkExt, StreamExt};
 use shared::log;
@@ -24,8 +25,6 @@ use std::sync::Arc;
 use tokio_tungstenite::{
     accept_async, tungstenite::protocol::Message as TungsteniteMessage, WebSocketStream,
 };
-
-pub mod error;
 
 /// A peer-observer tool that sends out all events on a websocket
 #[derive(Parser, Debug)]
@@ -85,13 +84,18 @@ pub async fn run(
     args: Args,
     mut shutdown_rx: watch::Receiver<bool>,
     bound_addr_tx: Option<oneshot::Sender<SocketAddr>>,
-) -> Result<(), error::RuntimeError> {
-    let nc = nats_util::prepare_connection(&args.nats)?
+) -> Result<()> {
+    let nc = nats_util::prepare_connection(&args.nats)
+        .context("preparing NATS connection")?
         .connect(&args.nats.address)
-        .await?;
+        .await
+        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
     log::info!("Connected to NATS-server at {}", args.nats.address);
-    let mut sub = nc.subscribe("*").await?;
-    nc.flush().await?;
+    let mut sub = nc
+        .subscribe("*")
+        .await
+        .context("subscribing to all NATS subjects")?;
+    nc.flush().await.context("flushing the NATS connection")?;
 
     let clients = Arc::new(Mutex::new(HashMap::new()));
 
@@ -113,8 +117,12 @@ pub async fn run(
     }
 
     log::debug!("Starting websocket server on {}...", args.websocket_address);
-    let server = TcpListener::bind(args.websocket_address).await?;
-    let local_addr = server.local_addr()?;
+    let server = TcpListener::bind(args.websocket_address.as_str())
+        .await
+        .with_context(|| format!("binding the websocket server to {}", args.websocket_address))?;
+    let local_addr = server
+        .local_addr()
+        .context("reading the websocket server's local address")?;
     log::info!("Started websocket server on {}", local_addr);
 
     // Notify the caller of the actual bound address (used in tests with port 0).
