@@ -7,13 +7,12 @@ use bitcoin_capnp_types::{
 };
 
 use shared::{
+    anyhow::Result,
     futures::AsyncReadExt,
     protobuf::ipc_extractor::BlockTip,
     tokio::{self, net::UnixStream, task::JoinHandle},
     tokio_util,
 };
-
-use crate::error::RuntimeError;
 
 pub struct IpcClient {
     pub mining: MiningClient,
@@ -23,7 +22,7 @@ pub struct IpcClient {
 }
 
 impl IpcClient {
-    pub async fn init(stream: UnixStream) -> Result<Self, crate::error::RuntimeError> {
+    pub async fn init(stream: UnixStream) -> Result<Self> {
         let (reader, writer) = tokio_util::compat::TokioAsyncReadCompatExt::compat(stream).split();
         let network = Box::new(twoparty::VatNetwork::new(
             reader,
@@ -57,7 +56,7 @@ impl IpcClient {
         })
     }
 
-    pub async fn get_tip(&self) -> Result<Option<BlockTip>, RuntimeError> {
+    pub async fn get_tip(&self) -> Result<Option<BlockTip>> {
         let mut req = self.mining.get_tip_request();
         set_context(req.get().get_context()?, &self.thread);
 

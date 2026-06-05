@@ -1,3 +1,4 @@
+use shared::anyhow::{Context, Result};
 use shared::prometheus::{
     HistogramOpts, HistogramVec, IntCounterVec, Opts, Registry,
     register_histogram_vec_with_registry, register_int_counter_vec_with_registry,
@@ -25,9 +26,9 @@ pub struct Metrics {
 }
 
 impl Metrics {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         let registry = Registry::new_custom(Some(NAMESPACE.to_string()), None)
-            .expect("Could not create prometheus registry");
+            .context("creating prometheus registry")?;
 
         let ipc_fetch_duration = register_histogram_vec_with_registry!(
             HistogramOpts::new(
@@ -38,7 +39,7 @@ impl Metrics {
             &[LABEL_IPC_METHOD],
             registry
         )
-        .expect("Could not create ipc_fetch_duration_seconds metric");
+        .context("creating ipc_fetch_duration_seconds metric")?;
 
         let ipc_fetch_errors = register_int_counter_vec_with_registry!(
             Opts::new(
@@ -48,7 +49,7 @@ impl Metrics {
             &[LABEL_IPC_METHOD],
             registry
         )
-        .expect("Could not create ipc_fetch_errors_total metric");
+        .context("creating ipc_fetch_errors_total metric")?;
 
         let nats_publish_errors = register_int_counter_vec_with_registry!(
             Opts::new(
@@ -58,19 +59,13 @@ impl Metrics {
             &[LABEL_IPC_METHOD],
             registry
         )
-        .expect("Could not create nats_publish_errors_total metric");
+        .context("creating nats_publish_errors_total metric")?;
 
-        Self {
+        Ok(Self {
             registry,
             ipc_fetch_duration,
             ipc_fetch_errors,
             nats_publish_errors,
-        }
-    }
-}
-
-impl Default for Metrics {
-    fn default() -> Self {
-        Self::new()
+        })
     }
 }

@@ -1,19 +1,18 @@
 use ipc_extractor::Args;
 use shared::{
+    anyhow::{Context, Result},
     clap::Parser,
     log, simple_logger,
     tokio::{self, signal, sync::watch, task::LocalSet},
 };
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     let args = Args::parse();
 
-    if let Err(e) = simple_logger::init_with_level(args.log_level) {
-        eprintln!("ipc extractor error: {}", e);
-    }
+    simple_logger::init_with_level(args.log_level).context("could not initialize logger")?;
 
-    LocalSet::new()
+    let result = LocalSet::new()
         .run_until(async move {
             let (shutdown_tx, shutdown_rx) = watch::channel(false);
             let run_future = ipc_extractor::run(args, shutdown_rx, None);
@@ -23,18 +22,16 @@ async fn main() {
                 _ = signal::ctrl_c() => {
                     log::info!("Received Ctrl+C. Stopping...");
                     let _ = shutdown_tx.send(true);
-                    match run_future.await {
-                        Ok(_) => log::info!("ipc-extractor task completed."),
-                        Err(e) => log::error!("ipc-extractor task failed: {e}"),
-                    }
+                    run_future.await
                 }
-                result = &mut run_future => {
-                    match result {
-                        Ok(_) => log::info!("ipc-extractor task completed."),
-                        Err(e) => log::error!("ipc-extractor task failed: {e}"),
-                    }
-                }
+                result = &mut run_future => result,
             }
         })
         .await;
+
+    if let Err(e) = result {
+        log::error!("ipc-extractor failed: {:#}", e);
+        std::process::exit(1);
+    }
+    Ok(())
 }

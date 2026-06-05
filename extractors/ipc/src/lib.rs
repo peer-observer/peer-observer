@@ -1,4 +1,5 @@
 use shared::{
+    anyhow::{Context, Result},
     async_nats,
     clap::{self, Parser},
     log,
@@ -16,17 +17,13 @@ use shared::{
         time::{self, Duration},
     },
 };
-use std::io;
 use std::net::SocketAddr;
 
-mod error;
+mod ipc;
 mod metrics;
 
-use error::RuntimeError;
-use metrics::Metrics;
-
-mod ipc;
 use ipc::IpcClient;
+use metrics::Metrics;
 
 /// The peer-observer ipc-extractor periodically queries data from the
 /// Bitcoin Core IPC interface and publishes the results as events into
@@ -60,30 +57,32 @@ pub async fn run(
     args: Args,
     mut shutdown_rx: watch::Receiver<bool>,
     bound_addr_tx: Option<oneshot::Sender<SocketAddr>>,
-) -> Result<(), RuntimeError> {
-    let nats_client = nats_util::prepare_connection(&args.nats)?
+) -> Result<()> {
+    let nats_client = nats_util::prepare_connection(&args.nats)
+        .context("preparing NATS connection")?
         .connect(&args.nats.address)
-        .await?;
+        .await
+        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
     log::info!("Connected to NATS server at {}", &args.nats.address);
 
     let stream = UnixStream::connect(&args.ipc_socket_path)
         .await
-        .map_err(|e| {
-            io::Error::new(
-                e.kind(),
-                format!(
-                    "could not connect to IPC socket at --ipc-socket-path '{}': {}",
-                    &args.ipc_socket_path, e
-                ),
+        .with_context(|| {
+            format!(
+                "connecting to IPC socket at --ipc-socket-path '{}'",
+                args.ipc_socket_path
             )
         })?;
     log::info!("Connected to IPC socket at {}", &args.ipc_socket_path);
 
-    let mut ipc_session = IpcClient::init(stream).await?;
+    let mut ipc_session = IpcClient::init(stream)
+        .await
+        .context("initializing the IPC session")?;
 
-    let metrics = Metrics::new();
+    let metrics = Metrics::new().context("creating metrics registry")?;
     let local_addr =
-        shared::metricserver::start(&args.prometheus_address, Some(metrics.registry.clone()))?;
+        shared::metricserver::start(&args.prometheus_address, Some(metrics.registry.clone()))
+            .with_context(|| format!("starting metrics server on {}", args.prometheus_address))?;
     if let Some(tx) = bound_addr_tx {
         let _ = tx.send(local_addr);
     }
@@ -99,7 +98,7 @@ pub async fn run(
         tokio::select! {
             _ = interval.tick() => {
                 if let Err(e) = fetch_and_publish_tip(&ipc_session, &nats_client, &metrics).await {
-                    log::error!("Could not fetch and publish 'BlockTip': {}", e);
+                    log::error!("Could not fetch and publish 'BlockTip': {:#}", e);
                 }
             }
             res = &mut ipc_session.rpc_task => {
@@ -162,15 +161,19 @@ async fn fetch_and_publish_tip(
     ipc_client: &IpcClient,
     nats_client: &async_nats::Client,
     metrics: &Metrics,
-) -> Result<(), RuntimeError> {
-    let tip = match measure_ipc_call("get_tip", metrics, ipc_client.get_tip()).await? {
+) -> Result<()> {
+    let tip = match measure_ipc_call("get_tip", metrics, ipc_client.get_tip())
+        .await
+        .context("measuring get_tip IPC")?
+    {
         Some(t) => t,
         None => return Ok(()), // the node has no tip loaded yet, skip NATS publish
     };
 
     let proto = Event::new(PeerObserverEvent::IpcExtractor(ipc_extractor::Ipc {
         ipc_event: Some(ipc_extractor::ipc::IpcEvent::BlockTip(tip)),
-    }))?;
+    }))
+    .context("creating the protobuf block tip event")?;
     nats_client
         .publish(Subject::Ipc.to_string(), proto.encode_to_vec().into())
         .await
@@ -179,6 +182,7 @@ async fn fetch_and_publish_tip(
                 .nats_publish_errors
                 .with_label_values(&["get_tip"])
                 .inc();
-        })?;
+        })
+        .context("publishing the block tip to NATS")?;
     Ok(())
 }
