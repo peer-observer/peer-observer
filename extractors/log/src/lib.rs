@@ -1,5 +1,5 @@
-use error::RuntimeError;
-use shared::async_nats::{self};
+use shared::anyhow::{Context, Result, bail};
+use shared::async_nats;
 use shared::clap;
 use shared::clap::Parser;
 use shared::log;
@@ -16,8 +16,6 @@ use shared::tokio::{
     sync::watch,
     time,
 };
-
-mod error;
 
 // from libc crate
 pub const O_NONBLOCK: i32 = 2048;
@@ -48,14 +46,18 @@ pub struct Args {
     pub log_level: log::Level,
 }
 
-pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(), RuntimeError> {
-    let nats_client = nats_util::prepare_connection(&args.nats)?
+pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<()> {
+    let nats_client = nats_util::prepare_connection(&args.nats)
+        .context("preparing NATS connection")?
         .connect(&args.nats.address)
-        .await?;
+        .await
+        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
     log::info!("Connected to NATS server at {}", &args.nats.address);
 
     log::info!("Opening bitcoind log pipe at {}...", &args.bitcoind_pipe);
-    let file = open_pipe(&args.bitcoind_pipe, shutdown_rx.clone()).await?;
+    let file = open_pipe(&args.bitcoind_pipe, shutdown_rx.clone())
+        .await
+        .with_context(|| format!("opening pipe {}", args.bitcoind_pipe))?;
     log::info!("Opened bitcoind log pipe at {}", &args.bitcoind_pipe);
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
@@ -129,26 +131,28 @@ async fn process_log(nats_client: &async_nats::Client, line: &str) {
     };
 }
 
-async fn open_pipe(path: &str, shutdown_rx: watch::Receiver<bool>) -> Result<File, std::io::Error> {
+async fn open_pipe(path: &str, shutdown_rx: watch::Receiver<bool>) -> Result<File> {
     // Fail after MAX_RETRIES if the pipe doesn't exist yet.
     const MAX_RETRIES: i32 = 30;
     for retries in 0..=MAX_RETRIES {
         if *shutdown_rx.borrow() {
             log::info!("open_pipe received shutdown signal.");
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Interrupted,
-                "shutdown signal received",
-            ));
+            bail!(
+                "shutdown signal received while waiting for {} to appear",
+                path
+            );
         }
 
         if !std::path::Path::new(path).exists() {
+            let retry_wait = time::Duration::from_secs(1);
             log::warn!(
-                "Pipe {} does not exist yet, retrying in 1s (retry: {}/{})",
+                "Pipe {} does not exist yet, retrying in {:?} (retry: {}/{})",
                 path,
+                retry_wait,
                 retries,
                 MAX_RETRIES
             );
-            time::sleep(time::Duration::from_secs(1)).await;
+            time::sleep(retry_wait).await;
         } else {
             break;
         }
@@ -163,4 +167,5 @@ async fn open_pipe(path: &str, shutdown_rx: watch::Receiver<bool>) -> Result<Fil
         .custom_flags(O_NONBLOCK)
         .open(path)
         .await
+        .with_context(|| format!("opening file {}", path))
 }
