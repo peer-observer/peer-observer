@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <title>addr self-advertisement log</title>
+</head>
+
+<body class="container-fluid">
+  <header class="py-3">
+    <h1 class="h3 mb-1">addr self-advertisement log</h1>
+    <p class="text-muted mb-2">
+      Real-time log of <code>addr</code> and <code>addrv2</code> messages where a peer includes its own IP address
+      as one of the entries (<em>peer IP == addr entry IP</em>). RPC <code>getpeerinfo</code> data is merged in
+      when available.
+    </p>
+    <div id="websocket-picker" class="mb-3"></div>
+  </header>
+
+  <p class="small text-muted mb-1">
+    Events: <span id="event-count">0</span> &nbsp;|&nbsp; max 500 shown (newest first)
+  </p>
+
+  <div style="overflow-x: auto;">
+    <table class="table table-sm table-striped table-bordered">
+      <thead class="sticky-top bg-white">
+        <tr>
+          <th>time</th>
+          <th>peer id</th>
+          <th>peer addr</th>
+          <th>dir</th>
+          <th>msg</th>
+          <th title="total addresses in the message">#addrs</th>
+          <th>self-advertised ip</th>
+          <th>port</th>
+          <th>services</th>
+          <th>addr timestamp</th>
+          <!-- RPC getpeerinfo fields -->
+          <th>subversion</th>
+          <th>conn type</th>
+          <th>network</th>
+          <th>transport</th>
+          <th>inbound</th>
+          <th>addr relay</th>
+          <th>tx relay</th>
+          <th>ping (ms)</th>
+        </tr>
+      </thead>
+      <tbody id="log-table"></tbody>
+    </table>
+  </div>
+</body>
+
+<script src="js/bootstrap.min.js"
+  integrity="sha384-0pUGZvbkm6XF6gxjEnlmuGrJXVbNuzT9qBBavbLwCsOGabYfZo0T0to5eqruptLy"
+  crossorigin="anonymous"></script>
+<script src="js/websocket-picker.js"></script>
+<script src="js/lib.js"></script>
+
+<style>
+  thead th {
+    white-space: nowrap;
+    font-size: 0.8rem;
+  }
+  tbody td {
+    font-size: 0.8rem;
+    font-family: monospace;
+    white-space: nowrap;
+  }
+  .dir-inbound  { color: #0044cc; }
+  .dir-outbound { color: #bb6600; }
+</style>
+
+<script>
+  const logTable = document.getElementById("log-table");
+  const eventCountSpan = document.getElementById("event-count");
+  const MAX_LOG_ENTRIES = 500;
+  let eventCount = 0;
+  let peerInfoById = {};
+
+  // Decode Bitcoin P2P service bits into a human-readable string.
+  function decodeServices(services) {
+    if (services === 0) return "0";
+    const bits = [];
+    if (services & 0x001) bits.push("NETWORK");
+    if (services & 0x004) bits.push("BLOOM");
+    if (services & 0x008) bits.push("WITNESS");
+    if (services & 0x200) bits.push("CF");
+    if (services & 0x400) bits.push("LIMITED");
+    if (services & 0x800) bits.push("v2");
+    const known = 0x001 | 0x004 | 0x008 | 0x200 | 0x400 | 0x800;
+    const unknown = services & ~known;
+    if (unknown) bits.push("0x" + unknown.toString(16));
+    return bits.join(" ") || "0x" + services.toString(16);
+  }
+
+  function formatUnixTs(ts) {
+    if (!ts) return "-";
+    return new Date(ts * 1000).toISOString().replace("T", " ").slice(0, 19) + " UTC";
+  }
+
+  // Extract the IP string from an addr entry's address oneof field.
+  function addrEntryIp(a) {
+    const addr = a.address;
+    if (!addr) return null;
+    if ("Ipv4"  in addr) return addr.Ipv4;
+    if ("Ipv6"  in addr) return addr.Ipv6;
+    if ("Torv3" in addr) return addr.Torv3;
+    if ("Torv2" in addr) return addr.Torv2;
+    if ("I2p"   in addr) return addr.I2p;
+    if ("Cjdns" in addr) return addr.Cjdns;
+    return null;
+  }
+
+  // Extract the bare IP from a "ip:port" or "[ipv6]:port" peer addr string.
+  function peerIpFromMetaAddr(addr) {
+    return removePortFromIPPort(addr).replace("[", "").replace("]", "");
+  }
+
+  function appendLogRow(meta, msgType, numAddresses, matchEntry, rpcInfo) {
+    eventCount++;
+    eventCountSpan.textContent = eventCount;
+
+    const now = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
+    const entryIp   = addrEntryIp(matchEntry) || "-";
+    const entryPort = matchEntry.port != null ? matchEntry.port : "-";
+    const services  = decodeServices(matchEntry.services || 0);
+    const addrTs    = formatUnixTs(matchEntry.timestamp);
+
+    const tr = document.createElement("tr");
+
+    const cells = [
+      now,
+      "#" + meta.peer_id,
+      meta.addr,
+      meta.inbound ? "← in" : "→ out",
+      msgType,
+      String(numAddresses),
+      entryIp,
+      String(entryPort),
+      services,
+      addrTs,
+      rpcInfo ? rpcInfo.subversion        : "-",
+      rpcInfo ? rpcInfo.connection_type   : "-",
+      rpcInfo ? rpcInfo.network           : "-",
+      rpcInfo ? rpcInfo.transport_protocol_type : "-",
+      rpcInfo ? String(rpcInfo.inbound)   : "-",
+      rpcInfo ? String(rpcInfo.addr_relay_enabled) : "-",
+      rpcInfo ? String(rpcInfo.relay_transactions) : "-",
+      rpcInfo && rpcInfo.ping_time != null
+        ? (rpcInfo.ping_time * 1000).toFixed(1)
+        : "-",
+    ];
+
+    for (let i = 0; i < cells.length; i++) {
+      const td = document.createElement("td");
+      td.textContent = cells[i];
+      if (i === 3) {
+        td.classList.add(meta.inbound ? "dir-inbound" : "dir-outbound");
+      }
+      tr.appendChild(td);
+    }
+
+    logTable.insertBefore(tr, logTable.firstChild);
+
+    // Trim oldest entries beyond the cap.
+    while (logTable.rows.length > MAX_LOG_ENTRIES) {
+      logTable.removeChild(logTable.lastChild);
+    }
+  }
+
+  function handle_ebpf_extractor_message(message) {
+    const meta = message.meta;
+    let addresses = null;
+    let msgType = null;
+
+    if (meta.command === "addr") {
+      addresses = message.msg && message.msg.Addr && message.msg.Addr.addresses;
+      msgType = "addr";
+    } else if (meta.command === "addrv2") {
+      addresses = message.msg && message.msg.Addrv2 && message.msg.Addrv2.addresses;
+      msgType = "addrv2";
+    }
+
+    if (!addresses || addresses.length === 0) return;
+
+    const peerIp = peerIpFromMetaAddr(meta.addr);
+    const rpcInfo = peerInfoById[meta.peer_id] || null;
+
+    for (const a of addresses) {
+      const entryIp = addrEntryIp(a);
+      if (entryIp && entryIp.toLowerCase() === peerIp.toLowerCase()) {
+        appendLogRow(meta, msgType, addresses.length, a, rpcInfo);
+      }
+    }
+  }
+
+  function handle_rpc_extractor_peerinfo(infos) {
+    peerInfoById = {};
+    for (const info of infos) {
+      peerInfoById[info.id] = info;
+    }
+  }
+
+  function handleWebsocketReset() {
+    logTable.innerHTML = "";
+    eventCount = 0;
+    eventCountSpan.textContent = "0";
+    peerInfoById = {};
+  }
+
+  window.onload = () => {
+    runUnitTests();
+    updateSubscriptions({ ebpf: { messages: true }, rpc: true });
+    initWebsocketPicker("websockets.json", "websocket-picker", processWebsocketMessage, handleWebsocketReset);
+  };
+</script>
+
+</html>
