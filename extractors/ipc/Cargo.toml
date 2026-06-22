@@ -19,4 +19,4 @@ nats_integration_tests = []
 node_integration_tests = []
 
 [build-dependencies]
-capnpc = "0.25.0"
+capnpc = "0.26.0"
