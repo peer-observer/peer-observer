@@ -353,22 +353,22 @@ dependencies = [
 
 [[package]]
 name = "capnp-futures"
-version = "0.25.2"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73b69dfddccc57844f9a90f9d72b44b97c326914851ea94fb7da40ef9cad6e8d"
+checksum = "2a732246b9523a962319faa1000b163645721accbc759cdf296f5f8424a97bdc"
 dependencies = [
- "capnp 0.25.1",
+ "capnp 0.26.0",
  "futures-channel",
  "futures-util",
 ]
 
 [[package]]
 name = "capnp-rpc"
-version = "0.25.0"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07ccca6d26009f4d6c12b741994f33b421da613b5dcf461508e236b53ef862f1"
+checksum = "09a77734dd5aa0dbbc2e1a5953a80cef75c11af289641cdaeb59cce38b11e2e1"
 dependencies = [
- "capnp 0.25.1",
+ "capnp 0.26.0",
  "capnp-futures",
  "futures",
 ]
