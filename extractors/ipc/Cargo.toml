@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 capnp = "0.26.0"
-capnp-rpc = "0.25.0"
+capnp-rpc = "0.26.0"
 shared = { path = "../../shared" }
 
 [features]
