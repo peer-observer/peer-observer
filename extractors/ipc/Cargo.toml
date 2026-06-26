@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-capnp = "0.25.1"
+capnp = "0.26.0"
 capnp-rpc = "0.25.0"
 shared = { path = "../../shared" }
 

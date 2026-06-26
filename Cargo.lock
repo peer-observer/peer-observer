@@ -335,9 +335,9 @@ dependencies = [
 
 [[package]]
 name = "capnp"
-version = "0.25.1"
+version = "0.25.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ae0593da254d02d0e69525b5eec7a59586753aa3bd2e54842eca33c6786330c"
+checksum = "4777a3bc19b8f8e5fb2d0196c6b5dfcbbcc8b2fe08ae57f873f2f35f15cfc210"
 dependencies = [
  "embedded-io",
 ]
@@ -357,7 +357,7 @@ version = "0.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73b69dfddccc57844f9a90f9d72b44b97c326914851ea94fb7da40ef9cad6e8d"
 dependencies = [
- "capnp 0.25.1",
+ "capnp 0.25.6",
  "futures-channel",
  "futures-util",
 ]
@@ -368,7 +368,7 @@ version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07ccca6d26009f4d6c12b741994f33b421da613b5dcf461508e236b53ef862f1"
 dependencies = [
- "capnp 0.25.1",
+ "capnp 0.25.6",
  "capnp-futures",
  "futures",
 ]
@@ -1178,7 +1178,7 @@ dependencies = [
 name = "ipc-extractor"
 version = "0.1.0"
 dependencies = [
- "capnp 0.25.1",
+ "capnp 0.26.0",
  "capnp-rpc",
  "capnpc",
  "shared",
