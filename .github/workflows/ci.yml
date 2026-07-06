@@ -21,7 +21,7 @@ jobs:
   nix-build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-nix-action
     - name: Build
       run: nix-shell --pure --command "cargo build --all-features"
@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: nix-build
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-nix-action
     - name: Run tests
       run: nix-shell --pure --command "cargo test --all-features"
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: nix-test
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-nix-action
     # use separate steps for iterations here to easily see on GHA the time it took
     - name: Iteration 0
@@ -66,7 +66,7 @@ jobs:
   nix-format:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-nix-action
     # needed to have all packages code-generated for fmt
     - name: Run cargo check
@@ -78,7 +78,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: nix-build
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-nix-action
     - name: Run coverage
       run: nix-shell --pure --command "cargo tarpaulin --out Lcov --out Html --workspace --all-features"
@@ -98,7 +98,7 @@ jobs:
   ubuntu-build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-ubuntu-action
     - name: Build
       run: cargo build --all-features
@@ -107,7 +107,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: ubuntu-build
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-ubuntu-action
     - name: Install integration test dependecies
       run: sudo apt-get install -y nats-server
@@ -118,7 +118,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: ubuntu-test
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-ubuntu-action
     - name: Install integration test dependecies
       run: sudo apt-get install -y nats-server
@@ -148,7 +148,7 @@ jobs:
     needs: ubuntu-build
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-ubuntu-action
     - name: Check help output of each tool (auto-detected)
       run: |
@@ -211,7 +211,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: ubuntu-build
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-ubuntu-action
     - name: Check help output of each extractor (auto-detected)
       run: |
@@ -282,7 +282,7 @@ jobs:
   ubuntu-check-and-fmt:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-ubuntu-action
     - name: Build
       run: cargo check --all-features
@@ -293,7 +293,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: ubuntu-build
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-ubuntu-action
     - name: cargo clippy
       run: cargo clippy --all-targets --all-features
