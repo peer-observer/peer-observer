@@ -116,7 +116,7 @@ pub async fn run(
         .context("preparing NATS connection")?
         .connect(&args.nats.address)
         .await
-        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
+        .with_context(|| format!("connecting to NATS at {}", args.nats.address))?;
     info!("Connected to NATS-server at {}", args.nats.address);
     let mut sub = nc
         .subscribe("*")
@@ -812,8 +812,8 @@ fn handle_rpc_event(e: &rpc::RpcEvent, state_arc: Arc<Mutex<State>>, metrics: me
                     let mut sources: BTreeSet<String> = BTreeSet::new();
                     let mut source_asn: BTreeSet<u32> = BTreeSet::new();
 
-                    for (_, bucket) in table.iter() {
-                        for (_, entry) in bucket.entries.iter() {
+                    for bucket in table.values() {
+                        for entry in bucket.entries.values() {
                             table_stats
                                 .port_count
                                 .entry(entry.port as u16)

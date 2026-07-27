@@ -30,6 +30,8 @@ use std::net::{IpAddr, Ipv4Addr, Shutdown, SocketAddr, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+// allow the constants to be "dead" code, which looks like a false positive
+#[allow(dead_code)]
 mod metrics;
 
 const WORKERS: usize = 50;
@@ -326,7 +328,7 @@ async fn main() {
     let (output_sender, output_receiver) = unbounded();
 
     metricserver::start(&args.metrics_address, None).unwrap();
-    log::info!("metrics-server started on {}", &args.metrics_address);
+    log::info!("metrics-server started on {}", args.metrics_address);
 
     let nc = nats_util::prepare_connection(&args.nats)
         .expect("should be able to open a password file")

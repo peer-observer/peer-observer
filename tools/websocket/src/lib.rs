@@ -89,7 +89,7 @@ pub async fn run(
         .context("preparing NATS connection")?
         .connect(&args.nats.address)
         .await
-        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
+        .with_context(|| format!("connecting to NATS at {}", args.nats.address))?;
     log::info!("Connected to NATS-server at {}", args.nats.address);
     let mut sub = nc
         .subscribe("*")

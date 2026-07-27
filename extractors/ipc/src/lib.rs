@@ -62,8 +62,8 @@ pub async fn run(
         .context("preparing NATS connection")?
         .connect(&args.nats.address)
         .await
-        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
-    log::info!("Connected to NATS server at {}", &args.nats.address);
+        .with_context(|| format!("connecting to NATS at {}", args.nats.address))?;
+    log::info!("Connected to NATS server at {}", args.nats.address);
 
     let stream = UnixStream::connect(&args.ipc_socket_path)
         .await
@@ -73,7 +73,7 @@ pub async fn run(
                 args.ipc_socket_path
             )
         })?;
-    log::info!("Connected to IPC socket at {}", &args.ipc_socket_path);
+    log::info!("Connected to IPC socket at {}", args.ipc_socket_path);
 
     let mut ipc_session = IpcClient::init(stream)
         .await

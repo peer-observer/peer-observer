@@ -149,8 +149,8 @@ pub async fn run(
         .context("preparing NATS connection")?
         .connect(&args.nats.address)
         .await
-        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
-    log::info!("Connected to NATS server at {}", &args.nats.address);
+        .with_context(|| format!("connecting to NATS at {}", args.nats.address))?;
+    log::info!("Connected to NATS server at {}", args.nats.address);
 
     log::debug!("Starting TCP listener on {}..", args.p2p_address);
     let listener = TcpListener::bind(args.p2p_address.as_str())

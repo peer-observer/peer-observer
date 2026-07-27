@@ -51,20 +51,20 @@ pub async fn run(args: Args, mut shutdown_rx: watch::Receiver<bool>) -> Result<(
         .context("preparing NATS connection")?
         .connect(&args.nats.address)
         .await
-        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
-    log::info!("Connected to NATS server at {}", &args.nats.address);
+        .with_context(|| format!("connecting to NATS at {}", args.nats.address))?;
+    log::info!("Connected to NATS server at {}", args.nats.address);
 
-    log::info!("Opening bitcoind log pipe at {}...", &args.bitcoind_pipe);
+    log::info!("Opening bitcoind log pipe at {}...", args.bitcoind_pipe);
     let file = open_pipe(&args.bitcoind_pipe, shutdown_rx.clone())
         .await
         .with_context(|| format!("opening pipe {}", args.bitcoind_pipe))?;
-    log::info!("Opened bitcoind log pipe at {}", &args.bitcoind_pipe);
+    log::info!("Opened bitcoind log pipe at {}", args.bitcoind_pipe);
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
 
     log::info!(
         "Started reading lines from bitcoind log pipe at {}",
-        &args.bitcoind_pipe
+        args.bitcoind_pipe
     );
     loop {
         tokio::select! {

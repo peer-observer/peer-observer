@@ -457,8 +457,8 @@ pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<()> {
         .context("preparing NATS connection")?
         .connect(&args.nats.address)
         .await
-        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
-    log::info!("Connected to NATS server at {}", &args.nats.address);
+        .with_context(|| format!("connecting to NATS at {}", args.nats.address))?;
+    log::info!("Connected to NATS server at {}", args.nats.address);
 
     let mut obj_container = MaybeUninit::uninit();
     // Keeping _loaded_obj and _links alive is important. Dropping them triggers deleletion from the

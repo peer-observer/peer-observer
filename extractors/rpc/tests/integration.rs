@@ -549,8 +549,8 @@ async fn test_integration_rpc_getrawaddrman() {
                 if let Some(ref e) = r.rpc_event {
                     match e {
                         Addrman(addrman) => {
-                            for (_, bucket) in addrman.new.iter() {
-                                for (_, entry) in bucket.entries.iter() {
+                            for bucket in addrman.new.values() {
+                                for entry in bucket.entries.values() {
                                     assert_eq!(entry.address, "1.2.3.4");
                                     assert_eq!(entry.port, 1234);
                                 }

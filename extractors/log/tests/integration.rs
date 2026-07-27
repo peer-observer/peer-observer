@@ -101,7 +101,7 @@ fn spawn_pipe(log_path: String, pipe_path: String) {
         .arg(&pipe_path)
         .status()
         .expect("Failed to create named pipe");
-    info!("Created named pipe at {}", &pipe_path);
+    info!("Created named pipe at {}", pipe_path);
 
     // Start tail -f from debug.log to the pipe
     info!("Running: bash -c 'tail -f {} > {}'", log_path, pipe_path);

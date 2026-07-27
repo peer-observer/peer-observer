@@ -183,7 +183,7 @@ pub async fn run<A: Alerter>(
         .context("preparing NATS connection")?
         .connect(&args.nats.address)
         .await
-        .with_context(|| format!("connecting to NATS at {}", &args.nats.address))?;
+        .with_context(|| format!("connecting to NATS at {}", args.nats.address))?;
 
     let netmsg_sub = nc
         .subscribe(Subject::NetMsg.to_string())
