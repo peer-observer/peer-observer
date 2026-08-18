@@ -4,4 +4,7 @@ package header;
 
 message ArchiveHeader {
   required      uint64      created = 1;      // Timestamp (seconds since UNIX epoch) when the archive was created.
+  optional      bool        low_data = 2;     // Whether this archive was written in low-data mode. When true,
+                                              // raw transaction data was omitted from archived messages.
+                                              // Unset in archives written before this field existed.
 }

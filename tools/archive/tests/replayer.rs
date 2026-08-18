@@ -21,7 +21,11 @@ fn test_event() -> Event {
 }
 
 fn archive_bytes(events: &[Event]) -> Vec<u8> {
-    let mut bytes = ArchiveHeader { created: 1 }.encode_length_delimited_to_vec();
+    let mut bytes = ArchiveHeader {
+        created: 1,
+        low_data: None,
+    }
+    .encode_length_delimited_to_vec();
     for event in events {
         bytes.extend(event.encode_length_delimited_to_vec());
     }
@@ -80,7 +84,11 @@ fn missing_header_is_an_archive_error() {
 
 #[test]
 fn truncated_event_is_an_unexpected_eof() {
-    let mut bytes = ArchiveHeader { created: 1 }.encode_length_delimited_to_vec();
+    let mut bytes = ArchiveHeader {
+        created: 1,
+        low_data: None,
+    }
+    .encode_length_delimited_to_vec();
     let mut event_bytes = test_event().encode_length_delimited_to_vec();
     event_bytes.pop();
     bytes.extend(event_bytes);
@@ -95,7 +103,11 @@ fn truncated_event_is_an_unexpected_eof() {
 
 #[test]
 fn malformed_event_is_a_read_error() {
-    let mut bytes = ArchiveHeader { created: 1 }.encode_length_delimited_to_vec();
+    let mut bytes = ArchiveHeader {
+        created: 1,
+        low_data: None,
+    }
+    .encode_length_delimited_to_vec();
     bytes.push(1);
     bytes.push(0xff);
     let path = write_temp_archive("malformed_event", bytes);
