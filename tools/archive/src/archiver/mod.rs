@@ -17,6 +17,7 @@ use shared::nats_util;
 use shared::prost::Message;
 use shared::protobuf::archive::ArchiveHeader;
 use shared::protobuf::ebpf_extractor::ebpf;
+use shared::protobuf::ebpf_extractor::message::message_event::Msg;
 use shared::protobuf::event::event::PeerObserverEvent;
 use shared::protobuf::event::Event;
 use shared::tokio::sync::{oneshot, watch};
@@ -106,7 +107,12 @@ struct ArchiveFile {
 }
 
 impl ArchiveFile {
-    fn new(output_dir: &Path, base_name: &str, compression_level: u32) -> std::io::Result<Self> {
+    fn new(
+        output_dir: &Path,
+        base_name: &str,
+        compression_level: u32,
+        low_data: bool,
+    ) -> std::io::Result<Self> {
         let ext = if compression_level > 0 {
             "bin.zst"
         } else {
@@ -139,7 +145,7 @@ impl ArchiveFile {
             }
         };
         let mut writer = ArchiveWriter::new(file, compression_level)?;
-        let header_bytes = ArchiveHeader::new().to_bytes();
+        let header_bytes = ArchiveHeader::new(low_data).to_bytes();
         writer.write_all(&header_bytes)?;
         writer.flush()?;
 
@@ -230,6 +236,12 @@ pub struct Args {
     /// Zstd compression level (0 = no compression, 1-22). Default: 22 (ultra).
     #[arg(long, default_value_t = 22)]
     pub compression_level: u32,
+
+    /// If passed, don't archive raw transaction data.
+    /// Requires --messages. Other enabled event filters are archived unchanged.
+    /// Transactions keep their txid and wtxid. Blocks keep only their header.
+    #[arg(long, requires = "messages")]
+    pub low_data: bool,
 }
 
 impl Args {
@@ -269,6 +281,7 @@ pub async fn run(
         log::info!("archiving log_extractor events: {}", args.log_extractor);
         log::info!("archiving ipc_extractor events: {}", args.ipc_extractor);
     }
+    log::info!("archiving in low-data mode: {}", args.low_data);
 
     let nc = nats_util::prepare_connection(&args.nats)
         .context("preparing NATS connection")?
@@ -284,9 +297,13 @@ pub async fn run(
 
     fs::create_dir_all(&args.output_dir)
         .with_context(|| format!("creating output directory {}", args.output_dir.display()))?;
-    let mut current_file =
-        ArchiveFile::new(&args.output_dir, &args.base_name, args.compression_level)
-            .context("creating the initial archive file")?;
+    let mut current_file = ArchiveFile::new(
+        &args.output_dir,
+        &args.base_name,
+        args.compression_level,
+        args.low_data,
+    )
+    .context("creating the initial archive file")?;
 
     if let Some(ready_tx) = ready_tx {
         // A flush only empties the client's write buffer and does not wait for
@@ -321,7 +338,7 @@ pub async fn run(
         shared::tokio::select! {
             maybe_msg = sub.next() => {
                 if let Some(msg) = maybe_msg {
-                    let event = match Event::decode(msg.payload.as_ref()) {
+                    let mut event = match Event::decode(msg.payload.as_ref()) {
                         Ok(event) => event,
                         Err(e) => {
                             log::warn!("failed to decode event: {}, skipping", e);
@@ -329,6 +346,10 @@ pub async fn run(
                         }
                     };
                     if should_archive(&event, &args){
+                        if args.low_data {
+                            strip_low_data(&mut event);
+                        }
+
                         if let Err(e) = current_file.write_event(&event) {
                             log::error!("failed to write event: {}", e);
                             break;
@@ -391,8 +412,43 @@ pub async fn run(
 fn rotate(current_file: ArchiveFile, args: &Args) -> std::io::Result<ArchiveFile> {
     log::trace!("rotating {:?}", current_file.path);
     current_file.finalize()?;
-    let new_file = ArchiveFile::new(&args.output_dir, &args.base_name, args.compression_level)?;
+    let new_file = ArchiveFile::new(
+        &args.output_dir,
+        &args.base_name,
+        args.compression_level,
+        args.low_data,
+    )?;
     Ok(new_file)
+}
+
+/// Removes the bulk of a P2P message: the raw bytes of transactions and the
+/// transactions of a block. Transactions keep their txid and wtxid, blocks keep
+/// their header, which includes the block hash.
+/// Messages that carry no transaction payloads are left untouched.
+fn strip_low_data(event: &mut Event) {
+    let Some(PeerObserverEvent::EbpfExtractor(ebpf)) = event.peer_observer_event.as_mut() else {
+        return;
+    };
+    let Some(ebpf::EbpfEvent::Message(message_event)) = ebpf.ebpf_event.as_mut() else {
+        return;
+    };
+    let Some(msg) = message_event.msg.as_mut() else {
+        return;
+    };
+
+    match msg {
+        Msg::Tx(tx) => tx.tx.raw = None,
+        Msg::Block(block) => block.transactions.clear(),
+        Msg::Blocktxn(blocktxn) => blocktxn
+            .transactions
+            .iter_mut()
+            .for_each(|tx| tx.raw = None),
+        Msg::Compactblock(compact_block) => compact_block
+            .transactions
+            .iter_mut()
+            .for_each(|prefilled| prefilled.tx.raw = None),
+        _ => (),
+    }
 }
 
 fn should_archive(event: &Event, args: &Args) -> bool {

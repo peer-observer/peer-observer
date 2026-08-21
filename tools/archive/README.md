@@ -31,6 +31,21 @@ Archive files are compressed with zstd using streaming compression — the write
 or `--compression-level 0` to skip compression. Rotation (`--max-file-size`) is checked against
 the compressed output stream. May overshoot slightly due to zstd internal buffering.
 
+### Low-data mode
+
+Raw transaction data makes up most of an archive. With `--low-data`, it is dropped before an
+event is written. `tx`, `blocktxn`, and prefilled transactions in `cmpctblock` keep their txid and
+wtxid. `block` messages keep only their header, including the block hash, and drop all block
+transactions.
+
+Everything else, including all connection, mempool and network metadata, is archived as usual. This
+makes it feasible to collect data over longer periods, at the cost of no longer being able to
+inspect the transactions and blocks themselves. Low-data mode requires `--messages`. It can be
+combined with other event filters, which are archived unchanged.
+
+Archives record the mode in their `ArchiveHeader`: `low_data` is `true` for low-data archives and
+`false` for complete ones. Archives written before the field existed are treated as full-data.
+
 ### Example
 
 Archive all events from a NATS server, rotating files at 100 MB, with zstd compression:
@@ -95,6 +110,8 @@ Options:
           If passed, archive ipc-extractor events
       --compression-level <COMPRESSION_LEVEL>
           Zstd compression level (0 = no compression, 1-22). Default: 22 (ultra) [default: 22]
+      --low-data
+          If passed, don't archive raw transaction data. Requires --messages. Other enabled event filters are archived unchanged. Transactions keep their txid and wtxid. Blocks keep only their header
   -h, --help
           Print help
   -V, --version

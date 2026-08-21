@@ -77,6 +77,7 @@ fn make_test_args(nats_port: u16, output_dir: &std::path::Path) -> Args {
         log_extractor: false,
         ipc_extractor: false,
         compression_level: 3,
+        low_data: false,
     }
 }
 

@@ -7,10 +7,10 @@ use std::fmt;
 include!(concat!(env!("OUT_DIR"), "/header.rs"));
 
 impl ArchiveHeader {
-    pub fn new() -> Self {
+    pub fn new(low_data: bool) -> Self {
         Self {
             created: current_timestamp(),
-            low_data: Some(false),
+            low_data: Some(low_data),
         }
     }
 
