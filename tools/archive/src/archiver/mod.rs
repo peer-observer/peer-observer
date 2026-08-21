@@ -491,3 +491,199 @@ fn format_utc_timestamp(epoch_ms: u64) -> String {
         .format(&fmt)
         .expect("timestamp formatting failed")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use shared::protobuf::bitcoin_primitives::{BlockHeader, PrefilledTransaction, Transaction};
+    use shared::protobuf::ebpf_extractor::message::{
+        Block, BlockTxn, CompactBlock, Inv, MessageEvent, Metadata, Tx,
+    };
+    use shared::protobuf::ebpf_extractor::Ebpf;
+
+    const TXID: [u8; 32] = [0x11; 32];
+    const WTXID: [u8; 32] = [0x22; 32];
+    const TXID_2: [u8; 32] = [0x44; 32];
+    const WTXID_2: [u8; 32] = [0x55; 32];
+    const BLOCK_HASH: [u8; 32] = [0x33; 32];
+
+    fn transaction() -> Transaction {
+        transaction_with_ids(TXID, WTXID, 0xff)
+    }
+
+    fn transaction_with_ids(txid: [u8; 32], wtxid: [u8; 32], raw_byte: u8) -> Transaction {
+        Transaction {
+            txid: txid.to_vec(),
+            wtxid: wtxid.to_vec(),
+            raw: Some(vec![raw_byte; 500]),
+        }
+    }
+
+    fn block_header() -> BlockHeader {
+        BlockHeader {
+            version: 1,
+            prev_blockhash: vec![0u8; 32],
+            merkle_root: vec![0u8; 32],
+            time: 1234,
+            bits: 5678,
+            nonce: 42,
+            hash: BLOCK_HASH.to_vec(),
+        }
+    }
+
+    fn message_event(msg: Msg) -> Event {
+        Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            ebpf_event: Some(ebpf::EbpfEvent::Message(MessageEvent {
+                meta: Metadata {
+                    peer_id: 0,
+                    addr: "127.0.0.1:8333".to_string(),
+                    conn_type: 1,
+                    command: String::new(),
+                    inbound: true,
+                    size: 0,
+                },
+                msg: Some(msg),
+            })),
+        }))
+        .unwrap()
+    }
+
+    /// Returns the P2P message of an event, panicking if there is none.
+    fn msg_of(event: &Event) -> &Msg {
+        match event.peer_observer_event.as_ref().unwrap() {
+            PeerObserverEvent::EbpfExtractor(ebpf) => match ebpf.ebpf_event.as_ref().unwrap() {
+                ebpf::EbpfEvent::Message(message_event) => message_event.msg.as_ref().unwrap(),
+                _ => panic!("expected a P2P message event"),
+            },
+            _ => panic!("expected an ebpf event"),
+        }
+    }
+
+    fn parse_args(args: &[&str]) -> std::result::Result<Args, clap::Error> {
+        let mut argv = vec!["archiver", "--output-dir", "/tmp"];
+        argv.extend_from_slice(args);
+        Args::try_parse_from(argv)
+    }
+
+    #[test]
+    fn low_data_requires_messages() {
+        assert!(parse_args(&["--low-data"]).is_err());
+        assert!(parse_args(&["--low-data", "--messages"]).is_ok());
+        assert!(parse_args(&["--low-data", "--messages", "--connections"]).is_ok());
+    }
+
+    #[test]
+    fn low_data_strips_tx_raw_and_keeps_ids() {
+        let mut event = message_event(Msg::Tx(Tx { tx: transaction() }));
+
+        strip_low_data(&mut event);
+
+        let Msg::Tx(tx) = msg_of(&event) else {
+            panic!("expected a tx message");
+        };
+        assert_eq!(tx.tx.raw, None);
+        assert_eq!(tx.tx.txid, TXID.to_vec());
+        assert_eq!(tx.tx.wtxid, WTXID.to_vec());
+    }
+
+    #[test]
+    fn low_data_keeps_block_header_and_removes_transactions() {
+        let mut event = message_event(Msg::Block(Block {
+            header: block_header(),
+            transactions: vec![transaction(), transaction()],
+        }));
+
+        strip_low_data(&mut event);
+
+        let Msg::Block(block) = msg_of(&event) else {
+            panic!("expected a block message");
+        };
+        assert_eq!(block.header.hash, BLOCK_HASH.to_vec());
+        assert_eq!(block.header.nonce, 42);
+        assert!(block.transactions.is_empty());
+    }
+
+    #[test]
+    fn low_data_strips_blocktxn_transaction_raw() {
+        let mut event = message_event(Msg::Blocktxn(BlockTxn {
+            block_hash: BLOCK_HASH.to_vec(),
+            transactions: vec![transaction(), transaction()],
+        }));
+
+        strip_low_data(&mut event);
+
+        let Msg::Blocktxn(blocktxn) = msg_of(&event) else {
+            panic!("expected a blocktxn message");
+        };
+        assert_eq!(blocktxn.block_hash, BLOCK_HASH.to_vec());
+        assert_eq!(blocktxn.transactions.len(), 2);
+        for tx in &blocktxn.transactions {
+            assert_eq!(tx.raw, None);
+            assert_eq!(tx.txid, TXID.to_vec());
+            assert_eq!(tx.wtxid, WTXID.to_vec());
+        }
+    }
+
+    #[test]
+    fn low_data_strips_compactblock_prefilled_transaction_raw() {
+        let mut event = message_event(Msg::Compactblock(CompactBlock {
+            header: block_header(),
+            nonce: 7,
+            short_ids: vec![vec![0xaa; 6]],
+            transactions: vec![
+                PrefilledTransaction {
+                    diff_index: 0,
+                    tx: transaction(),
+                },
+                PrefilledTransaction {
+                    diff_index: 2,
+                    tx: transaction_with_ids(TXID_2, WTXID_2, 0xee),
+                },
+            ],
+        }));
+
+        strip_low_data(&mut event);
+
+        let Msg::Compactblock(compact_block) = msg_of(&event) else {
+            panic!("expected a compactblock message");
+        };
+        assert_eq!(compact_block.nonce, 7);
+        assert_eq!(compact_block.short_ids, vec![vec![0xaa; 6]]);
+        assert_eq!(compact_block.header.hash, BLOCK_HASH.to_vec());
+        assert_eq!(compact_block.transactions.len(), 2);
+        assert_eq!(compact_block.transactions[0].diff_index, 0);
+        assert_eq!(compact_block.transactions[0].tx.raw, None);
+        assert_eq!(compact_block.transactions[0].tx.txid, TXID.to_vec());
+        assert_eq!(compact_block.transactions[0].tx.wtxid, WTXID.to_vec());
+        assert_eq!(compact_block.transactions[1].diff_index, 2);
+        assert_eq!(compact_block.transactions[1].tx.raw, None);
+        assert_eq!(compact_block.transactions[1].tx.txid, TXID_2.to_vec());
+        assert_eq!(compact_block.transactions[1].tx.wtxid, WTXID_2.to_vec());
+    }
+
+    #[test]
+    fn low_data_leaves_other_messages_untouched() {
+        let mut event = message_event(Msg::Inv(Inv { items: vec![] }));
+        let before = event.encode_to_vec();
+
+        strip_low_data(&mut event);
+
+        assert_eq!(event.encode_to_vec(), before);
+    }
+
+    #[test]
+    fn low_data_leaves_non_p2p_events_untouched() {
+        let mut event = Event::new(PeerObserverEvent::RpcExtractor(
+            shared::protobuf::rpc_extractor::Rpc {
+                rpc_event: Some(shared::protobuf::rpc_extractor::rpc::RpcEvent::Uptime(1234)),
+            },
+        ))
+        .unwrap();
+        let before = event.encode_to_vec();
+
+        strip_low_data(&mut event);
+
+        assert_eq!(event.encode_to_vec(), before);
+    }
+}

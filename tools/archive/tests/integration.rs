@@ -9,6 +9,7 @@ use shared::{
     nats_util,
     prost::Message,
     protobuf::{
+        bitcoin_primitives,
         ebpf_extractor::{
             connection::{self, Connection, InboundConnection},
             ebpf,
@@ -585,4 +586,155 @@ async fn test_shutdown_with_unreachable_nats() {
     );
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
+}
+
+/// Publishes a tx and a block message and returns the archived events.
+async fn archive_tx_and_block(low_data: bool, tmp_dir: &std::path::Path) -> Vec<Event> {
+    setup();
+
+    let _ = std::fs::remove_dir_all(tmp_dir);
+
+    let nats_server = NatsServerForTesting::new(&[]).await;
+    let nats_publisher = NatsPublisherForTesting::new(nats_server.port).await;
+    let (shutdown_tx, shutdown_rx) = watch::channel(false);
+    let (ready_tx, ready_rx) = oneshot::channel();
+
+    let dir = tmp_dir.to_path_buf();
+    let mut archiver_handle = tokio::spawn(async move {
+        let mut args = make_test_args(nats_server.port, &dir);
+        args.low_data = low_data;
+        args.messages = low_data;
+        run(args, shutdown_rx, Some(ready_tx)).await.unwrap();
+    });
+
+    wait_for_archiver_ready(ready_rx, &mut archiver_handle).await;
+
+    let transaction = bitcoin_primitives::Transaction {
+        txid: vec![0x11; 32],
+        wtxid: vec![0x22; 32],
+        raw: Some(vec![0xff; 500]),
+    };
+    let header = bitcoin_primitives::BlockHeader {
+        version: 1,
+        prev_blockhash: vec![0u8; 32],
+        merkle_root: vec![0u8; 32],
+        time: 1234,
+        bits: 5678,
+        nonce: 42,
+        hash: vec![0x33; 32],
+    };
+    let events = [
+        Msg::Tx(message::Tx {
+            tx: transaction.clone(),
+        }),
+        Msg::Block(message::Block {
+            header,
+            transactions: vec![transaction],
+        }),
+    ]
+    .map(|msg| {
+        Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
+                meta: Metadata {
+                    peer_id: 0,
+                    addr: "127.0.0.1:8333".to_string(),
+                    conn_type: 1,
+                    command: String::new(),
+                    inbound: true,
+                    size: 0,
+                },
+                msg: Some(msg),
+            })),
+        }))
+        .unwrap()
+    });
+
+    for event in &events {
+        nats_publisher
+            .publish(Subject::NetMsg.to_string(), event.encode_to_vec())
+            .await;
+    }
+
+    nats_publisher.sync().await;
+    shutdown_tx.send(true).unwrap();
+    archiver_handle.await.unwrap();
+
+    let archive_path = find_files(tmp_dir, ".bin.zst")
+        .into_iter()
+        .next()
+        .expect("expected a .<timestamp>.bin.zst file");
+    let archive = ArchiveReader::open(&archive_path).unwrap();
+    assert_eq!(
+        archive.header.low_data,
+        Some(low_data),
+        "the archive header should record the low-data mode"
+    );
+
+    archive.map(|event| event.unwrap()).collect()
+}
+
+#[tokio::test]
+async fn test_low_data_strips_transaction_raw_and_block_transactions() {
+    let tmp_dir = std::env::temp_dir().join("archiver_test_low_data");
+    let archived = archive_tx_and_block(true, &tmp_dir).await;
+
+    let [tx_event, block_event] = &archived[..] else {
+        panic!("expected a tx and a block event, got {}", archived.len());
+    };
+
+    let Msg::Tx(tx) = msg_of(tx_event) else {
+        panic!("expected a tx message");
+    };
+    assert_eq!(tx.tx.raw, None, "raw transaction data should be stripped");
+    assert_eq!(tx.tx.txid, vec![0x11; 32], "the txid should be kept");
+    assert_eq!(tx.tx.wtxid, vec![0x22; 32], "the wtxid should be kept");
+
+    let Msg::Block(block) = msg_of(block_event) else {
+        panic!("expected a block message");
+    };
+    assert_eq!(
+        block.header.hash,
+        vec![0x33; 32],
+        "the block header should be kept"
+    );
+    assert!(
+        block.transactions.is_empty(),
+        "block transactions should be removed in low-data mode"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+}
+
+#[tokio::test]
+async fn test_without_low_data_transaction_and_block_data_are_archived() {
+    let tmp_dir = std::env::temp_dir().join("archiver_test_full_data");
+    let archived = archive_tx_and_block(false, &tmp_dir).await;
+
+    let [tx_event, block_event] = &archived[..] else {
+        panic!("expected a tx and a block event, got {}", archived.len());
+    };
+
+    let Msg::Tx(tx) = msg_of(tx_event) else {
+        panic!("expected a tx message");
+    };
+    assert_eq!(tx.tx.raw, Some(vec![0xff; 500]));
+
+    let Msg::Block(block) = msg_of(block_event) else {
+        panic!("expected a block message");
+    };
+    assert_eq!(block.transactions.len(), 1);
+    assert_eq!(block.transactions[0].raw, Some(vec![0xff; 500]));
+
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+}
+
+/// Returns the P2P message of an event, panicking if there is none.
+fn msg_of(event: &Event) -> &Msg {
+    match event.peer_observer_event.as_ref().unwrap() {
+        PeerObserverEvent::EbpfExtractor(ebpf) => match ebpf.ebpf_event.as_ref().unwrap() {
+            ebpf::EbpfEvent::Message(message_event) => message_event.msg.as_ref().unwrap(),
+            _ => panic!("expected a P2P message event"),
+        },
+        _ => panic!("expected an ebpf event"),
+    }
 }
