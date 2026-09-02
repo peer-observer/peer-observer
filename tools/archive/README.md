@@ -46,6 +46,27 @@ combined with other event filters, which are archived unchanged.
 Archives record the mode in their `ArchiveHeader`: `low_data` is `true` for low-data archives and
 `false` for complete ones. Archives written before the field existed are treated as full-data.
 
+### Address-relay and handshake modes
+
+Two modes for dedicated recording jobs that only need a subset of the P2P messages:
+
+- `--addr-relay` archives address-relay P2P messages: `getaddr`, `addr`, and `addrv2` (including
+  addrv2 messages without any addresses in them).
+- `--connections-with-handshakes` archives P2P connections with their version handshakes:
+  `version` messages (both sent and received) and all P2P connection events. It's a superset of
+  `--connections`.
+
+Both modes are additive: they combine freely with each other and with the other event filters,
+archiving the union of everything enabled. For example, a node recording both address relay and
+connections with handshakes:
+
+```
+$ cargo run --bin archiver \
+    --nats-address 127.0.0.1:4222 \
+    --output-dir ./archive \
+    --addr-relay --connections-with-handshakes
+```
+
 ### Example
 
 Archive all events from a NATS server, rotating files at 100 MB, with zstd compression:
@@ -109,9 +130,13 @@ Options:
       --ipc-extractor
           If passed, archive ipc-extractor events
       --compression-level <COMPRESSION_LEVEL>
-          Zstd compression level (0 = no compression, 1-22). Default: 22 (ultra) [default: 22]
+              Zstd compression level (0 = no compression, 1-22). Default: 22 (ultra) [default: 22]
       --low-data
           If passed, don't archive raw transaction data. Requires --messages. Other enabled event filters are archived unchanged. Transactions keep their txid and wtxid. Blocks keep only their header
+      --addr-relay
+          If passed, archive address-relay P2P messages (getaddr, addr, addrv2, including empty addrv2). Additive: combines freely with the other event filters
+      --connections-with-handshakes
+          If passed, archive P2P connections with their version handshakes: version messages (both directions) and all P2P connection events. Additive: combines freely with the other event filters
   -h, --help
           Print help
   -V, --version
@@ -133,7 +158,7 @@ Supports:
   cargo run --bin replayer -- archive/test.0.bin
   cargo run --bin replayer -- archive/test.0.bin.zst
   cargo run --bin replayer -- archive/test.0.bin archive/test.1.bin.zst
-  
+
 ```
 
 ### Example log output

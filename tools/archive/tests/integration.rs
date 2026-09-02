@@ -79,6 +79,8 @@ fn make_test_args(nats_port: u16, output_dir: &std::path::Path) -> Args {
         ipc_extractor: false,
         compression_level: 3,
         low_data: false,
+        addr_relay: false,
+        connections_with_handshakes: false,
     }
 }
 
@@ -726,6 +728,190 @@ async fn test_without_low_data_transaction_and_block_data_are_archived() {
     assert_eq!(block.transactions[0].raw, Some(vec![0xff; 500]));
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
+}
+
+/// Builds one event per message-filter-relevant message type (addr, addrv2,
+/// empty addrv2, getaddr, version, ping) plus a connection and a mempool event.
+fn make_msg_filter_events() -> Vec<Event> {
+    let address = bitcoin_primitives::Address {
+        timestamp: 0,
+        services: 0,
+        port: 8333,
+        address: None,
+    };
+    let msgs = vec![
+        Msg::Addr(message::Addr {
+            addresses: vec![address.clone()],
+        }),
+        Msg::Addrv2(message::AddrV2 {
+            addresses: vec![address.clone()],
+        }),
+        Msg::Emptyaddrv2(true),
+        Msg::Getaddr(true),
+        Msg::Version(message::Version {
+            version: 70016,
+            services: 0,
+            timestamp: 0,
+            receiver: address.clone(),
+            sender: address,
+            nonce: 0,
+            user_agent: "/test/".to_string(),
+            start_height: 0,
+            relay: false,
+        }),
+        Msg::Ping(Ping { value: 7 }),
+    ];
+    let mut events: Vec<Event> = msgs
+        .into_iter()
+        .map(|msg| {
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
+                    meta: Metadata {
+                        peer_id: 0,
+                        addr: "127.0.0.1:8333".to_string(),
+                        conn_type: 1,
+                        command: String::new(),
+                        inbound: true,
+                        size: 0,
+                    },
+                    msg: Some(msg),
+                })),
+            }))
+            .unwrap()
+        })
+        .collect();
+    events.push(
+        Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                event: Some(connection::connection_event::Event::Inbound(
+                    InboundConnection {
+                        conn: Connection {
+                            addr: "127.0.0.1:8333".to_string(),
+                            conn_type: 1,
+                            network: 1,
+                            peer_id: 1,
+                        },
+                        existing_connections: 10,
+                    },
+                )),
+            })),
+        }))
+        .unwrap(),
+    );
+    events.push(
+        Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            ebpf_event: Some(ebpf::EbpfEvent::Mempool(mempool::MempoolEvent {
+                event: Some(mempool::mempool_event::Event::Added(Added {
+                    txid: vec![0u8; 32],
+                    vsize: 250,
+                    fee: 1000,
+                })),
+            })),
+        }))
+        .unwrap(),
+    );
+    events
+}
+
+/// Returns a short label describing an event, for asserting which events were
+/// archived by the message-filter modes.
+fn event_kind(event: &Event) -> &'static str {
+    match event.peer_observer_event.as_ref().unwrap() {
+        PeerObserverEvent::EbpfExtractor(e) => match e.ebpf_event.as_ref().unwrap() {
+            ebpf::EbpfEvent::Message(m) => match m.msg.as_ref().unwrap() {
+                Msg::Addr(_) => "addr",
+                Msg::Addrv2(_) => "addrv2",
+                Msg::Emptyaddrv2(_) => "empty-addrv2",
+                Msg::Getaddr(_) => "getaddr",
+                Msg::Version(_) => "version",
+                Msg::Ping(_) => "ping",
+                _ => "other-message",
+            },
+            ebpf::EbpfEvent::Connection(_) => "connection",
+            ebpf::EbpfEvent::Mempool(_) => "mempool",
+            _ => "other-event",
+        },
+        _ => "other-event",
+    }
+}
+
+/// Publishes the message-filter test events (see [make_msg_filter_events]) and
+/// returns the kinds of the archived events in publish order.
+async fn archive_with_msg_filters(
+    addr_relay: bool,
+    connections_with_handshakes: bool,
+    tmp_dir: &std::path::Path,
+) -> Vec<&'static str> {
+    setup();
+
+    let _ = std::fs::remove_dir_all(tmp_dir);
+
+    let nats_server = NatsServerForTesting::new(&[]).await;
+    let nats_publisher = NatsPublisherForTesting::new(nats_server.port).await;
+    let (shutdown_tx, shutdown_rx) = watch::channel(false);
+    let (ready_tx, ready_rx) = oneshot::channel();
+
+    let dir = tmp_dir.to_path_buf();
+    let mut archiver_handle = tokio::spawn(async move {
+        let mut args = make_test_args(nats_server.port, &dir);
+        args.addr_relay = addr_relay;
+        args.connections_with_handshakes = connections_with_handshakes;
+        run(args, shutdown_rx, Some(ready_tx)).await.unwrap();
+    });
+
+    wait_for_archiver_ready(ready_rx, &mut archiver_handle).await;
+
+    for event in &make_msg_filter_events() {
+        nats_publisher
+            .publish(Subject::NetMsg.to_string(), event.encode_to_vec())
+            .await;
+    }
+
+    nats_publisher.sync().await;
+    shutdown_tx.send(true).unwrap();
+    archiver_handle.await.unwrap();
+
+    let archive_path = find_files(tmp_dir, ".bin.zst")
+        .into_iter()
+        .next()
+        .expect("expected a .<timestamp>.bin.zst file");
+    let archive = ArchiveReader::open(&archive_path).unwrap();
+    let kinds = archive.map(|event| event_kind(&event.unwrap())).collect();
+
+    let _ = std::fs::remove_dir_all(tmp_dir);
+    kinds
+}
+
+#[tokio::test]
+async fn test_filter_addr_relay() {
+    let tmp_dir = std::env::temp_dir().join("archiver_test_addr_relay");
+    let kinds = archive_with_msg_filters(true, false, &tmp_dir).await;
+    assert_eq!(kinds, vec!["addr", "addrv2", "empty-addrv2", "getaddr"]);
+}
+
+#[tokio::test]
+async fn test_filter_connections_with_handshakes() {
+    let tmp_dir = std::env::temp_dir().join("archiver_test_connections_with_handshakes");
+    let kinds = archive_with_msg_filters(false, true, &tmp_dir).await;
+    assert_eq!(kinds, vec!["version", "connection"]);
+}
+
+#[tokio::test]
+async fn test_filter_addr_relay_and_connections_with_handshakes() {
+    let tmp_dir =
+        std::env::temp_dir().join("archiver_test_addr_relay_and_connections_with_handshakes");
+    let kinds = archive_with_msg_filters(true, true, &tmp_dir).await;
+    assert_eq!(
+        kinds,
+        vec![
+            "addr",
+            "addrv2",
+            "empty-addrv2",
+            "getaddr",
+            "version",
+            "connection"
+        ]
+    );
 }
 
 /// Returns the P2P message of an event, panicking if there is none.
