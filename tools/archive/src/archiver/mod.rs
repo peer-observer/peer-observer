@@ -242,6 +242,18 @@ pub struct Args {
     /// Transactions keep their txid and wtxid. Blocks keep only their header.
     #[arg(long, requires = "messages")]
     pub low_data: bool,
+
+    /// If passed, archive address-relay P2P messages (getaddr, addr, addrv2,
+    /// including empty addrv2).
+    /// Additive: combines freely with the other event filters.
+    #[arg(long)]
+    pub addr_relay: bool,
+
+    /// If passed, archive P2P connections with their version handshakes:
+    /// version messages (both directions) and all P2P connection events.
+    /// Additive: combines freely with the other event filters.
+    #[arg(long)]
+    pub connections_with_handshakes: bool,
 }
 
 impl Args {
@@ -254,7 +266,103 @@ impl Args {
             || self.rpc
             || self.p2p_extractor
             || self.log_extractor
-            || self.ipc_extractor)
+            || self.ipc_extractor
+            || self.addr_relay
+            || self.connections_with_handshakes)
+    }
+}
+
+/// Per-message-type filter for P2P messages. A message is archived when its
+/// type's flag is set. Extend with more message types as needed.
+#[derive(Debug, Clone, Copy, Default)]
+struct MessageFilter {
+    getaddr: bool,
+    addr: bool,
+    addrv2: bool,
+    version: bool,
+}
+
+impl MessageFilter {
+    fn matches(&self, msg: &Msg) -> bool {
+        match msg {
+            Msg::Getaddr(_) => self.getaddr,
+            Msg::Addr(_) => self.addr,
+            // An addrv2 message without any addresses in it is emitted as its
+            // own message type by the extractor.
+            Msg::Addrv2(_) | Msg::Emptyaddrv2(_) => self.addrv2,
+            Msg::Version(_) => self.version,
+            _ => false,
+        }
+    }
+}
+
+/// Which events the archiver writes to disk. Derived once from the CLI args, so
+/// that the filter policy lives in a single place.
+#[derive(Debug, Clone, Copy, Default)]
+struct ArchiveFilter {
+    /// Archive every event, regardless of the per-event-type fields below.
+    all: bool,
+    messages: bool,
+    connections: bool,
+    mempool: bool,
+    validation: bool,
+    rpc: bool,
+    p2p_extractor: bool,
+    log_extractor: bool,
+    ipc_extractor: bool,
+    /// Archives single P2P message types that the `messages` field doesn't
+    /// already cover.
+    message_types: MessageFilter,
+}
+
+impl From<&Args> for ArchiveFilter {
+    fn from(args: &Args) -> Self {
+        Self {
+            all: args.archive_all(),
+            messages: args.messages,
+            connections: args.connections || args.connections_with_handshakes,
+            mempool: args.mempool,
+            validation: args.validation,
+            rpc: args.rpc,
+            p2p_extractor: args.p2p_extractor,
+            log_extractor: args.log_extractor,
+            ipc_extractor: args.ipc_extractor,
+            message_types: MessageFilter {
+                getaddr: args.addr_relay,
+                addr: args.addr_relay,
+                addrv2: args.addr_relay,
+                version: args.connections_with_handshakes,
+            },
+        }
+    }
+}
+
+impl ArchiveFilter {
+    /// Returns true if the event should be archived.
+    fn matches(&self, event: &Event) -> bool {
+        if self.all {
+            return true;
+        }
+        match event.peer_observer_event.as_ref() {
+            Some(PeerObserverEvent::EbpfExtractor(e)) => match e.ebpf_event.as_ref() {
+                Some(ebpf::EbpfEvent::Message(message_event)) => {
+                    self.messages
+                        || message_event
+                            .msg
+                            .as_ref()
+                            .is_some_and(|msg| self.message_types.matches(msg))
+                }
+                Some(ebpf::EbpfEvent::Connection(_)) => self.connections,
+                Some(ebpf::EbpfEvent::Mempool(_)) => self.mempool,
+                Some(ebpf::EbpfEvent::Validation(_)) => self.validation,
+                None => false,
+            },
+            Some(PeerObserverEvent::RpcExtractor(_)) => self.rpc,
+            Some(PeerObserverEvent::P2pExtractor(_)) => self.p2p_extractor,
+            Some(PeerObserverEvent::LogExtractor(_)) => self.log_extractor,
+            Some(PeerObserverEvent::IpcExtractor(_)) => self.ipc_extractor,
+            None => false,
+        }
     }
 }
 
@@ -271,15 +379,35 @@ pub async fn run(
     if args.archive_all() {
         log::info!("archiving all events: {}", args.archive_all());
     } else {
-        log::info!("archiving all events:           {}", args.archive_all());
-        log::info!("archiving P2P messages:         {}", args.messages);
-        log::info!("archiving P2P connections:      {}", args.connections);
-        log::info!("archiving mempool events:       {}", args.mempool);
-        log::info!("archiving validation events:    {}", args.validation);
-        log::info!("archiving rpc events:           {}", args.rpc);
-        log::info!("archiving p2p_extractor events: {}", args.p2p_extractor);
-        log::info!("archiving log_extractor events: {}", args.log_extractor);
-        log::info!("archiving ipc_extractor events: {}", args.ipc_extractor);
+        log::info!(
+            "archiving all events:                  {}",
+            args.archive_all()
+        );
+        log::info!("archiving P2P messages:                {}", args.messages);
+        log::info!(
+            "archiving P2P connections:             {}",
+            args.connections
+        );
+        log::info!("archiving mempool events:              {}", args.mempool);
+        log::info!("archiving validation events:           {}", args.validation);
+        log::info!("archiving rpc events:                  {}", args.rpc);
+        log::info!(
+            "archiving p2p_extractor events:        {}",
+            args.p2p_extractor
+        );
+        log::info!(
+            "archiving log_extractor events:        {}",
+            args.log_extractor
+        );
+        log::info!(
+            "archiving ipc_extractor events:        {}",
+            args.ipc_extractor
+        );
+        log::info!("archiving addr-relay messages:         {}", args.addr_relay);
+        log::info!(
+            "archiving connections-with-handshakes: {}",
+            args.connections_with_handshakes
+        );
     }
     log::info!("archiving in low-data mode: {}", args.low_data);
 
@@ -329,6 +457,7 @@ pub async fn run(
         let _ = ready_tx.send(());
     }
 
+    let filter = ArchiveFilter::from(&args);
     let mut total_files: u64 = 0;
     let mut draining = false;
     // Only read once draining is set below.
@@ -345,7 +474,7 @@ pub async fn run(
                             continue;
                         }
                     };
-                    if should_archive(&event, &args){
+                    if filter.matches(&event) {
                         if args.low_data {
                             strip_low_data(&mut event);
                         }
@@ -451,39 +580,6 @@ fn strip_low_data(event: &mut Event) {
     }
 }
 
-fn should_archive(event: &Event, args: &Args) -> bool {
-    if args.archive_all() {
-        return true;
-    }
-    match event_type_name(event) {
-        Some("messages") => args.messages,
-        Some("connections") => args.connections,
-        Some("mempool") => args.mempool,
-        Some("validation") => args.validation,
-        Some("rpc") => args.rpc,
-        Some("p2p_extractor") => args.p2p_extractor,
-        Some("log_extractor") => args.log_extractor,
-        Some("ipc_extractor") => args.ipc_extractor,
-        _ => false,
-    }
-}
-
-fn event_type_name(event: &Event) -> Option<&'static str> {
-    let name = match event.peer_observer_event.as_ref()? {
-        PeerObserverEvent::EbpfExtractor(e) => match e.ebpf_event.as_ref()? {
-            ebpf::EbpfEvent::Message(_) => "messages",
-            ebpf::EbpfEvent::Connection(_) => "connections",
-            ebpf::EbpfEvent::Mempool(_) => "mempool",
-            ebpf::EbpfEvent::Validation(_) => "validation",
-        },
-        PeerObserverEvent::RpcExtractor(_) => "rpc",
-        PeerObserverEvent::P2pExtractor(_) => "p2p_extractor",
-        PeerObserverEvent::LogExtractor(_) => "log_extractor",
-        PeerObserverEvent::IpcExtractor(_) => "ipc_extractor",
-    };
-    Some(name)
-}
-
 fn format_utc_timestamp(epoch_ms: u64) -> String {
     let fmt = format_description!("[year][month][day]-[hour][minute][second]-[subsecond digits:3]");
     OffsetDateTime::from_unix_timestamp_nanos(epoch_ms as i128 * 1_000_000)
@@ -496,9 +592,12 @@ fn format_utc_timestamp(epoch_ms: u64) -> String {
 mod tests {
     use super::*;
 
-    use shared::protobuf::bitcoin_primitives::{BlockHeader, PrefilledTransaction, Transaction};
+    use shared::protobuf::bitcoin_primitives::{
+        Address, BlockHeader, PrefilledTransaction, Transaction,
+    };
+    use shared::protobuf::ebpf_extractor::connection;
     use shared::protobuf::ebpf_extractor::message::{
-        Block, BlockTxn, CompactBlock, Inv, MessageEvent, Metadata, Tx,
+        Addr, AddrV2, Block, BlockTxn, CompactBlock, Inv, MessageEvent, Metadata, Ping, Tx, Version,
     };
     use shared::protobuf::ebpf_extractor::Ebpf;
 
@@ -566,11 +665,152 @@ mod tests {
         Args::try_parse_from(argv)
     }
 
+    fn address() -> Address {
+        Address {
+            timestamp: 0,
+            services: 0,
+            port: 8333,
+            address: None,
+        }
+    }
+
+    fn version_msg() -> Msg {
+        Msg::Version(Version {
+            version: 70016,
+            services: 0,
+            timestamp: 0,
+            receiver: address(),
+            sender: address(),
+            nonce: 0,
+            user_agent: "/test/".to_string(),
+            start_height: 0,
+            relay: false,
+        })
+    }
+
+    fn connection_event() -> Event {
+        Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+            ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                event: Some(connection::connection_event::Event::Inbound(
+                    connection::InboundConnection {
+                        conn: connection::Connection {
+                            addr: "127.0.0.1:8333".to_string(),
+                            conn_type: 1,
+                            network: 1,
+                            peer_id: 1,
+                        },
+                        existing_connections: 1,
+                    },
+                )),
+            })),
+        }))
+        .unwrap()
+    }
+
+    fn rpc_event() -> Event {
+        Event::new(PeerObserverEvent::RpcExtractor(
+            shared::protobuf::rpc_extractor::Rpc {
+                rpc_event: Some(shared::protobuf::rpc_extractor::rpc::RpcEvent::Uptime(1234)),
+            },
+        ))
+        .unwrap()
+    }
+
+    /// Runs the archive filter derived from the args on the event.
+    fn archived(args: &Args, event: &Event) -> bool {
+        ArchiveFilter::from(args).matches(event)
+    }
+
     #[test]
     fn low_data_requires_messages() {
         assert!(parse_args(&["--low-data"]).is_err());
         assert!(parse_args(&["--low-data", "--messages"]).is_ok());
         assert!(parse_args(&["--low-data", "--messages", "--connections"]).is_ok());
+    }
+
+    #[test]
+    fn addr_relay_and_connections_with_handshakes_combine_freely() {
+        assert!(parse_args(&["--addr-relay"]).is_ok());
+        assert!(parse_args(&["--connections-with-handshakes"]).is_ok());
+        assert!(parse_args(&["--addr-relay", "--connections-with-handshakes"]).is_ok());
+        assert!(parse_args(&[
+            "--addr-relay",
+            "--connections-with-handshakes",
+            "--mempool",
+            "--messages"
+        ])
+        .is_ok());
+        assert!(parse_args(&[
+            "--addr-relay",
+            "--connections-with-handshakes",
+            "--low-data",
+            "--messages"
+        ])
+        .is_ok());
+    }
+
+    #[test]
+    fn message_filter_modes_disable_archive_all() {
+        assert!(parse_args(&[]).unwrap().archive_all());
+        assert!(!parse_args(&["--addr-relay"]).unwrap().archive_all());
+        assert!(!parse_args(&["--connections-with-handshakes"])
+            .unwrap()
+            .archive_all());
+    }
+
+    #[test]
+    fn addr_relay_archives_only_address_relay_messages() {
+        let args = parse_args(&["--addr-relay"]).unwrap();
+        assert!(archived(&args, &message_event(Msg::Addr(Addr::default()))));
+        assert!(archived(
+            &args,
+            &message_event(Msg::Addrv2(AddrV2::default()))
+        ));
+        assert!(archived(&args, &message_event(Msg::Getaddr(true))));
+        assert!(archived(&args, &message_event(Msg::Emptyaddrv2(true))));
+        assert!(!archived(&args, &message_event(version_msg())));
+        assert!(!archived(&args, &message_event(Msg::Ping(Ping::default()))));
+        assert!(!archived(&args, &connection_event()));
+        assert!(!archived(&args, &rpc_event()));
+    }
+
+    #[test]
+    fn connections_with_handshakes_archives_version_messages_and_connections() {
+        let args = parse_args(&["--connections-with-handshakes"]).unwrap();
+        assert!(archived(&args, &message_event(version_msg())));
+        assert!(archived(&args, &connection_event()));
+        assert!(!archived(&args, &message_event(Msg::Addr(Addr::default()))));
+        assert!(!archived(
+            &args,
+            &message_event(Msg::Addrv2(AddrV2::default()))
+        ));
+        assert!(!archived(&args, &message_event(Msg::Getaddr(true))));
+        assert!(!archived(&args, &message_event(Msg::Emptyaddrv2(true))));
+        assert!(!archived(&args, &message_event(Msg::Ping(Ping::default()))));
+        assert!(!archived(&args, &rpc_event()));
+    }
+
+    #[test]
+    fn addr_relay_and_connections_with_handshakes_archive_the_union() {
+        let args = parse_args(&["--addr-relay", "--connections-with-handshakes"]).unwrap();
+        assert!(archived(&args, &message_event(Msg::Addr(Addr::default()))));
+        assert!(archived(
+            &args,
+            &message_event(Msg::Addrv2(AddrV2::default()))
+        ));
+        assert!(archived(&args, &message_event(Msg::Getaddr(true))));
+        assert!(archived(&args, &message_event(version_msg())));
+        assert!(archived(&args, &connection_event()));
+        assert!(!archived(&args, &message_event(Msg::Ping(Ping::default()))));
+        assert!(!archived(&args, &rpc_event()));
+    }
+
+    #[test]
+    fn messages_flag_still_archives_non_filter_messages() {
+        let args = parse_args(&["--addr-relay", "--messages"]).unwrap();
+        assert!(archived(&args, &message_event(Msg::Ping(Ping::default()))));
+        assert!(archived(&args, &message_event(version_msg())));
+        assert!(archived(&args, &message_event(Msg::Addr(Addr::default()))));
     }
 
     #[test]
