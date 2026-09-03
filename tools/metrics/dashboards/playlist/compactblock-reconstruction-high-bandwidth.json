@@ -71,12 +71,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
+                "color": "green",
                 "value": 0
               },
               {
-                "color": "transparent",
-                "value": 0
+                "color": "red",
+                "value": 80
               }
             ]
           },
@@ -90,7 +90,7 @@
         "x": 0,
         "y": 0
       },
-      "id": 2,
+      "id": 1,
       "options": {
         "legend": {
           "calcs": [],
@@ -100,7 +100,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
@@ -111,42 +111,23 @@
             "type": "prometheus",
             "uid": "P1809F7CD0C75ACF3"
           },
-          "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(increase(peerobserver_log_compact_block_reconstruction_count{tx_requested=\"false\"}[1d])) by (host)\r\n/ sum(increase(peerobserver_log_compact_block_reconstruction_count[1d])) by (host)",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "instant": false,
+          "expr": "sum(increase(peerobserver_log_compact_block_reconstruction_count{bandwidth=\"high\"}[1d])) by (host)\r\n/ (sum(increase(peerobserver_log_compact_block_reconstruction_count[1d])) by (host))",
           "interval": "12h",
-          "legendFormat": "__auto",
+          "legendFormat": "{{host}}",
           "range": true,
-          "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P1809F7CD0C75ACF3"
-          },
-          "editorMode": "code",
-          "expr": "1 - sum(increase(peerobserver_p2p_message_count{message=\"getblocktxn\", direction=\"outbound\"}[1d])) by (host) / sum(increase(peerobserver_p2p_message_count{message=\"cmpctblock\", direction=\"inbound\"}[1d])) by (host)",
-          "hide": true,
-          "instant": false,
-          "interval": "12h",
-          "legendFormat": "{{host}} approx",
-          "range": true,
-          "refId": "B"
+          "refId": "A"
         }
       ],
-      "title": "Compact block reconstruction without transaction requests per day",
+      "title": "Compact block reconstruction in high-bandwidth per day",
       "type": "timeseries"
     }
   ],
   "preload": false,
   "schemaVersion": 42,
   "tags": [
-    "compact-block",
-    "big-playlist"
+    "big-playlist",
+    "compact-block"
   ],
   "templating": {
     "list": []
@@ -157,8 +138,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "[compact-block] Compact block reconstruction without transaction requests",
-  "uid": "adtsyzmbdt0cgc",
-  "version": 13,
+  "title": "[compact-block] Compact block reconstruction in high-bandwidth",
+  "uid": "adbpgdz",
+  "version": 1,
   "weekStart": ""
 }
