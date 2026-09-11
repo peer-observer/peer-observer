@@ -23,7 +23,7 @@ rand = "0.10.1"
 time = { version = "0.3.47", features = ["parsing"] }
 regex = "1.12"
 anyhow = "1.0.102"
-zstd = "0.13"
+zstd = "0.14"
 
 # Use custom commit to support:
 # - cpu_load and inv_to_send in getpeerinfo
