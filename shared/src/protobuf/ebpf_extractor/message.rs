@@ -651,13 +651,14 @@ impl fmt::Display for MessageEvent {
         match &self.msg {
             Some(msg) => write!(
                 f,
-                "{} id={} (conn_type={}): {}",
+                "{} id={} addr={} (conn_type={}): {}",
                 if self.meta.inbound {
                     "inbound from"
                 } else {
                     "outbound to"
                 },
                 self.meta.peer_id,
+                self.meta.addr,
                 self.meta.conn_type,
                 msg
             ),

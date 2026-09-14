@@ -311,8 +311,8 @@ async fn test_integration_logger_p2p_messages() {
         ],
         Subject::NetMsg,
         r#"
-        message: inbound from id=0 (conn_type=1): Ping(1336)
-        message: outbound to id=0 (conn_type=1): Pong(1337)
+        message: inbound from id=0 addr=127.0.0.1:8333 (conn_type=1): Ping(1336)
+        message: outbound to id=0 addr=127.0.0.1:8333 (conn_type=1): Pong(1337)
         "#,
     )
     .await;
