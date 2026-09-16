@@ -1,0 +1,72 @@
+name: fuzz
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, Monday 04:00 UTC.
+    - cron: "0 4 * * 1"
+  push:
+    branches: [ master ]
+    paths:
+      - "fuzz/**"
+      - "shared/**"
+      - "extractors/p2p/**"
+      - "tools/archive/**"
+      - ".github/workflows/fuzz.yml"
+  pull_request:
+    branches: [ master ]
+    paths:
+      - "fuzz/**"
+      - "shared/**"
+      - "extractors/p2p/**"
+      - "tools/archive/**"
+      - ".github/workflows/fuzz.yml"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+
+  # Make sure the fuzz targets keep compiling against the crates they test.
+  fuzz-build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+    - uses: ./.github/actions/setup-nix-action
+    - name: Build fuzz targets
+      run: nix-shell --pure --command "cd fuzz && cargo fuzz build -s none"
+
+  # Short fuzzing session for each target. Only runs on the schedule and on
+  # manual dispatch, since it takes a while.
+  fuzz-run:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: fuzz-build
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - ebpf_p2p_message
+          - ebpf_ringbuffer
+          - p2p_read_message
+          - archive_reader
+          - event_decode
+          - log_line
+    steps:
+    - uses: actions/checkout@v7
+    - uses: ./.github/actions/setup-nix-action
+    - name: Generate seed corpus
+      run: nix-shell --pure --command "cd fuzz && cargo run --example gen_seeds"
+    - name: Fuzz ${{ matrix.target }} for 10 minutes
+      run: |
+        nix-shell --pure --command "cd fuzz && cargo fuzz run -s none ${{ matrix.target }} corpus/${{ matrix.target }} seeds/${{ matrix.target }} -- -max_total_time=600"
+    - name: Upload crash artifacts
+      if: failure()
+      uses: actions/upload-artifact@v7
+      with:
+        name: fuzz-artifacts-${{ matrix.target }}
+        path: fuzz/artifacts/${{ matrix.target }}
+        if-no-files-found: ignore
