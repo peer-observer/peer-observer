@@ -35,6 +35,9 @@ pkgs.mkShell {
       # for code coverage:
       pkgs.cargo-tarpaulin
 
+      # for fuzzing (see fuzz/README.md)
+      pkgs.cargo-fuzz
+
       # for integration tests
       pkgs.bitcoind
     ];

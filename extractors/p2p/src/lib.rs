@@ -431,7 +431,11 @@ async fn publish_ping_measurement_event(duration: u64, nats_client: &async_nats:
     }
 }
 
-async fn read_and_decode_message<R: AsyncRead + Unpin>(
+/// Reads one P2P message (24-byte header followed by the payload) from `reader`
+/// and decodes it. Only v1 messages with the expected network magic are accepted.
+///
+/// Public so the fuzz targets in `fuzz/` can feed it arbitrary bytes.
+pub async fn read_and_decode_message<R: AsyncRead + Unpin>(
     reader: &mut BufReader<R>,
     network: BitcoinNetwork,
     addr: &str,
