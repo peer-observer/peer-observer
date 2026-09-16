@@ -5,6 +5,7 @@ use bitcoin::hashes::Hash;
 use bitcoin::hex::DisplayHex;
 use bitcoin::p2p;
 
+use crate::protobuf::display_hash;
 use std::fmt;
 use std::net::SocketAddr;
 
@@ -126,8 +127,8 @@ impl fmt::Display for Transaction {
         write!(
             f,
             "Transaction(txid={}, wtxid={})",
-            bitcoin::Txid::from_slice(&self.txid).unwrap(),
-            bitcoin::Wtxid::from_slice(&self.wtxid).unwrap()
+            display_hash::<bitcoin::Txid>(&self.txid),
+            display_hash::<bitcoin::Wtxid>(&self.wtxid)
         )
     }
 }
@@ -135,10 +136,10 @@ impl fmt::Display for Transaction {
 impl fmt::Display for BlockHeader {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "BlockHeader(hash={}, version={}, prev_blockhash={}, merkle_root={}, time={}, bits={}, nonce={})",
-            bitcoin::BlockHash::from_slice(&self.hash).unwrap(),
+            display_hash::<bitcoin::BlockHash>(&self.hash),
             self.version,
-            bitcoin::BlockHash::from_slice(&self.prev_blockhash).unwrap(),
-            bitcoin::TxMerkleNode::from_slice(&self.merkle_root).unwrap(),
+            display_hash::<bitcoin::BlockHash>(&self.prev_blockhash),
+            display_hash::<bitcoin::TxMerkleNode>(&self.merkle_root),
             self.time,
             self.bits,
             self.nonce,
@@ -237,42 +238,36 @@ impl fmt::Display for InventoryItem {
         if let Some(item) = &self.item {
             match item {
                 Item::Transaction(txid) => {
-                    write!(f, "Tx({})", bitcoin::Txid::from_slice(txid).unwrap())
+                    write!(f, "Tx({})", display_hash::<bitcoin::Txid>(txid))
                 }
-                Item::Block(hash) => write!(
-                    f,
-                    "Block({})",
-                    bitcoin::BlockHash::from_slice(hash).unwrap()
-                ),
+                Item::Block(hash) => {
+                    write!(f, "Block({})", display_hash::<bitcoin::BlockHash>(hash))
+                }
                 Item::Wtx(wtxid) => {
-                    write!(f, "WTx({})", bitcoin::Wtxid::from_slice(wtxid).unwrap())
+                    write!(f, "WTx({})", display_hash::<bitcoin::Wtxid>(wtxid))
                 }
                 Item::WitnessTransaction(wtxid) => {
-                    write!(
-                        f,
-                        "WitnessTx({})",
-                        bitcoin::Wtxid::from_slice(wtxid).unwrap()
-                    )
+                    write!(f, "WitnessTx({})", display_hash::<bitcoin::Wtxid>(wtxid))
                 }
                 Item::WitnessBlock(hash) => {
                     write!(
                         f,
                         "WitnessBlock({})",
-                        bitcoin::BlockHash::from_slice(hash).unwrap()
+                        display_hash::<bitcoin::BlockHash>(hash)
                     )
                 }
                 Item::CompactBlock(hash) => {
                     write!(
                         f,
                         "CompactBlock({})",
-                        bitcoin::BlockHash::from_slice(hash).unwrap()
+                        display_hash::<bitcoin::BlockHash>(hash)
                     )
                 }
                 Item::Unknown(uitem) => write!(
                     f,
                     "Unknown(type={}, hash={})",
                     uitem.inv_type,
-                    bitcoin::hashes::sha256::Hash::from_slice(&uitem.hash).unwrap()
+                    display_hash::<bitcoin::hashes::sha256::Hash>(&uitem.hash)
                 ),
                 Item::Error(_) => write!(f, "Error"),
             }
@@ -288,7 +283,10 @@ impl fmt::Display for Address {
             f,
             "Address(timestamp={}, address={}, port={}, services={})",
             self.timestamp,
-            self.address.as_ref().unwrap(),
+            match &self.address {
+                Some(address) => address.to_string(),
+                None => "None".to_string(),
+            },
             self.port,
             self.services,
         )
