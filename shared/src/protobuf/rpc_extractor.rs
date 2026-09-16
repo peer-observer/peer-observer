@@ -543,8 +543,12 @@ impl From<GetRawAddrMan> for Addrman {
 
 impl fmt::Display for EstimateSmartFee {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mode = FeeEstimateMode::try_from(self.mode)
-            .expect("Estimate mode must be a valid FeeEstimateMode enum variant");
+        // The mode is an i32 on the wire, so a decoded event can hold a value
+        // that isn't a known variant.
+        let mode = match FeeEstimateMode::try_from(self.mode) {
+            Ok(mode) => mode.to_string(),
+            Err(_) => format!("unknown({})", self.mode),
+        };
 
         let Some(fee_rate) = self.fee_rate else {
             return write!(
@@ -591,5 +595,27 @@ impl EstimateSmartFee {
             requested_blocks: target,
             mode: mode.into(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Found by the event_decode fuzz target: a decoded event with a mode value
+    // that isn't a FeeEstimateMode variant must not panic when displayed.
+    #[test]
+    fn estimate_smart_fee_display_does_not_panic_on_unknown_mode() {
+        let estimate = EstimateSmartFee {
+            fee_rate: None,
+            blocks: 6,
+            requested_blocks: 6,
+            mode: 42,
+            errors: vec![],
+        };
+        assert_eq!(
+            estimate.to_string(),
+            "EstimateSmartFee(estimation failed, blocks=6, mode=unknown(42), errors=[])"
+        );
     }
 }
