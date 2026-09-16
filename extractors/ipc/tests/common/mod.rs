@@ -54,23 +54,17 @@ fn bitcoin_node_exe_path() -> String {
         .into_owned()
 }
 
-fn setup_node(conf: bitcoind::Conf) -> bitcoind::BitcoinD {
+pub fn configure_node() -> bitcoind::BitcoinD {
     let exe_path = bitcoin_node_exe_path();
     info!("Using bitcoin-node at '{}'", exe_path);
+
+    let mut conf = bitcoind::Conf::default();
+    conf.args = vec!["-regtest", "-ipcbind=unix", "-fallbackfee=0.00001"];
+    conf.view_stdout = false;
+    // Disable default wallet auto-creation. Create it manually in tests requiring wallet.
+    conf.wallet = None;
+
     bitcoind::BitcoinD::with_conf(exe_path, &conf).unwrap()
-}
-
-pub fn configure_node() -> bitcoind::BitcoinD {
-    let mut node_conf = bitcoind::Conf::default();
-    node_conf.args = vec!["-regtest", "-ipcbind=unix"];
-    // enabling this is useful for debugging, but enabling this by default will
-    // be quite spammy.
-    node_conf.view_stdout = false;
-    // node_conf.wallet is `true` by default, but since `bitcoin-node` binary doesn't
-    // have wallet capabilities we disable it
-    node_conf.wallet = None;
-
-    setup_node(node_conf)
 }
 
 pub fn ipc_socket_path(node: &bitcoind::BitcoinD) -> String {

@@ -2,13 +2,65 @@ syntax = "proto2";
 
 package ipc_extractor;
 
+import "bitcoin_primitives.proto";
+
 message ipc {
   oneof ipc_event {
     BlockTip block_tip = 1;
+    BlockConnected block_connected = 2;
+    BlockDisconnected block_disconnected = 3;
+    TransactionAddedToMempool transaction_added_to_mempool = 4;
+    TransactionRemovedFromMempool transaction_removed_from_mempool = 5;
+    ChainStateFlushed chain_state_flushed = 6;
   }
 }
 
+// The current chain tip as reported by Bitcoin Core.
 message BlockTip {
   required int32 height = 1;
   required bytes hash   = 2;
+}
+
+// A block summary delivered by Chain notifications.
+message BlockInfo {
+  required int32  height       = 1;
+  required bytes  hash         = 2;
+  required bytes  prev_hash    = 3;
+  optional uint32 chain_time_max = 4;
+}
+
+// Role of the chainstate from which a notification originated.
+message ChainstateRole {
+  required bool validated  = 1;
+  required bool historical = 2;
+}
+
+// Fired when a block is connected to the active chain.
+message BlockConnected {
+  required ChainstateRole role  = 1;
+  required BlockInfo      block = 2;
+}
+
+// Fired when a block is disconnected from the active chain (e.g. during a reorg).
+message BlockDisconnected {
+  required BlockInfo block = 1;
+}
+
+// Fired when a transaction enters the mempool.
+message TransactionAddedToMempool {
+  required bitcoin_primitives.Transaction tx = 1;
+}
+
+// Fired when a transaction leaves the mempool. The `reason` field is a
+// pass-through of Bitcoin Core's MemPoolRemovalReason enum value.
+message TransactionRemovedFromMempool {
+  required bitcoin_primitives.Transaction tx     = 1;
+  required int32                          reason = 2;
+}
+
+// Fired when the chainstate is flushed to disk. `locator` is a serialized
+// CBlockLocator pointing at the flushed tip.
+message ChainStateFlushed {
+  required ChainstateRole role    = 1;
+  required bytes          locator = 2;
 }

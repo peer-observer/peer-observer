@@ -1552,6 +1552,11 @@ fn handle_ipc_event(e: &ipc_extractor::ipc::IpcEvent, metrics: metrics::Metrics)
         ipc_extractor::ipc::IpcEvent::BlockTip(tip) => {
             metrics.ipc_block_tip_height.set(tip.height as i64);
         }
+        ipc_extractor::ipc::IpcEvent::BlockConnected(_) => {}
+        ipc_extractor::ipc::IpcEvent::BlockDisconnected(_) => {}
+        ipc_extractor::ipc::IpcEvent::TransactionAddedToMempool(_) => {}
+        ipc_extractor::ipc::IpcEvent::TransactionRemovedFromMempool(_) => {}
+        ipc_extractor::ipc::IpcEvent::ChainStateFlushed(_) => {}
     }
 }
 

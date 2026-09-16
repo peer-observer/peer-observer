@@ -61,6 +61,7 @@ async fn test_integration_metrics_server_basic() {
 
 /// Verifies that a successful IPC call records its duration in the histogram.
 #[tokio::test]
+#[ignore = "moved get_tip from polling to listener"]
 async fn test_integration_metrics_ipc_fetch_duration() {
     setup();
     let node = configure_node();

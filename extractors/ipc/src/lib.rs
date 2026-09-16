@@ -8,7 +8,7 @@ use shared::{
     prost::Message,
     protobuf::{
         event::{Event, event::PeerObserverEvent},
-        ipc_extractor,
+        ipc_extractor::{self, ipc::IpcEvent},
     },
     tokio::{
         self,
@@ -22,8 +22,8 @@ use std::net::SocketAddr;
 mod ipc;
 mod metrics;
 
-use ipc::IpcClient;
 use metrics::Metrics;
+use ipc::{ChainCallbacks, EventFut, IpcClient, IpcReader};
 
 /// The peer-observer ipc-extractor periodically queries data from the
 /// Bitcoin Core IPC interface and publishes the results as events into
@@ -75,10 +75,6 @@ pub async fn run(
         })?;
     log::info!("Connected to IPC socket at {}", args.ipc_socket_path);
 
-    let mut ipc_session = IpcClient::init(stream)
-        .await
-        .context("initializing the IPC session")?;
-
     let metrics = Metrics::new().context("creating metrics registry")?;
     let local_addr =
         shared::metricserver::start(&args.prometheus_address, Some(metrics.registry.clone()))
@@ -87,49 +83,55 @@ pub async fn run(
         let _ = tx.send(local_addr);
     }
 
-    let duration_sec = Duration::from_secs(args.query_interval);
-    let mut interval = time::interval(duration_sec);
-    log::info!(
-        "Querying the Bitcoin Core IPC interface every {:?}.",
-        duration_sec
-    );
+    let mut ipc = IpcClient::connect(stream).await?;
+    let chain_listener = ipc
+        .subscribe_chain_notifications(make_chain_callbacks(
+            nats_client.clone(),
+            ipc.reader.clone(),
+            metrics.clone(),
+        ))
+        .await?;
 
-    loop {
-        tokio::select! {
-            _ = interval.tick() => {
-                if let Err(e) = fetch_and_publish_tip(&ipc_session, &nats_client, &metrics).await {
-                    log::error!("Could not fetch and publish 'BlockTip': {:#}", e);
-                }
+    let mut poll_handle = tokio::task::spawn_local(poll_task(args.query_interval));
+
+    tokio::select! {
+        res = &mut poll_handle => {
+            match res {
+                Ok(()) => log::info!("Poll task exited."),
+                Err(e) => log::error!("Poll task panicked: {e}"),
             }
-            res = &mut ipc_session.rpc_task => {
-                match res {
-                    Ok(Ok(())) => log::warn!("Lost IPC connection to bitcoin-node."),
-                    Ok(Err(e)) => log::error!("Lost IPC connection to bitcoin-node: {e}"),
-                    Err(e) => log::error!("IPC task panicked or was cancelled: {e}"),
-                }
-                break;
+        }
+        res = &mut ipc.rpc_task => {
+            match res {
+                Ok(Ok(())) => log::warn!("Lost IPC connection to bitcoin-node."),
+                Ok(Err(e)) => log::error!("Lost IPC connection to bitcoin-node: {e}"),
+                Err(e) => log::error!("IPC task panicked or was cancelled: {e}"),
             }
-            res = shutdown_rx.changed() => {
-                match res {
-                    Ok(_) if *shutdown_rx.borrow() => {
-                        log::info!("ipc_extractor received shutdown signal.");
-                    }
-                    _ => {
-                        // all senders dropped -> treat as shutdown
-                        log::warn!("The shutdown notification sender was dropped. Shutting down.");
-                    }
+        }
+        res = shutdown_rx.changed() => {
+            match res {
+                Ok(_) if *shutdown_rx.borrow() => {
+                    log::info!("ipc_extractor received shutdown signal.");
                 }
-                break;
+                _ => {
+                    // all senders dropped -> treat as shutdown
+                    log::warn!("The shutdown notification sender was dropped. Shutting down.");
+                }
             }
         }
     }
 
-    if let Err(e) = ipc_session.disconnector.await {
+    if ipc.rpc_task.is_finished() {
+        return Ok(());
+    }
+
+    if let Err(e) = chain_listener.shutdown().await {
+        log::error!("could not shut down listener: {}", e);
+    }
+    if let Err(e) = ipc.disconnector.await {
         log::error!("could not run disconnector during shutdown: {}", e);
     }
-    if !ipc_session.rpc_task.is_finished() {
-        let _ = ipc_session.rpc_task.await;
-    }
+    let _ = ipc.rpc_task.await;
     Ok(())
 }
 
@@ -157,32 +159,76 @@ where
     res
 }
 
-async fn fetch_and_publish_tip(
-    ipc_client: &IpcClient,
-    nats_client: &async_nats::Client,
-    metrics: &Metrics,
-) -> Result<()> {
-    let tip = match measure_ipc_call("get_tip", metrics, ipc_client.get_tip())
-        .await
-        .context("measuring get_tip IPC")?
-    {
-        Some(t) => t,
-        None => return Ok(()), // the node has no tip loaded yet, skip NATS publish
-    };
+async fn poll_task(interval_secs: u64) {
+    let duration_sec = Duration::from_secs(interval_secs);
+    log::info!(
+        "Querying the Bitcoin Core IPC interface every {:?}.",
+        duration_sec
+    );
+    let mut interval = time::interval(duration_sec);
 
-    let proto = Event::new(PeerObserverEvent::IpcExtractor(ipc_extractor::Ipc {
-        ipc_event: Some(ipc_extractor::ipc::IpcEvent::BlockTip(tip)),
-    }))
-    .context("creating the protobuf block tip event")?;
-    nats_client
-        .publish(Subject::Ipc.to_string(), proto.encode_to_vec().into())
-        .await
-        .inspect_err(|_| {
-            metrics
-                .nats_publish_errors
-                .with_label_values(&["get_tip"])
-                .inc();
-        })
-        .context("publishing the block tip to NATS")?;
-    Ok(())
+    loop {
+        interval.tick().await;
+    }
+}
+
+fn make_chain_callbacks(
+    nats: async_nats::Client,
+    reader: IpcReader,
+    metrics: Metrics,
+) -> ChainCallbacks {
+    ChainCallbacks {
+        on_block_connected: wrap_publisher(nats.clone(), IpcEvent::BlockConnected),
+        on_block_disconnected: wrap_publisher(nats.clone(), IpcEvent::BlockDisconnected),
+        on_tx_added: wrap_publisher(nats.clone(), IpcEvent::TransactionAddedToMempool),
+        on_tx_removed: wrap_publisher(nats.clone(), IpcEvent::TransactionRemovedFromMempool),
+        on_chain_state_flushed: wrap_publisher(nats.clone(), IpcEvent::ChainStateFlushed),
+
+        // `updatedBlockTip` pushes no value to the subscriber
+        // so we fetch through the reader the new tip and publish
+        // a BlockTip event to NATS.
+        on_updated_block_tip: Box::new(move || {
+            let nats = nats.clone();
+            let reader = reader.clone();
+            let metrics = metrics.clone();
+            Box::pin(async move {
+                match measure_ipc_call("get_tip", &metrics, reader.get_tip()).await {
+                    Ok(Some(tip)) => publish_ipc_event(&nats, IpcEvent::BlockTip(tip)).await,
+                    Ok(None) => unreachable!("updatedBlockTip fired without a tip"),
+                    Err(e) => log::error!("could not get tip on updated_block_tip: {}", e),
+                }
+            })
+        }),
+    }
+}
+
+fn wrap_publisher<T: 'static>(
+    nats: async_nats::Client,
+    variant: fn(T) -> IpcEvent,
+) -> Box<dyn Fn(T) -> EventFut> {
+    Box::new(move |value: T| {
+        let nats = nats.clone();
+        let event_inner = variant(value);
+        Box::pin(async move { publish_ipc_event(&nats, event_inner).await })
+    })
+}
+
+async fn publish_ipc_event(nats: &async_nats::Client, ipc_event: IpcEvent) {
+    match Event::new(PeerObserverEvent::IpcExtractor(ipc_extractor::Ipc {
+        ipc_event: Some(ipc_event),
+    })) {
+        Ok(proto) => {
+            if let Err(e) = nats
+                .publish(Subject::Ipc.to_string(), proto.encode_to_vec().into())
+                .await
+            {
+                log::error!("could not publish IPC event into NATS: {}", e);
+            } else {
+                log::trace!("published IPC event into NATS: {:?}", proto);
+            }
+        }
+        Err(e) => {
+            log::error!("could not create IPC event protobuf: {}", e);
+        }
+    }
 }
