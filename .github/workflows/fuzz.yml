@@ -1,4 +1,5 @@
 name: fuzz
+        mkdir -p fuzz/corpus/${{ matrix.target }}
 
 on:
   workflow_dispatch:

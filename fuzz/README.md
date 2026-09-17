@@ -32,10 +32,12 @@ cd fuzz
 cargo run --example gen_seeds
 
 # Run one target. The seeds/ directory is used as the starting corpus and new
-# inputs are written to corpus/<target>/.
+# inputs are written to corpus/<target>/, which has to exist.
+mkdir -p corpus/ebpf_p2p_message
 cargo fuzz run -s none ebpf_p2p_message corpus/ebpf_p2p_message seeds/ebpf_p2p_message
 
 # Time-limited run, e.g. for CI.
+mkdir -p corpus/archive_reader
 cargo fuzz run -s none archive_reader corpus/archive_reader seeds/archive_reader -- -max_total_time=600
 
 # List targets, build all of them.
