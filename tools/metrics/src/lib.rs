@@ -477,7 +477,6 @@ fn handle_rpc_event(
             let mut peers_by_network: BTreeMap<&str, i64> = BTreeMap::new();
             let mut peers_by_connection_type: BTreeMap<&str, i64> = BTreeMap::new();
             let mut peers_by_protocol_version: BTreeMap<u32, i64> = BTreeMap::new();
-            let mut peers_by_asn: BTreeMap<u32, i64> = BTreeMap::new();
 
             // When we requested a block, but a peer hasn't yet sent us the block,
             // the block is considered inflight. If a peer doesn't send us a block at all,
@@ -607,15 +606,6 @@ fn handle_rpc_event(
                     .entry(peer.version)
                     .and_modify(|e| *e += 1)
                     .or_insert(1);
-
-                // Not all nodes use an ASMap file and we don't care about the number
-                // of non-mapped peers here. So, ignore peers mapped as 0.
-                if peer.mapped_as != 0 {
-                    peers_by_asn
-                        .entry(peer.mapped_as)
-                        .and_modify(|e| *e += 1)
-                        .or_insert(1);
-                }
 
                 if peer.relay_transactions
                     // check that the minfeefilter of this pee is below 1 sat/vbyte
@@ -757,16 +747,6 @@ fn handle_rpc_event(
             for (k, v) in peers_by_protocol_version.iter() {
                 metrics
                     .rpc_peer_info_protocol_version_peers
-                    .with_label_values(&[k.to_string()])
-                    .set(*v);
-            }
-
-            // TODO: remove once the dashboards use rpc_peer_info_as_peers, which is
-            // based on the local asmap lookup instead of Bitcoin Core's mapped_as.
-            metrics.rpc_peer_info_asn_peers.reset();
-            for (k, v) in peers_by_asn.iter() {
-                metrics
-                    .rpc_peer_info_asn_peers
                     .with_label_values(&[k.to_string()])
                     .set(*v);
             }

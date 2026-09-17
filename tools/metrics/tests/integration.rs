@@ -2115,7 +2115,6 @@ async fn test_integration_metrics_rpc_peerinfo() {
         peerobserver_rpc_peer_info_addr_ratelimited_peers 2
         peerobserver_rpc_peer_info_addr_ratelimited_total 1668
         peerobserver_rpc_peer_info_addr_relay_enabled_peers 2
-        peerobserver_rpc_peer_info_asn_peers{ASN="1234"} 2
         peerobserver_rpc_peer_info_bip152_highbandwidth_from 1
         peerobserver_rpc_peer_info_bip152_highbandwidth_to 2
         peerobserver_rpc_peer_info_connection_type_peers{connection_type="type0"} 1

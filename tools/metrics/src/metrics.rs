@@ -34,7 +34,6 @@ pub const LABEL_RPC_TRANSPORT_PROTOCOL_TYPE: &str = "transport_protocol_type";
 pub const LABEL_RPC_NETWORK_TYPE: &str = "network";
 pub const LABEL_RPC_CONNECTION_TYPE: &str = "connection_type";
 pub const LABEL_RPC_PROTOCOL_VERSION: &str = "protocol_version";
-pub const LABEL_RPC_ASN: &str = "ASN";
 
 // Labels for metrics using the local IP to AS lookup (see shared::asn).
 pub const LABEL_ASN: &str = "asn";
@@ -269,7 +268,6 @@ pub struct Metrics {
     pub rpc_peer_info_network_peers: IntGaugeVec,
     pub rpc_peer_info_connection_type_peers: IntGaugeVec,
     pub rpc_peer_info_protocol_version_peers: IntGaugeVec,
-    pub rpc_peer_info_asn_peers: IntGaugeVec,
     pub rpc_peer_info_as_peers: IntGaugeVec,
     pub rpc_peer_info_as_distinct: IntGaugeVec,
     pub rpc_peer_info_as_diversity: GaugeVec,
@@ -499,7 +497,6 @@ impl Metrics {
         igv!(rpc_peer_info_network_peers, "Number of peers by network.", [LABEL_RPC_NETWORK_TYPE], registry);
         igv!(rpc_peer_info_connection_type_peers, "Number of peers by connection_type", [LABEL_RPC_CONNECTION_TYPE], registry);
         igv!(rpc_peer_info_protocol_version_peers, "Number of peers by protocol_version", [LABEL_RPC_PROTOCOL_VERSION], registry);
-        igv!(rpc_peer_info_asn_peers, "Number of peers by AS number", [LABEL_RPC_ASN], registry);
         igv!(rpc_peer_info_as_peers, "Number of peers by Autonomous System (AS) of the peer IP and connection direction. Requires an asmap file.", [LABEL_ASN, LABEL_AS_NAME, LABEL_DIRECTION], registry);
         igv!(rpc_peer_info_as_distinct, "Number of distinct Autonomous Systems (AS) among peers with a mapped AS by connection direction. Requires an asmap file.", [LABEL_DIRECTION], registry);
         gv!(rpc_peer_info_as_diversity, "Number of distinct Autonomous Systems (AS) divided by the number of peers with a mapped AS by connection direction (1.0 = all peers from different AS). Requires an asmap file.", [LABEL_DIRECTION], registry);
@@ -726,7 +723,6 @@ impl Metrics {
             rpc_peer_info_network_peers,
             rpc_peer_info_connection_type_peers,
             rpc_peer_info_protocol_version_peers,
-            rpc_peer_info_asn_peers,
             rpc_peer_info_as_peers,
             rpc_peer_info_as_distinct,
             rpc_peer_info_as_diversity,
