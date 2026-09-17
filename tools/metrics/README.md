@@ -79,6 +79,24 @@ The dashboards are tagged with, for example, tags like: `connections`, `mempool`
 Addtionally, dashboards intended for usage in a big monitoring playlist are tagged with `big-playlist`.
 Recent versions of Grafana allow to add dashboards to playlists by tags.
 
+## AS lookups
+
+With `--asmap-file <PATH>`, the tool maps peer IP addresses to Autonomous Systems (AS)
+locally using an asmap file in Bitcoin Core's binary format. No API requests are made.
+AS names come from a dataset embedded at compile time. This enables the following metrics:
+
+- `peerobserver_rpc_peer_info_as_peers{asn, as_name, direction}`: connected peers per AS and connection direction (from `getpeerinfo`)
+- `peerobserver_rpc_peer_info_as_distinct{direction}`: distinct AS among peers with a mapped AS
+- `peerobserver_rpc_peer_info_as_diversity{direction}`: distinct AS divided by peers with a mapped AS (1.0 = all peers from different AS)
+- `peerobserver_rpc_peer_info_as_unmapped_peers{direction}`: IPv4/IPv6 peers not mapped in the asmap file
+- `peerobserver_conn_inbound_as{asn, as_name}`, `peerobserver_conn_outbound_as{asn, as_name}`, `peerobserver_conn_closed_as{asn, as_name}`: opened and closed connections per AS (from the eBPF connection tracepoints)
+
+asmap files are published in [bitcoin-core/asmap-data](https://github.com/bitcoin-core/asmap-data).
+Prefer the `*_asmap_unfilled.dat` variant: the default (filled) files assign unmapped IP ranges to
+neighboring AS to reduce the file size, while the unfilled files only contain the ranges sourced
+from the data and report everything else as unmapped. The asmap file is read once at startup, so
+restart the tool to use a newer file.
+
 ## Usage
 
 ```
@@ -100,6 +118,8 @@ Options:
           The metrics server address the tool should listen on [default: 127.0.0.1:8282]
   -l, --log-level <LOG_LEVEL>
           The log level the tool should run with. Valid log levels are "trace", "debug", "info", "warn", "error". See https://docs.rs/log/latest/log/enum.Level.html [default: DEBUG]
+      --asmap-file <PATH>
+          Path to an asmap file (Bitcoin Core binary format) used to map peer IPs to Autonomous Systems (AS). Enables the AS metrics. Files are available at https://github.com/bitcoin-core/asmap-data (prefer the _unfilled variant)
   -h, --help
           Print help
   -V, --version

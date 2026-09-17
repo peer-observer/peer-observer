@@ -28,10 +28,11 @@ use shared::protobuf::{
 use shared::tokio::sync::{oneshot, watch};
 use shared::tokio::time::Instant;
 use shared::util::{self, is_on_linkinglion_banlist};
-use shared::{async_nats, clap};
+use shared::{asn, async_nats, clap};
 use std::cmp::{max, min};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -60,6 +61,12 @@ pub struct Args {
     /// are "trace", "debug", "info", "warn", "error". See https://docs.rs/log/latest/log/enum.Level.html
     #[arg(short, long, default_value_t = Level::Debug)]
     pub log_level: Level,
+
+    /// Path to an asmap file (Bitcoin Core binary format) used to map peer IPs to
+    /// Autonomous Systems (AS). Enables the AS metrics. Files are available at
+    /// https://github.com/bitcoin-core/asmap-data (prefer the _unfilled variant).
+    #[arg(long, value_name = "PATH")]
+    pub asmap_file: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug)]
@@ -112,6 +119,23 @@ pub async fn run(
 
     let metrics = metrics::Metrics::new();
 
+    // Load the asmap before connecting to NATS so that an invalid file fails fast.
+    let asn_lookup = match &args.asmap_file {
+        Some(path) => {
+            let lookup = asn::AsnLookup::from_file(path)?;
+            info!(
+                "Loaded asmap file {} ({} bytes). AS metrics are enabled.",
+                path.display(),
+                lookup.len()
+            );
+            Some(lookup)
+        }
+        None => {
+            info!("No asmap file given (--asmap-file). AS metrics are disabled.");
+            None
+        }
+    };
+
     let nc = nats_util::prepare_connection(&args.nats)
         .context("preparing NATS connection")?
         .connect(&args.nats.address)
@@ -144,7 +168,7 @@ pub async fn run(
         shared::tokio::select! {
             maybe_msg = sub.next() => {
                 if let Some(msg) = maybe_msg {
-                    handle_event(msg, state_arc.clone(), metrics.clone())?;
+                    handle_event(msg, state_arc.clone(), metrics.clone(), asn_lookup.as_ref())?;
                 } else {
                     break; // subscription ended
                 }
@@ -174,6 +198,7 @@ fn handle_event(
     msg: async_nats::Message,
     state_arc: Arc<Mutex<State>>,
     metrics: metrics::Metrics,
+    asn_lookup: Option<&asn::AsnLookup>,
 ) -> anyhow::Result<()> {
     let unwrapped = Event::decode(msg.payload).context("decoding event")?;
     if let Some(event) = unwrapped.peer_observer_event {
@@ -183,7 +208,12 @@ fn handle_event(
                     handle_p2p_message(&msg, unwrapped.timestamp, metrics);
                 }
                 ebpf::EbpfEvent::Connection(conn) => {
-                    handle_connection_event(&conn.event.unwrap(), unwrapped.timestamp, metrics);
+                    handle_connection_event(
+                        &conn.event.unwrap(),
+                        unwrapped.timestamp,
+                        metrics,
+                        asn_lookup,
+                    );
                 }
                 ebpf::EbpfEvent::Mempool(mempool) => {
                     handle_mempool_event(&mempool.event.unwrap(), metrics);
@@ -194,7 +224,7 @@ fn handle_event(
             },
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(e) = r.rpc_event {
-                    handle_rpc_event(&e, state_arc, metrics);
+                    handle_rpc_event(&e, state_arc, metrics, asn_lookup);
                 }
             }
             PeerObserverEvent::P2pExtractor(p) => {
@@ -216,7 +246,12 @@ fn handle_event(
     Ok(())
 }
 
-fn handle_rpc_event(e: &rpc::RpcEvent, state_arc: Arc<Mutex<State>>, metrics: metrics::Metrics) {
+fn handle_rpc_event(
+    e: &rpc::RpcEvent,
+    state_arc: Arc<Mutex<State>>,
+    metrics: metrics::Metrics,
+    asn_lookup: Option<&asn::AsnLookup>,
+) {
     match e {
         rpc::RpcEvent::Uptime(uptime_seconds) => {
             metrics.rpc_uptime.set(*uptime_seconds as i64);
@@ -461,8 +496,32 @@ fn handle_rpc_event(e: &rpc::RpcEvent, state_arc: Arc<Mutex<State>>, metrics: me
             let mut invtosend_values: Vec<u64> = vec![];
             let mut cpuload_values: Vec<f64> = vec![];
 
+            // Peers per (inbound, ASN) and IPv4/IPv6 peers per direction without a
+            // mapped AS. Only filled when an asmap file is loaded.
+            let mut peers_by_direction_and_asn: BTreeMap<(bool, u32), i64> = BTreeMap::new();
+            let mut as_unmapped_peers_by_direction: BTreeMap<bool, i64> = BTreeMap::new();
+
             for peer in info.infos.iter() {
                 let ip = util::ip_from_ipport(peer.address.clone());
+                if let Some(lookup) = asn_lookup {
+                    match lookup.lookup(&ip) {
+                        Some(asn) => {
+                            *peers_by_direction_and_asn
+                                .entry((peer.inbound, asn))
+                                .or_insert(0) += 1;
+                        }
+                        None => {
+                            // Only count IPv4 and IPv6 peers as unmapped. Tor, I2P and
+                            // CJDNS addresses can't be mapped to an AS.
+                            let network = peer.network.to_lowercase();
+                            if network == "ipv4" || network == "ipv6" {
+                                *as_unmapped_peers_by_direction
+                                    .entry(peer.inbound)
+                                    .or_insert(0) += 1;
+                            }
+                        }
+                    }
+                }
                 if util::is_on_gmax_banlist(&ip) {
                     on_gmax_banlist += 1;
                 }
@@ -702,12 +761,53 @@ fn handle_rpc_event(e: &rpc::RpcEvent, state_arc: Arc<Mutex<State>>, metrics: me
                     .set(*v);
             }
 
+            // TODO: remove once the dashboards use rpc_peer_info_as_peers, which is
+            // based on the local asmap lookup instead of Bitcoin Core's mapped_as.
             metrics.rpc_peer_info_asn_peers.reset();
             for (k, v) in peers_by_asn.iter() {
                 metrics
                     .rpc_peer_info_asn_peers
                     .with_label_values(&[k.to_string()])
                     .set(*v);
+            }
+
+            if asn_lookup.is_some() {
+                metrics.rpc_peer_info_as_peers.reset();
+                metrics.rpc_peer_info_as_distinct.reset();
+                metrics.rpc_peer_info_as_diversity.reset();
+                metrics.rpc_peer_info_as_unmapped_peers.reset();
+
+                for ((inbound, asn), count) in peers_by_direction_and_asn.iter() {
+                    let [asn_label, as_name_label] = as_label_values(*asn);
+                    metrics
+                        .rpc_peer_info_as_peers
+                        .with_label_values(&[&asn_label, &as_name_label, direction(*inbound)])
+                        .set(*count);
+                }
+
+                for inbound in [true, false] {
+                    let per_direction = peers_by_direction_and_asn
+                        .iter()
+                        .filter(|((i, _), _)| *i == inbound);
+                    let distinct = per_direction.clone().count();
+                    let mapped_peers: i64 = per_direction.map(|(_, count)| count).sum();
+
+                    metrics
+                        .rpc_peer_info_as_distinct
+                        .with_label_values(&[direction(inbound)])
+                        .set(distinct as i64);
+                    if mapped_peers > 0 {
+                        // avoid division by zero
+                        metrics
+                            .rpc_peer_info_as_diversity
+                            .with_label_values(&[direction(inbound)])
+                            .set(distinct as f64 / mapped_peers as f64);
+                    }
+                    metrics
+                        .rpc_peer_info_as_unmapped_peers
+                        .with_label_values(&[direction(inbound)])
+                        .set(*as_unmapped_peers_by_direction.get(&inbound).unwrap_or(&0));
+                }
             }
 
             metrics
@@ -1095,15 +1195,47 @@ fn handle_validation_event(e: &validation_event::Event, metrics: metrics::Metric
     }
 }
 
+/// Label values for the `asn` and `as_name` labels of the AS metrics.
+fn as_label_values(asn: u32) -> [String; 2] {
+    [asn.to_string(), asn::as_name(asn)]
+}
+
+/// Label value for the `direction` label of the AS metrics.
+fn direction(inbound: bool) -> &'static str {
+    if inbound {
+        "inbound"
+    } else {
+        "outbound"
+    }
+}
+
+/// Increments the AS counter for the peer address `addr` (ip:port) if an asmap
+/// is loaded and the IP is mapped to an AS.
+fn inc_conn_as_counter(
+    counter: &shared::prometheus::IntCounterVec,
+    addr: &str,
+    asn_lookup: Option<&asn::AsnLookup>,
+) {
+    let ip = util::ip_from_ipport(addr.to_string());
+    if let Some(asn) = asn_lookup.and_then(|lookup| lookup.lookup(&ip)) {
+        let [asn_label, as_name_label] = as_label_values(asn);
+        counter
+            .with_label_values(&[&asn_label, &as_name_label])
+            .inc();
+    }
+}
+
 fn handle_connection_event(
     cevent: &connection_event::Event,
     timestamp_ms: u64,
     metrics: metrics::Metrics,
+    asn_lookup: Option<&asn::AsnLookup>,
 ) {
     match cevent {
         connection_event::Event::Inbound(i) => {
             let ip = util::ip_from_ipport(i.conn.addr.clone());
             metrics.conn_inbound.inc();
+            inc_conn_as_counter(&metrics.conn_inbound_as, &i.conn.addr, asn_lookup);
             if util::is_tor_exit_node(&ip) {
                 metrics.conn_inbound_tor_exit.inc();
             }
@@ -1126,6 +1258,7 @@ fn handle_connection_event(
         }
         connection_event::Event::Outbound(o) => {
             metrics.conn_outbound.inc();
+            inc_conn_as_counter(&metrics.conn_outbound_as, &o.conn.addr, asn_lookup);
             metrics
                 .conn_outbound_network
                 .with_label_values(&[&o.conn.network.to_string()])
@@ -1136,6 +1269,7 @@ fn handle_connection_event(
         }
         connection_event::Event::Closed(c) => {
             metrics.conn_closed.inc();
+            inc_conn_as_counter(&metrics.conn_closed_as, &c.conn.addr, asn_lookup);
             metrics
                 .conn_closed_age
                 .inc_by(timestamp_ms / 1000 - c.time_established);

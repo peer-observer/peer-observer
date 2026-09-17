@@ -36,6 +36,11 @@ pub const LABEL_RPC_CONNECTION_TYPE: &str = "connection_type";
 pub const LABEL_RPC_PROTOCOL_VERSION: &str = "protocol_version";
 pub const LABEL_RPC_ASN: &str = "ASN";
 
+// Labels for metrics using the local IP to AS lookup (see shared::asn).
+pub const LABEL_ASN: &str = "asn";
+pub const LABEL_AS_NAME: &str = "as_name";
+pub const LABEL_DIRECTION: &str = "direction";
+
 pub const LABEL_LOG_CATEGORY: &str = "category";
 pub const LABEL_LOG_LEVEL: &str = "level";
 pub const LABEL_LOG_MUTATED_BLOCK_STATUS: &str = "status";
@@ -214,6 +219,9 @@ pub struct Metrics {
     pub conn_outbound_current: IntGauge,
     pub conn_outbound_network: IntCounterVec,
     pub conn_closed_network: IntCounterVec,
+    pub conn_inbound_as: IntCounterVec,
+    pub conn_outbound_as: IntCounterVec,
+    pub conn_closed_as: IntCounterVec,
     pub conn_closed: IntCounter,
     pub conn_closed_age: IntCounter,
     pub conn_evicted_inbound: IntCounter,
@@ -262,6 +270,10 @@ pub struct Metrics {
     pub rpc_peer_info_connection_type_peers: IntGaugeVec,
     pub rpc_peer_info_protocol_version_peers: IntGaugeVec,
     pub rpc_peer_info_asn_peers: IntGaugeVec,
+    pub rpc_peer_info_as_peers: IntGaugeVec,
+    pub rpc_peer_info_as_distinct: IntGaugeVec,
+    pub rpc_peer_info_as_diversity: GaugeVec,
+    pub rpc_peer_info_as_unmapped_peers: IntGaugeVec,
     pub rpc_peer_info_ping_median: Gauge,
     pub rpc_peer_info_ping_mean: Gauge,
     pub rpc_peer_info_minping_median: Gauge,
@@ -429,6 +441,9 @@ impl Metrics {
         ig!(conn_outbound_current, "Number of currently open outbound connections.", registry);
         icv!(conn_outbound_network, "Number of opened outbound connections by network.", [LABEL_CONN_NETWORK], registry);
         icv!(conn_closed_network, "Number of closed connections by network.", [LABEL_CONN_NETWORK], registry);
+        icv!(conn_inbound_as, "Number of inbound connections by Autonomous System (AS) of the peer IP. Requires an asmap file. One series per AS seen since start.", [LABEL_ASN, LABEL_AS_NAME], registry);
+        icv!(conn_outbound_as, "Number of opened outbound connections by Autonomous System (AS) of the peer IP. Requires an asmap file. One series per AS seen since start.", [LABEL_ASN, LABEL_AS_NAME], registry);
+        icv!(conn_closed_as, "Number of closed connections by Autonomous System (AS) of the peer IP. Requires an asmap file. One series per AS seen since start.", [LABEL_ASN, LABEL_AS_NAME], registry);
         ic!(conn_closed, "Number of closed connections.", registry);
         ic!(conn_closed_age, "Age (in seconds) of closed connections. The age of each closed connection is added to the metric.", registry);
         ic!(conn_evicted_inbound, "Number of evicted inbound connections.", registry);
@@ -485,6 +500,10 @@ impl Metrics {
         igv!(rpc_peer_info_connection_type_peers, "Number of peers by connection_type", [LABEL_RPC_CONNECTION_TYPE], registry);
         igv!(rpc_peer_info_protocol_version_peers, "Number of peers by protocol_version", [LABEL_RPC_PROTOCOL_VERSION], registry);
         igv!(rpc_peer_info_asn_peers, "Number of peers by AS number", [LABEL_RPC_ASN], registry);
+        igv!(rpc_peer_info_as_peers, "Number of peers by Autonomous System (AS) of the peer IP and connection direction. Requires an asmap file.", [LABEL_ASN, LABEL_AS_NAME, LABEL_DIRECTION], registry);
+        igv!(rpc_peer_info_as_distinct, "Number of distinct Autonomous Systems (AS) among peers with a mapped AS by connection direction. Requires an asmap file.", [LABEL_DIRECTION], registry);
+        gv!(rpc_peer_info_as_diversity, "Number of distinct Autonomous Systems (AS) divided by the number of peers with a mapped AS by connection direction (1.0 = all peers from different AS). Requires an asmap file.", [LABEL_DIRECTION], registry);
+        igv!(rpc_peer_info_as_unmapped_peers, "Number of IPv4 and IPv6 peers whose IP is not mapped to an Autonomous System (AS) in the asmap file by connection direction. Requires an asmap file.", [LABEL_DIRECTION], registry);
         g!(rpc_peer_info_ping_median, "Median ping (in milliseconds) of all connected peers.", registry);
         g!(rpc_peer_info_ping_mean, "Mean ping (in milliseconds) of all connected peers.", registry);
         g!(rpc_peer_info_minping_median, "Median min_ping (in milliseconds) of all connected peers.", registry);
@@ -648,6 +667,9 @@ impl Metrics {
             conn_outbound_current,
             conn_outbound_network,
             conn_closed_network,
+            conn_inbound_as,
+            conn_outbound_as,
+            conn_closed_as,
             conn_closed,
             conn_closed_age,
             conn_evicted_inbound,
@@ -705,6 +727,10 @@ impl Metrics {
             rpc_peer_info_connection_type_peers,
             rpc_peer_info_protocol_version_peers,
             rpc_peer_info_asn_peers,
+            rpc_peer_info_as_peers,
+            rpc_peer_info_as_distinct,
+            rpc_peer_info_as_diversity,
+            rpc_peer_info_as_unmapped_peers,
             rpc_peer_info_ping_median,
             rpc_peer_info_ping_mean,
             rpc_peer_info_minping_median,

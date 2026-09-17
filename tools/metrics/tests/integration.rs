@@ -72,6 +72,7 @@ fn make_test_args(nats_port: u16) -> Args {
         },
         metrics_address: "127.0.0.1:0".to_string(),
         log_level: Level::Trace,
+        asmap_file: None,
     }
 }
 
