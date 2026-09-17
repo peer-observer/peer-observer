@@ -95,7 +95,8 @@ asmap files are published in [bitcoin-core/asmap-data](https://github.com/bitcoi
 Prefer the `*_asmap_unfilled.dat` variant: the default (filled) files assign unmapped IP ranges to
 neighboring AS to reduce the file size, while the unfilled files only contain the ranges sourced
 from the data and report everything else as unmapped. The asmap file is read once at startup, so
-restart the tool to use a newer file.
+restart the tool to use a newer file. Grafana dashboards for these metrics are in
+`dashboards/playlist/` (tagged `asmap`).
 
 ## Usage
 
