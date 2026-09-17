@@ -31,6 +31,9 @@ pub mod metricserver;
 /// Used in integration testing.
 pub mod testing;
 
+/// IP to Autonomous System (AS) lookups.
+pub mod asn;
+
 /// Utillity functions shared among peer-observer tools
 pub mod util;
 
