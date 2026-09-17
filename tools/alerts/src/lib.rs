@@ -133,6 +133,12 @@ impl AlertState {
     }
 }
 
+impl Default for AlertState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Builds a `PeerDisconnected` alert for peers that were previously flagged as
 /// spammers, including how long they were active. Returns `None` for peers
 /// that were never flagged so non-flagged disconnects stay silent
