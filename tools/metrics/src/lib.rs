@@ -35,7 +35,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-mod metrics;
+pub mod metrics;
 mod stat_util;
 
 const LOG_TARGET: &str = "main";
@@ -92,7 +92,7 @@ struct CompactBlockReconstruction {
 /// State that's between processing events.
 /// This allows tracking differences between two statefull events.
 #[derive(Default, Debug)]
-struct State {
+pub struct State {
     // Map of wtxid to bytes
     orphanage: HashMap<String, u64>,
     addrman: Addrman,
@@ -175,7 +175,19 @@ fn handle_event(
     state_arc: Arc<Mutex<State>>,
     metrics: metrics::Metrics,
 ) -> anyhow::Result<()> {
-    let unwrapped = Event::decode(msg.payload).context("decoding event")?;
+    let event = Event::decode(msg.payload).context("decoding event")?;
+    handle_decoded_event(event, state_arc, metrics);
+    Ok(())
+}
+
+/// Updates the metrics and the state for one decoded event.
+///
+/// Public so the fuzz targets in `fuzz/` can feed it events.
+pub fn handle_decoded_event(
+    unwrapped: Event,
+    state_arc: Arc<Mutex<State>>,
+    metrics: metrics::Metrics,
+) {
     if let Some(event) = unwrapped.peer_observer_event {
         match event {
             PeerObserverEvent::EbpfExtractor(ebpf) => match ebpf.ebpf_event.unwrap() {
@@ -212,8 +224,6 @@ fn handle_event(
             }
         }
     }
-
-    Ok(())
 }
 
 fn handle_rpc_event(e: &rpc::RpcEvent, state_arc: Arc<Mutex<State>>, metrics: metrics::Metrics) {

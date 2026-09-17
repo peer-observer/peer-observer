@@ -213,19 +213,24 @@ fn main() {
     )));
 
     // event_decode: one event per file. archive_reader: all events in one archive.
-    let mut archive = ArchiveHeader {
-        created: 1_700_000_000,
-        low_data: Some(false),
-    }
-    .to_bytes();
+    let mut events_bytes = Vec::new();
     for (i, event) in events.iter().enumerate() {
         write_seed(
             &seeds.join("event_decode"),
             &format!("event-{i}"),
             &event.encode_to_vec(),
         );
-        archive.extend_from_slice(&event.encode_length_delimited_to_vec());
+        events_bytes.extend_from_slice(&event.encode_length_delimited_to_vec());
     }
+    // metrics_events: a sequence of length-delimited events, as received over NATS.
+    write_seed(&seeds.join("metrics_events"), "all-events", &events_bytes);
+    // archive_reader: the same sequence behind an archive header.
+    let mut archive = ArchiveHeader {
+        created: 1_700_000_000,
+        low_data: Some(false),
+    }
+    .to_bytes();
+    archive.extend_from_slice(&events_bytes);
     write_seed(&seeds.join("archive_reader"), "all-events", &archive);
     let header_only = ArchiveHeader {
         created: 1_700_000_000,

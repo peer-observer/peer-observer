@@ -13,6 +13,7 @@ serde_json = "1"
 shared = { path = "../shared" }
 p2p-extractor = { path = "../extractors/p2p" }
 archive = { path = "../tools/archive" }
+metrics = { path = "../tools/metrics" }
 
 [[bin]]
 name = "ebpf_p2p_message"
@@ -52,6 +53,13 @@ bench = false
 [[bin]]
 name = "log_line"
 path = "fuzz_targets/log_line.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "metrics_events"
+path = "fuzz_targets/metrics_events.rs"
 test = false
 doc = false
 bench = false
