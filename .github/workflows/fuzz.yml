@@ -1,5 +1,4 @@
 name: fuzz
-        mkdir -p fuzz/corpus/${{ matrix.target }}
 
 on:
   workflow_dispatch:
@@ -72,6 +71,7 @@ jobs:
       run: nix-shell --pure --command "cd fuzz && cargo run --example gen_seeds"
     - name: Fuzz ${{ matrix.target }} for 10 minutes
       run: |
+        mkdir -p fuzz/corpus/${{ matrix.target }}
         nix-shell --pure --command "cd fuzz && cargo fuzz run -s none ${{ matrix.target }} corpus/${{ matrix.target }} seeds/${{ matrix.target }} -- -max_total_time=600 ${{ matrix.args }}"
     - name: Upload crash artifacts
       if: failure()
