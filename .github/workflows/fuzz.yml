@@ -30,14 +30,25 @@ env:
 
 jobs:
 
-  # Make sure the fuzz targets keep compiling against the crates they test.
+  # Make sure the fuzz targets keep compiling against the crates they test,
+  # and list them for the fuzzing jobs below.
   fuzz-build:
     runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.targets.outputs.targets }}
     steps:
     - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-nix-action
     - name: Build fuzz targets
       run: nix-shell --pure --command "cd fuzz && cargo fuzz build -s none"
+    - name: List fuzz targets
+      id: targets
+      # The targets are read from fuzz/Cargo.toml, so a new target is fuzzed
+      # without touching this workflow. Output is a JSON array of names.
+      run: |
+        targets=$(nix-shell --pure --command "cd fuzz && cargo fuzz list" | jq --raw-input . | jq --slurp --compact-output .)
+        echo "targets: $targets"
+        echo "targets=$targets" >> "$GITHUB_OUTPUT"
 
   # Short fuzzing session for each target. Only runs on the schedule and on
   # manual dispatch, since it takes a while.
@@ -48,15 +59,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - ebpf_p2p_message
-          - ebpf_ringbuffer
-          - p2p_read_message
-          - archive_reader
-          - event_decode
-          - log_line
-          - metrics_events
-          - alerts_events
+        target: ${{ fromJson(needs.fuzz-build.outputs.targets) }}
         include:
           # The P2P message targets need larger inputs than libFuzzer's default
           # 4096 bytes to reach full-size block and inventory messages.
@@ -71,6 +74,7 @@ jobs:
       run: nix-shell --pure --command "cd fuzz && cargo run --example gen_seeds"
     - name: Fuzz ${{ matrix.target }} for 10 minutes
       run: |
+        test -d fuzz/seeds/${{ matrix.target }} || { echo "No seeds for ${{ matrix.target }}. Add them to fuzz/examples/gen_seeds.rs."; exit 1; }
         mkdir -p fuzz/corpus/${{ matrix.target }}
         nix-shell --pure --command "cd fuzz && cargo fuzz run -s none ${{ matrix.target }} corpus/${{ matrix.target }} seeds/${{ matrix.target }} -- -max_total_time=600 ${{ matrix.args }}"
     - name: Upload crash artifacts
@@ -94,15 +98,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - ebpf_p2p_message
-          - ebpf_ringbuffer
-          - p2p_read_message
-          - archive_reader
-          - event_decode
-          - log_line
-          - metrics_events
-          - alerts_events
+        target: ${{ fromJson(needs.fuzz-build.outputs.targets) }}
         include:
           - target: ebpf_p2p_message
             args: "-max_len=4200000"
@@ -119,6 +115,7 @@ jobs:
       run: cd fuzz && cargo run --example gen_seeds
     - name: Fuzz ${{ matrix.target }} with AddressSanitizer for 10 minutes
       run: |
+        test -d fuzz/seeds/${{ matrix.target }} || { echo "No seeds for ${{ matrix.target }}. Add them to fuzz/examples/gen_seeds.rs."; exit 1; }
         mkdir -p fuzz/corpus/${{ matrix.target }}
         cd fuzz && cargo +nightly fuzz run -s address ${{ matrix.target }} corpus/${{ matrix.target }} seeds/${{ matrix.target }} -- -max_total_time=600 ${{ matrix.args }}
     - name: Upload crash artifacts

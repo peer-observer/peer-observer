@@ -28,7 +28,9 @@ when the sanitizer is disabled with `-s none`. AddressSanitizer needs a nightly
 toolchain (`cargo +nightly fuzz run -s address ...`) and is worth a run now and
 then: it catches memory errors in the unsafe ring buffer struct reads and
 allocations that are never touched, both of which the stable runs cannot see.
-CI runs both variants weekly.
+CI runs both variants weekly for every target listed by `cargo fuzz list`, so a
+new `[[bin]]` entry in `Cargo.toml` is picked up without touching the workflow.
+Each target needs seeds from `gen_seeds` or its CI run fails.
 
 ```sh
 cd fuzz
