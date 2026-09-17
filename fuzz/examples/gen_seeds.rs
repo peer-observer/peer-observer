@@ -222,8 +222,10 @@ fn main() {
         );
         events_bytes.extend_from_slice(&event.encode_length_delimited_to_vec());
     }
-    // metrics_events: a sequence of length-delimited events, as received over NATS.
+    // metrics_events, alerts_events: a sequence of length-delimited events, as
+    // received over NATS.
     write_seed(&seeds.join("metrics_events"), "all-events", &events_bytes);
+    write_seed(&seeds.join("alerts_events"), "all-events", &events_bytes);
     // archive_reader: the same sequence behind an archive header.
     let mut archive = ArchiveHeader {
         created: 1_700_000_000,

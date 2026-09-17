@@ -14,6 +14,7 @@ shared = { path = "../shared" }
 p2p-extractor = { path = "../extractors/p2p" }
 archive = { path = "../tools/archive" }
 metrics = { path = "../tools/metrics" }
+alerts = { path = "../tools/alerts" }
 
 [[bin]]
 name = "ebpf_p2p_message"
@@ -60,6 +61,13 @@ bench = false
 [[bin]]
 name = "metrics_events"
 path = "fuzz_targets/metrics_events.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "alerts_events"
+path = "fuzz_targets/alerts_events.rs"
 test = false
 doc = false
 bench = false

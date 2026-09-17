@@ -57,6 +57,7 @@ jobs:
           - event_decode
           - log_line
           - metrics_events
+          - alerts_events
     steps:
     - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-nix-action

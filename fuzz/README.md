@@ -16,6 +16,7 @@ and libFuzzer. The crate is its own workspace and is not built by
 | `event_decode`     | One protobuf-encoded `Event`                       | What every NATS consumer does with a received event: Display, JSON, re-encode           |
 | `log_line`         | One debug.log line                                 | `log_matchers::parse_log_event` and the log event Display / JSON                         |
 | `metrics_events`   | A sequence of length-delimited `Event`s            | The metrics tool's event handlers and the state they keep between events              |
+| `alerts_events`    | A sequence of length-delimited `Event`s            | The alerts tool's event handlers and the per-peer state they keep                     |
 
 The `ebpf_*` targets only generate inputs that respect the invariants the BPF
 program guarantees (see `src/lib.rs`), e.g. that `bool` fields hold 0 or 1.
