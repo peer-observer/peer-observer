@@ -1,0 +1,127 @@
+name: fuzz
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, Monday 04:00 UTC.
+    - cron: "0 4 * * 1"
+  push:
+    branches: [ master ]
+    paths:
+      - "fuzz/**"
+      - "shared/**"
+      - "extractors/p2p/**"
+      - "tools/archive/**"
+      - ".github/workflows/fuzz.yml"
+  pull_request:
+    branches: [ master ]
+    paths:
+      - "fuzz/**"
+      - "shared/**"
+      - "extractors/p2p/**"
+      - "tools/archive/**"
+      - ".github/workflows/fuzz.yml"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+
+  # Make sure the fuzz targets keep compiling against the crates they test,
+  # and list them for the fuzzing jobs below.
+  fuzz-build:
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.targets.outputs.targets }}
+    steps:
+    - uses: actions/checkout@v7
+    - uses: ./.github/actions/setup-nix-action
+    - name: Build fuzz targets
+      run: nix-shell --pure --command "cd fuzz && cargo fuzz build -s none"
+    - name: List fuzz targets
+      id: targets
+      # The targets are read from fuzz/Cargo.toml, so a new target is fuzzed
+      # without touching this workflow. Output is a JSON array of names.
+      run: |
+        targets=$(nix-shell --pure --command "cd fuzz && cargo fuzz list" | jq --raw-input . | jq --slurp --compact-output .)
+        echo "targets: $targets"
+        echo "targets=$targets" >> "$GITHUB_OUTPUT"
+
+  # Short fuzzing session for each target. Only runs on the schedule and on
+  # manual dispatch, since it takes a while.
+  fuzz-run:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: fuzz-build
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(needs.fuzz-build.outputs.targets) }}
+        include:
+          # The P2P message targets need larger inputs than libFuzzer's default
+          # 4096 bytes to reach full-size block and inventory messages.
+          - target: ebpf_p2p_message
+            args: "-max_len=4200000"
+          - target: p2p_read_message
+            args: "-max_len=4200000"
+    steps:
+    - uses: actions/checkout@v7
+    - uses: ./.github/actions/setup-nix-action
+    - name: Generate seed corpus
+      run: nix-shell --pure --command "cd fuzz && cargo run --example gen_seeds"
+    - name: Fuzz ${{ matrix.target }} for 10 minutes
+      run: |
+        test -d fuzz/seeds/${{ matrix.target }} || { echo "No seeds for ${{ matrix.target }}. Add them to fuzz/examples/gen_seeds.rs."; exit 1; }
+        mkdir -p fuzz/corpus/${{ matrix.target }}
+        nix-shell --pure --command "cd fuzz && cargo fuzz run -s none ${{ matrix.target }} corpus/${{ matrix.target }} seeds/${{ matrix.target }} -- -max_total_time=600 ${{ matrix.args }}"
+    - name: Upload crash artifacts
+      if: failure()
+      uses: actions/upload-artifact@v7
+      with:
+        name: fuzz-artifacts-${{ matrix.target }}
+        path: fuzz/artifacts/${{ matrix.target }}
+        if-no-files-found: ignore
+
+  # AddressSanitizer catches what the stable runs can't: memory errors in the
+  # unsafe ring buffer struct reads, and allocations that are never touched.
+  # Needs a nightly toolchain.
+  fuzz-run-asan:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: fuzz-build
+    env:
+      # Don't download a bitcoind binary for the bitcoind crate's `download` feature.
+      BITCOIND_SKIP_DOWNLOAD: 1
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(needs.fuzz-build.outputs.targets) }}
+        include:
+          - target: ebpf_p2p_message
+            args: "-max_len=4200000"
+          - target: p2p_read_message
+            args: "-max_len=4200000"
+    steps:
+    - uses: actions/checkout@v7
+    - uses: ./.github/actions/setup-ubuntu-action
+    - name: Install nightly toolchain
+      run: rustup toolchain install nightly --profile minimal
+    - name: Install cargo-fuzz
+      run: cargo install cargo-fuzz --locked
+    - name: Generate seed corpus
+      run: cd fuzz && cargo run --example gen_seeds
+    - name: Fuzz ${{ matrix.target }} with AddressSanitizer for 10 minutes
+      run: |
+        test -d fuzz/seeds/${{ matrix.target }} || { echo "No seeds for ${{ matrix.target }}. Add them to fuzz/examples/gen_seeds.rs."; exit 1; }
+        mkdir -p fuzz/corpus/${{ matrix.target }}
+        cd fuzz && cargo +nightly fuzz run -s address ${{ matrix.target }} corpus/${{ matrix.target }} seeds/${{ matrix.target }} -- -max_total_time=600 ${{ matrix.args }}
+    - name: Upload crash artifacts
+      if: failure()
+      uses: actions/upload-artifact@v7
+      with:
+        name: fuzz-artifacts-asan-${{ matrix.target }}
+        path: fuzz/artifacts/${{ matrix.target }}
+        if-no-files-found: ignore

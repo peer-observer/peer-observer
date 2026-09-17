@@ -8,6 +8,12 @@ use std::fs::File;
 use std::io::{self, BufReader, ErrorKind, Read};
 use std::path::Path;
 
+/// Upper bound for a single length-delimited message in an archive. Events are
+/// at most a few megabytes (a P2P message payload is capped at 4 MB), so a
+/// larger length prefix means the archive is corrupt. Without this bound, the
+/// reader would allocate whatever a corrupt prefix says.
+const MAX_MESSAGE_LEN: usize = 64 * 1024 * 1024;
+
 #[derive(Debug)]
 pub struct ArchiveReader<R> {
     reader: BufReader<R>,
@@ -64,6 +70,13 @@ fn read_message<M: Message + Default>(
         // A clean EOF at a message boundary is the normal end of the archive.
         None => return Ok(None),
     };
+
+    if len > MAX_MESSAGE_LEN {
+        return Err(io::Error::new(
+            ErrorKind::InvalidData,
+            format!("message length {len} exceeds the maximum of {MAX_MESSAGE_LEN} bytes"),
+        ));
+    }
 
     buf.clear();
     buf.resize(len, 0);
@@ -154,6 +167,18 @@ mod tests {
         let mut reader = Cursor::new(vec![0x80]);
         let err = read_length_delimiter(&mut reader).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
+    }
+
+    // Found by the archive_reader fuzz target: a length prefix of ~2.7 GB made
+    // the reader allocate and zero that much memory before failing.
+    #[test]
+    fn errors_on_oversized_length_prefix() {
+        let mut reader =
+            BufReader::new(Cursor::new(vec![0xfa, 0xed, 0x80, 0xcf, 0xaa, 0x06, 0x06]));
+        let mut buf = Vec::new();
+        let err = read_message::<ArchiveHeader>(&mut reader, &mut buf).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(buf.is_empty());
     }
 
     #[test]

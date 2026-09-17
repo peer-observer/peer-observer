@@ -1,0 +1,76 @@
+[package]
+name = "peer-observer-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1"
+shared = { path = "../shared" }
+p2p-extractor = { path = "../extractors/p2p" }
+archive = { path = "../tools/archive" }
+metrics = { path = "../tools/metrics" }
+alerts = { path = "../tools/alerts" }
+
+[[bin]]
+name = "ebpf_p2p_message"
+path = "fuzz_targets/ebpf_p2p_message.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ebpf_ringbuffer"
+path = "fuzz_targets/ebpf_ringbuffer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "p2p_read_message"
+path = "fuzz_targets/p2p_read_message.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "archive_reader"
+path = "fuzz_targets/archive_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "event_decode"
+path = "fuzz_targets/event_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "log_line"
+path = "fuzz_targets/log_line.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "metrics_events"
+path = "fuzz_targets/metrics_events.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "alerts_events"
+path = "fuzz_targets/alerts_events.rs"
+test = false
+doc = false
+bench = false
+
+# Standalone workspace: keeps libfuzzer-sys out of the main workspace build.
+[workspace]
