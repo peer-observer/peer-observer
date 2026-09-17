@@ -19,7 +19,20 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 663,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "doc",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Number of distinct block heights currently in flight from peers (getpeerinfo inflight), per host. Useful to spot block download stalling.",
+      "tooltip": "",
+      "type": "link",
+      "url": "#"
+    }
+  ],
   "panels": [
     {
       "datasource": {

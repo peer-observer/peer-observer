@@ -79,6 +79,45 @@ The dashboards are tagged with, for example, tags like: `connections`, `mempool`
 Addtionally, dashboards intended for usage in a big monitoring playlist are tagged with `big-playlist`.
 Recent versions of Grafana allow to add dashboards to playlists by tags.
 
+### Dashboard descriptions
+
+Each dashboard has a short description of what it shows and why it might be
+useful. The description is stored as a dashboard "link" that is always shown at
+the top of the dashboard. The link uses the `doc` icon and points to `#`, so
+clicking on it does nothing. The link `title` contains the description:
+
+```json
+"links": [
+  {
+    "asDropdown": true,
+    "icon": "doc",
+    "includeVars": false,
+    "keepTime": false,
+    "tags": [],
+    "targetBlank": false,
+    "title": "The description of the dashboard.",
+    "tooltip": "",
+    "type": "link",
+    "url": "#"
+  }
+],
+```
+
+The description should only be a few sentences long, as Grafana does not wrap
+the text. If more context is needed, link to an explainer instead.
+
+CI checks that every dashboard in the `dashboards` directory has a description.
+The same test can be used to list all dashboards with their description:
+
+```
+$ cargo test -p metrics --test dashboards -- --nocapture
+...
+playlist/uptime-per-node.json
+    Uptime of each Bitcoin node (uptime RPC). Red and yellow values indicate a recent restart.
+...
+62 dashboards, 0 without description
+```
+
 ## Usage
 
 ```

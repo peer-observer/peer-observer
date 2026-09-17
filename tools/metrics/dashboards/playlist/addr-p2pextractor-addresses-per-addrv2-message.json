@@ -19,7 +19,20 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 0,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "doc",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Average number of addresses per addrv2 message that the Bitcoin node relayed to the p2p-extractor client. Bitcoin Core only relays addr(v2) messages with 10 or fewer entries.",
+      "tooltip": "",
+      "type": "link",
+      "url": "#"
+    }
+  ],
   "panels": [
     {
       "datasource": {

@@ -19,7 +19,20 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 29,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "doc",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Number of peers per host with an outstanding ping that hasn't been answered for more than 5 seconds (getpeerinfo pingwait). A high number can mean network problems and connections about to drop.",
+      "tooltip": "",
+      "type": "link",
+      "url": "#"
+    }
+  ],
   "panels": [
     {
       "datasource": {

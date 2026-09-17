@@ -6,6 +6,10 @@ edition = "2021"
 [dependencies]
 shared = { path = "../../shared" }
 
+[dev-dependencies]
+# For checking the Grafana dashboards in tests/dashboards.rs
+serde_json = "1.0"
+
 [features]
 # Treat warnings as a build error.
 strict = []

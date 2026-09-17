@@ -19,7 +19,20 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 938,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "doc",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Share of inbound and outbound P2P traffic (in bytes) per host that was exchanged with known LinkingLion peers.",
+      "tooltip": "",
+      "type": "link",
+      "url": "#"
+    }
+  ],
   "panels": [
     {
       "datasource": {

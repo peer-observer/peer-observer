@@ -19,7 +19,20 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 0,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "doc",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Diversity of IPv4 inbound connections per host: the number of distinct /16 subnets divided by the number of inbound IPv4 peers. Higher is better; a low value means many inbound peers come from the same few subnets.",
+      "tooltip": "",
+      "type": "link",
+      "url": "#"
+    }
+  ],
   "panels": [
     {
       "datasource": {

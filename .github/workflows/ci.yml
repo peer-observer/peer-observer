@@ -279,6 +279,18 @@ jobs:
           exit 1
         fi
 
+  ubuntu-docs-dashboards:
+    runs-on: ubuntu-latest
+    needs: ubuntu-build
+    steps:
+    - uses: actions/checkout@v7
+    - uses: ./.github/actions/setup-ubuntu-action
+    # Each Grafana dashboard in tools/metrics/dashboards must have a description
+    # (a dashboard "link" with the "doc" icon and "#" as URL). The test lists all
+    # dashboards with their description and fails if one is missing.
+    - name: Check that each Grafana dashboard has a description
+      run: cargo test -p metrics --test dashboards -- --nocapture
+
   ubuntu-check-and-fmt:
     runs-on: ubuntu-latest
     steps:

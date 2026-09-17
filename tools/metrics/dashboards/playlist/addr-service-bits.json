@@ -25,7 +25,20 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": 19,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "doc",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Heatmaps of the service bits set on addresses in inbound and outbound addr and addrv2 messages. See the table in the dashboard for the meaning of each service bit value.",
+      "tooltip": "",
+      "type": "link",
+      "url": "#"
+    }
+  ],
   "panels": [
     {
       "fieldConfig": {

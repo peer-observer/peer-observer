@@ -20,7 +20,20 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 2,
   "id": 568,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "doc",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Current inbound connections per host together with two experimental anomaly scores (z-score over 2d and modified z-score over 10h). Large scores indicate an unusual number of inbound connections, e.g. during a connection flood.",
+      "tooltip": "",
+      "type": "link",
+      "url": "#"
+    }
+  ],
   "panels": [
     {
       "datasource": {
