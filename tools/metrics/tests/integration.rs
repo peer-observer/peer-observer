@@ -3131,18 +3131,120 @@ async fn test_integration_metrics_rpc_getrawaddrman() {
         ],
         Subject::Rpc,
         r#"
+            peerobserver_rpc_getrawaddrman_distinct_addresses{network="ipv4",table="new"} 1
             peerobserver_rpc_getrawaddrman_distinct_asns{table="new"} 1
             peerobserver_rpc_getrawaddrman_distinct_asns{table="tried"} 0
+            peerobserver_rpc_getrawaddrman_distinct_entries{network="ipv4",table="new"} 1
             peerobserver_rpc_getrawaddrman_distinct_source_asn{table="new"} 1
             peerobserver_rpc_getrawaddrman_distinct_source_asn{table="tried"} 0
             peerobserver_rpc_getrawaddrman_distinct_sources{table="new"} 1
             peerobserver_rpc_getrawaddrman_distinct_sources{table="tried"} 0
+            peerobserver_rpc_getrawaddrman_entries{network="ipv4",table="new"} 2
             peerobserver_rpc_getrawaddrman_ports{port="1234",table="new"} 2
             peerobserver_rpc_getrawaddrman_service_bits{service_bit="1",table="new"} 2
             peerobserver_rpc_getrawaddrman_service_bits{service_bit="11",table="new"} 2
             peerobserver_rpc_getrawaddrman_service_bits{service_bit="12",table="new"} 2
             peerobserver_rpc_getrawaddrman_service_bits{service_bit="4",table="new"} 2
             peerobserver_rpc_getrawaddrman_services{service="3081",table="new"} 2
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_rpc_getrawaddrman_entry_age() {
+    println!("test that the getrawaddrman entry age, size, terrible and future metrics work");
+
+    let now = current_timestamp() as i64;
+    let entry = |network: &str, address: &str, port: u32, time: i64| AddrmanEntry {
+        address: address.to_string(),
+        mapped_as: Some(1234),
+        port,
+        network: network.to_string(),
+        services: 3081,
+        time,
+        source: "2.3.4.5".to_string(),
+        source_network: "ipv4".to_string(),
+        source_mapped_as: Some(2345),
+    };
+
+    // The three ipv4 entries hold the same address: twice on the same port,
+    // which the addrman can do by keeping an address in several buckets, and
+    // once on another port. The two onion entries hold different addresses.
+    let mut new_bucket: AddrmanBucket = AddrmanBucket {
+        entries: HashMap::new(),
+    };
+    // 30 minutes old
+    new_bucket
+        .entries
+        .insert(0, entry("ipv4", "1.2.3.4", 1234, now - 30 * 60));
+    // 3 hours old
+    new_bucket
+        .entries
+        .insert(1, entry("ipv4", "1.2.3.4", 4321, now - 3 * 60 * 60));
+    // 2 days old
+    new_bucket
+        .entries
+        .insert(2, entry("onion", "aaa.onion", 8333, now - 2 * 24 * 60 * 60));
+    // 45 days old: older than the 30 day horizon and therefore terrible
+    new_bucket.entries.insert(
+        3,
+        entry("onion", "bbb.onion", 8333, now - 45 * 24 * 60 * 60),
+    );
+    // 5 minutes in the future: not terrible yet
+    new_bucket
+        .entries
+        .insert(4, entry("ipv4", "1.2.3.4", 1234, now + 5 * 60));
+    // 20 minutes in the future: more than 10 minutes and therefore terrible
+    new_bucket
+        .entries
+        .insert(5, entry("i2p", "xyz.b32.i2p", 8333, now + 20 * 60));
+
+    let mut new: HashMap<u32, AddrmanBucket> = HashMap::new();
+    new.insert(4, new_bucket);
+
+    publish_and_check(
+        &[
+            Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+                rpc_event: Some(rpc_extractor::rpc::RpcEvent::Addrman(Addrman {
+                    new,
+                    tried: HashMap::new(),
+                })),
+            }))
+            .unwrap(),
+        ],
+        Subject::Rpc,
+        // The two entries with a timestamp in the future have an age of zero, which
+        // makes the 10th percentile of the ages zero too.
+        r#"
+            peerobserver_rpc_getrawaddrman_distinct_addresses{network="i2p",table="new"} 1
+            peerobserver_rpc_getrawaddrman_distinct_addresses{network="ipv4",table="new"} 1
+            peerobserver_rpc_getrawaddrman_distinct_addresses{network="onion",table="new"} 2
+            peerobserver_rpc_getrawaddrman_distinct_entries{network="i2p",table="new"} 1
+            peerobserver_rpc_getrawaddrman_distinct_entries{network="ipv4",table="new"} 2
+            peerobserver_rpc_getrawaddrman_distinct_entries{network="onion",table="new"} 2
+            peerobserver_rpc_getrawaddrman_entries{network="i2p",table="new"} 1
+            peerobserver_rpc_getrawaddrman_entries{network="ipv4",table="new"} 3
+            peerobserver_rpc_getrawaddrman_entries{network="onion",table="new"} 2
+            peerobserver_rpc_getrawaddrman_entry_age_seconds{quantile="0.1",table="new"} 0
+            peerobserver_rpc_getrawaddrman_entry_age_seconds{quantile="0.5",table="tried"} 0
+            peerobserver_rpc_getrawaddrman_entry_age_seconds_bucket{le="+Inf",table="new"} 6
+            peerobserver_rpc_getrawaddrman_entry_age_seconds_bucket{le="+Inf",table="tried"} 0
+            peerobserver_rpc_getrawaddrman_entry_age_seconds_bucket{le="1209600",table="new"} 5
+            peerobserver_rpc_getrawaddrman_entry_age_seconds_bucket{le="21600",table="new"} 4
+            peerobserver_rpc_getrawaddrman_entry_age_seconds_bucket{le="259200",table="new"} 5
+            peerobserver_rpc_getrawaddrman_entry_age_seconds_bucket{le="2592000",table="new"} 5
+            peerobserver_rpc_getrawaddrman_entry_age_seconds_bucket{le="3600",table="new"} 3
+            peerobserver_rpc_getrawaddrman_entry_age_seconds_bucket{le="3600",table="tried"} 0
+            peerobserver_rpc_getrawaddrman_entry_age_seconds_bucket{le="5184000",table="new"} 6
+            peerobserver_rpc_getrawaddrman_entry_age_seconds_bucket{le="604800",table="new"} 5
+            peerobserver_rpc_getrawaddrman_entry_age_seconds_bucket{le="7776000",table="new"} 6
+            peerobserver_rpc_getrawaddrman_entry_age_seconds_bucket{le="86400",table="new"} 4
+            peerobserver_rpc_getrawaddrman_future_entries{min_offset_seconds="0",network="i2p",table="new"} 1
+            peerobserver_rpc_getrawaddrman_future_entries{min_offset_seconds="0",network="ipv4",table="new"} 1
+            peerobserver_rpc_getrawaddrman_future_entries{min_offset_seconds="600",network="i2p",table="new"} 1
+            peerobserver_rpc_getrawaddrman_terrible_entries{network="i2p",table="new"} 1
+            peerobserver_rpc_getrawaddrman_terrible_entries{network="onion",table="new"} 1
         "#,
     )
     .await;
