@@ -18,7 +18,20 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "doc",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Anomaly detection for selected metrics (closed connections, inbound addr entries, inbound connections, IPv4 peers, LinkingLion traffic share) based on the Prometheus recording rules in tools/metrics/prometheus/rules. Values outside the upper and lower band are flagged as anomalies.",
+      "tooltip": "",
+      "type": "link",
+      "url": "#"
+    }
+  ],
   "panels": [
     {
       "datasource": {

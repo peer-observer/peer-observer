@@ -26,7 +26,20 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 36,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "doc",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Time the node needed to connect the latest block (validation block_connected tracepoint via the ebpf-extractor), per host, together with the latest block height.",
+      "tooltip": "",
+      "type": "link",
+      "url": "#"
+    }
+  ],
   "panels": [
     {
       "datasource": {
