@@ -80,3 +80,51 @@ jobs:
         name: fuzz-artifacts-${{ matrix.target }}
         path: fuzz/artifacts/${{ matrix.target }}
         if-no-files-found: ignore
+
+  # AddressSanitizer catches what the stable runs can't: memory errors in the
+  # unsafe ring buffer struct reads, and allocations that are never touched.
+  # Needs a nightly toolchain.
+  fuzz-run-asan:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: fuzz-build
+    env:
+      # Don't download a bitcoind binary for the bitcoind crate's `download` feature.
+      BITCOIND_SKIP_DOWNLOAD: 1
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - ebpf_p2p_message
+          - ebpf_ringbuffer
+          - p2p_read_message
+          - archive_reader
+          - event_decode
+          - log_line
+          - metrics_events
+          - alerts_events
+        include:
+          - target: ebpf_p2p_message
+            args: "-max_len=4200000"
+          - target: p2p_read_message
+            args: "-max_len=4200000"
+    steps:
+    - uses: actions/checkout@v7
+    - uses: ./.github/actions/setup-ubuntu-action
+    - name: Install nightly toolchain
+      run: rustup toolchain install nightly --profile minimal
+    - name: Install cargo-fuzz
+      run: cargo install cargo-fuzz --locked
+    - name: Generate seed corpus
+      run: cd fuzz && cargo run --example gen_seeds
+    - name: Fuzz ${{ matrix.target }} with AddressSanitizer for 10 minutes
+      run: |
+        mkdir -p fuzz/corpus/${{ matrix.target }}
+        cd fuzz && cargo +nightly fuzz run -s address ${{ matrix.target }} corpus/${{ matrix.target }} seeds/${{ matrix.target }} -- -max_total_time=600 ${{ matrix.args }}
+    - name: Upload crash artifacts
+      if: failure()
+      uses: actions/upload-artifact@v7
+      with:
+        name: fuzz-artifacts-asan-${{ matrix.target }}
+        path: fuzz/artifacts/${{ matrix.target }}
+        if-no-files-found: ignore

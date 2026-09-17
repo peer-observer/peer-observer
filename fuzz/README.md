@@ -24,9 +24,11 @@ program guarantees (see `src/lib.rs`), e.g. that `bool` fields hold 0 or 1.
 ## Running
 
 `cargo-fuzz` is part of `shell.nix`. The targets build on the stable toolchain
-when the sanitizer is disabled with `-s none`; AddressSanitizer needs a nightly
-toolchain but adds little here since the code under test is almost entirely
-safe Rust.
+when the sanitizer is disabled with `-s none`. AddressSanitizer needs a nightly
+toolchain (`cargo +nightly fuzz run -s address ...`) and is worth a run now and
+then: it catches memory errors in the unsafe ring buffer struct reads and
+allocations that are never touched, both of which the stable runs cannot see.
+CI runs both variants weekly.
 
 ```sh
 cd fuzz
