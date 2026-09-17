@@ -49,7 +49,7 @@ use shared::{
     util::current_timestamp,
 };
 
-use std::{collections::HashMap, sync::Once, time::Duration};
+use std::{collections::HashMap, path::PathBuf, sync::Once, time::Duration};
 
 static INIT: Once = Once::new();
 
@@ -72,6 +72,7 @@ fn make_test_args(nats_port: u16) -> Args {
         },
         metrics_address: "127.0.0.1:0".to_string(),
         log_level: Level::Trace,
+        asmap_file: None,
     }
 }
 
@@ -173,7 +174,15 @@ async fn wait_for_metrics_ready(
     }
 }
 
-async fn start_metrics_service() -> (
+/// Path to the test asmap file. It maps 250.0.0.0/8 to AS1000 and
+/// 101.N.0.0/16 to ASN for N in 1..=8. All other addresses are unmapped.
+fn test_asmap_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shared/src/fixtures/asmap-test.raw")
+}
+
+async fn start_metrics_service_with_asmap(
+    asmap_file: Option<PathBuf>,
+) -> (
     u16,
     NatsServerForTesting,
     NatsPublisherForTesting,
@@ -188,7 +197,8 @@ async fn start_metrics_service() -> (
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let (addr_tx, addr_rx) = oneshot::channel();
     let mut metrics_handle = tokio::spawn(async move {
-        let args = make_test_args(nats_server.port);
+        let mut args = make_test_args(nats_server.port);
+        args.asmap_file = asmap_file;
         metrics::run(args, shutdown_rx.clone(), Some(addr_tx))
             .await
             .expect("Could not start metrics tool");
@@ -220,8 +230,15 @@ async fn start_metrics_service() -> (
 }
 
 async fn handle_metrics(callback: impl AsyncFnOnce(u16, NatsPublisherForTesting) -> ()) {
+    handle_metrics_with_asmap(None, callback).await
+}
+
+async fn handle_metrics_with_asmap(
+    asmap_file: Option<PathBuf>,
+    callback: impl AsyncFnOnce(u16, NatsPublisherForTesting) -> (),
+) {
     let (metrics_port, _nats_server, nats_publisher, shutdown_tx, metrics_handle) =
-        start_metrics_service().await;
+        start_metrics_service_with_asmap(asmap_file).await;
 
     callback(metrics_port, nats_publisher).await;
 
@@ -249,7 +266,17 @@ async fn check_metrics(metrics_port: u16, expected: &str) {
 }
 
 async fn publish_and_check(events: &[Event], subject: Subject, expected: &str) {
-    handle_metrics(
+    publish_and_check_with_asmap(None, events, subject, expected).await
+}
+
+async fn publish_and_check_with_asmap(
+    asmap_file: Option<PathBuf>,
+    events: &[Event],
+    subject: Subject,
+    expected: &str,
+) {
+    handle_metrics_with_asmap(
+        asmap_file,
         |metrics_port: u16, nats_publisher: NatsPublisherForTesting| async move {
             for event in events {
                 debug!("publishing: {:?}", event);
@@ -2088,7 +2115,6 @@ async fn test_integration_metrics_rpc_peerinfo() {
         peerobserver_rpc_peer_info_addr_ratelimited_peers 2
         peerobserver_rpc_peer_info_addr_ratelimited_total 1668
         peerobserver_rpc_peer_info_addr_relay_enabled_peers 2
-        peerobserver_rpc_peer_info_asn_peers{ASN="1234"} 2
         peerobserver_rpc_peer_info_bip152_highbandwidth_from 1
         peerobserver_rpc_peer_info_bip152_highbandwidth_to 2
         peerobserver_rpc_peer_info_connection_type_peers{connection_type="type0"} 1
@@ -4127,4 +4153,243 @@ async fn test_integration_metrics_compact_block_reconstruction_state_cleanup() {
         },
     )
     .await;
+}
+
+/// A getpeerinfo entry with the fields relevant for the AS metrics set and
+/// everything else zeroed.
+fn as_test_peer(id: u32, address: &str, network: &str, inbound: bool) -> PeerInfo {
+    PeerInfo {
+        addr_processed: 0,
+        addr_rate_limited: 0,
+        addr_relay_enabled: true,
+        address: address.to_string(),
+        address_bind: "1.2.3.4:8333".to_string(),
+        address_local: "1.2.3.4:8333".to_string(),
+        bip152_hb_from: false,
+        bip152_hb_to: false,
+        bytes_received: 0,
+        bytes_received_per_message: HashMap::new(),
+        bytes_sent_per_message: HashMap::new(),
+        bytes_sent: 0,
+        connection_time: 0,
+        connection_type: "type0".to_string(),
+        id,
+        inbound,
+        inflight: vec![],
+        last_block: 0,
+        last_received: 0,
+        last_send: 0,
+        last_transaction: 0,
+        mapped_as: 0,
+        minfeefilter: 0.0,
+        minimum_ping: 0.0,
+        network: network.to_string(),
+        permissions: vec![],
+        ping_time: 0.0,
+        ping_wait: 0.0,
+        relay_transactions: true,
+        services: "service".to_string(),
+        starting_height: 0,
+        subversion: "subversion".to_string(),
+        synced_blocks: 0,
+        synced_headers: 0,
+        time_offset: 0,
+        transport_protocol_type: "v2".to_string(),
+        version: 70016,
+        cpu_load: 0.0,
+        inv_to_send: 0,
+    }
+}
+
+fn as_test_peer_infos_event() -> Event {
+    Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
+        rpc_event: Some(rpc_extractor::rpc::RpcEvent::PeerInfos(PeerInfos {
+            infos: vec![
+                // two inbound peers from AS1
+                as_test_peer(1, "101.1.0.1:1234", "ipv4", true),
+                as_test_peer(2, "101.1.2.3:1234", "ipv4", true),
+                // one outbound peer from AS2 and one from AS8
+                as_test_peer(3, "101.2.0.1:8333", "ipv4", false),
+                as_test_peer(4, "[::ffff:101.8.0.1]:8333", "ipv6", false),
+                // an inbound IPv4 peer that isn't mapped in the test asmap
+                as_test_peer(5, "127.0.0.1:1234", "ipv4", true),
+                // an inbound Tor peer, which can't be mapped and isn't counted as unmapped
+                as_test_peer(
+                    6,
+                    "pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion:8333",
+                    "onion",
+                    true,
+                ),
+            ],
+        })),
+    }))
+    .unwrap()
+}
+
+#[tokio::test]
+async fn test_integration_metrics_rpc_peerinfo_as() {
+    println!("test that the RPC peer-info AS metrics work with an asmap file");
+
+    publish_and_check_with_asmap(
+        Some(test_asmap_path()),
+        &[as_test_peer_infos_event()],
+        Subject::Rpc,
+        r#"
+        peerobserver_rpc_peer_info_as_peers{as_name="Level 3 Parent LLC",asn="1",direction="inbound"} 2
+        peerobserver_rpc_peer_info_as_peers{as_name="University of Delaware",asn="2",direction="outbound"} 1
+        peerobserver_rpc_peer_info_as_peers{as_name="Rice University",asn="8",direction="outbound"} 1
+        peerobserver_rpc_peer_info_as_distinct{direction="inbound"} 1
+        peerobserver_rpc_peer_info_as_distinct{direction="outbound"} 2
+        peerobserver_rpc_peer_info_as_diversity{direction="inbound"} 0.5
+        peerobserver_rpc_peer_info_as_diversity{direction="outbound"} 1
+        peerobserver_rpc_peer_info_as_unmapped_peers{direction="inbound"} 1
+        peerobserver_rpc_peer_info_as_unmapped_peers{direction="outbound"} 0
+        peerobserver_rpc_peer_info_network_peers{network="ipv4"} 4
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_rpc_peerinfo_as_disabled() {
+    println!("test that no AS metrics are produced without an asmap file");
+
+    handle_metrics(
+        |metrics_port: u16, nats_publisher: NatsPublisherForTesting| async move {
+            nats_publisher
+                .publish(
+                    Subject::Rpc.to_string(),
+                    as_test_peer_infos_event().encode_to_vec(),
+                )
+                .await;
+
+            // Wait until the peer info event has been processed.
+            check_metrics(
+                metrics_port,
+                r#"
+                peerobserver_rpc_peer_info_network_peers{network="ipv4"} 4
+                "#,
+            )
+            .await;
+
+            let metrics_raw = fetch_metrics_root(metrics_port).expect("Could not fetch metrics");
+            for metric in [
+                "peerobserver_rpc_peer_info_as_peers{",
+                "peerobserver_rpc_peer_info_as_distinct{",
+                "peerobserver_rpc_peer_info_as_diversity{",
+                "peerobserver_rpc_peer_info_as_unmapped_peers{",
+            ] {
+                assert!(
+                    !metrics_raw.contains(metric),
+                    "did not expect '{}' without an asmap file",
+                    metric
+                );
+            }
+        },
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_conn_as() {
+    println!("test that the connection AS metrics work with an asmap file");
+
+    let timestamp_now = current_timestamp();
+
+    let conn = |addr: &str, peer_id: u64| Connection {
+        addr: addr.to_string(),
+        conn_type: 1,
+        network: 1,
+        peer_id,
+    };
+
+    publish_and_check_with_asmap(
+        Some(test_asmap_path()),
+        &[
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                    event: Some(connection::connection_event::Event::Inbound(
+                        InboundConnection {
+                            conn: conn("101.8.0.1:1234", 1),
+                            existing_connections: 10,
+                        },
+                    )),
+                })),
+            }))
+            .unwrap(),
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                    event: Some(connection::connection_event::Event::Inbound(
+                        InboundConnection {
+                            conn: conn("101.2.0.1:1234", 2),
+                            existing_connections: 11,
+                        },
+                    )),
+                })),
+            }))
+            .unwrap(),
+            // unmapped in the test asmap: no AS series expected
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                    event: Some(connection::connection_event::Event::Inbound(
+                        InboundConnection {
+                            conn: conn("127.0.0.1:1234", 3),
+                            existing_connections: 12,
+                        },
+                    )),
+                })),
+            }))
+            .unwrap(),
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                    event: Some(connection::connection_event::Event::Outbound(
+                        connection::OutboundConnection {
+                            conn: conn("101.8.0.2:8333", 4),
+                            existing_connections: 5,
+                        },
+                    )),
+                })),
+            }))
+            .unwrap(),
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                    event: Some(connection::connection_event::Event::Closed(
+                        ClosedConnection {
+                            conn: conn("101.8.0.1:1234", 1),
+                            time_established: timestamp_now - 100,
+                        },
+                    )),
+                })),
+            }))
+            .unwrap(),
+        ],
+        Subject::NetConn,
+        r#"
+        peerobserver_conn_inbound 3
+        peerobserver_conn_inbound_as{as_name="Rice University",asn="8"} 1
+        peerobserver_conn_inbound_as{as_name="University of Delaware",asn="2"} 1
+        peerobserver_conn_outbound 1
+        peerobserver_conn_outbound_as{as_name="Rice University",asn="8"} 1
+        peerobserver_conn_closed 1
+        peerobserver_conn_closed_as{as_name="Rice University",asn="8"} 1
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_integration_metrics_invalid_asmap_file() {
+    println!("test that we fail to start with an invalid asmap file");
+    setup();
+
+    let mut args = make_test_args(0);
+    args.asmap_file = Some(PathBuf::from("/nonexistent/asmap.dat"));
+    let (_, shutdown_rx) = watch::channel(false);
+    let result = metrics::run(args, shutdown_rx, None).await;
+    let err = result.expect_err("expected an error for a missing asmap file");
+    assert!(
+        format!("{:#}", err).contains("asmap"),
+        "unexpected error: {:#}",
+        err
+    );
 }

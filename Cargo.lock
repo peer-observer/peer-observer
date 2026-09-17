@@ -110,6 +110,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 
 [[package]]
+name = "asinfo"
+version = "0.1.20260901"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a754fe86bbd1bb7b5fbe1b1641349e7848b3305846e7adf67c9b492f661449a6"
+dependencies = [
+ "csv",
+]
+
+[[package]]
+name = "asmap"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "996e3818c450a9497e2f1aff7306d1c56b4198a07880222ee0aa85b6c42ac81f"
+
+[[package]]
 name = "async-nats"
 version = "0.50.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2038,6 +2053,8 @@ name = "shared"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "asinfo",
+ "asmap",
  "async-nats",
  "base32",
  "bitcoin",
