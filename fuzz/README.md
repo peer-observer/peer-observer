@@ -57,6 +57,20 @@ cargo fuzz tmin -s none <target> artifacts/<target>/crash-...
 Once a crash is fixed, add the minimized input as a regular unit test in the
 crate that owned the bug so it stays covered without the fuzzer.
 
+## Large inputs
+
+libFuzzer caps generated inputs at 4096 bytes by default, which never reaches
+full-size block, compact block, or large inventory messages. Run the two P2P
+targets with a larger `-max_len` (the seeds include such messages):
+
+```sh
+cargo fuzz run -s none ebpf_p2p_message corpus/ebpf_p2p_message seeds/ebpf_p2p_message -- -max_len=4200000
+cargo fuzz run -s none p2p_read_message corpus/p2p_read_message seeds/p2p_read_message -- -max_len=4200000
+```
+
+libFuzzer grows the input length gradually, so most inputs stay small and the
+run does not slow down much.
+
 ## Seeds
 
 `seeds/<target>/` holds small valid inputs generated from real encodings by

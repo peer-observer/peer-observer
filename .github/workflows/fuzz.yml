@@ -58,6 +58,13 @@ jobs:
           - log_line
           - metrics_events
           - alerts_events
+        include:
+          # The P2P message targets need larger inputs than libFuzzer's default
+          # 4096 bytes to reach full-size block and inventory messages.
+          - target: ebpf_p2p_message
+            args: "-max_len=4200000"
+          - target: p2p_read_message
+            args: "-max_len=4200000"
     steps:
     - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-nix-action
@@ -65,7 +72,7 @@ jobs:
       run: nix-shell --pure --command "cd fuzz && cargo run --example gen_seeds"
     - name: Fuzz ${{ matrix.target }} for 10 minutes
       run: |
-        nix-shell --pure --command "cd fuzz && cargo fuzz run -s none ${{ matrix.target }} corpus/${{ matrix.target }} seeds/${{ matrix.target }} -- -max_total_time=600"
+        nix-shell --pure --command "cd fuzz && cargo fuzz run -s none ${{ matrix.target }} corpus/${{ matrix.target }} seeds/${{ matrix.target }} -- -max_total_time=600 ${{ matrix.args }}"
     - name: Upload crash artifacts
       if: failure()
       uses: actions/upload-artifact@v7

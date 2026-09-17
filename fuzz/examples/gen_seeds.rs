@@ -10,14 +10,18 @@
 
 use peer_observer_fuzz::layout::{p2p_message_entry, P2P_METADATA_SIZE};
 use peer_observer_fuzz::{dummy_metadata, wrap_ebpf_event, wrap_event};
+use shared::bitcoin::bip152::{BlockTransactions, HeaderAndShortIds};
+use shared::bitcoin::block::{Header, Version};
 use shared::bitcoin::consensus::{deserialize, serialize};
 use shared::bitcoin::hashes::Hash;
 use shared::bitcoin::p2p::address::{AddrV2, AddrV2Message, Address};
 use shared::bitcoin::p2p::message::{NetworkMessage, RawNetworkMessage};
 use shared::bitcoin::p2p::message_blockdata::{GetHeadersMessage, Inventory};
-use shared::bitcoin::p2p::message_compact_blocks::SendCmpct;
+use shared::bitcoin::p2p::message_compact_blocks::{BlockTxn, CmpctBlock, SendCmpct};
 use shared::bitcoin::p2p::message_network::VersionMessage;
 use shared::bitcoin::p2p::ServiceFlags;
+use shared::bitcoin::pow::CompactTarget;
+use shared::bitcoin::{Block, TxMerkleNode, Wtxid};
 use shared::bitcoin::{BlockHash, Network, Transaction, Txid};
 use shared::log_matchers::parse_log_event;
 use shared::prost::Message;
@@ -56,7 +60,7 @@ fn network_messages() -> Vec<NetworkMessage> {
     let txid = Txid::from_byte_array([0x24; 32]);
     let socket = SocketAddr::new(Ipv4Addr::new(203, 0, 113, 7).into(), 8333);
 
-    vec![
+    let mut messages = vec![
         NetworkMessage::Ping(0x1122334455667788),
         NetworkMessage::Pong(0x1122334455667788),
         NetworkMessage::Verack,
@@ -79,7 +83,7 @@ fn network_messages() -> Vec<NetworkMessage> {
             900_000,
         )),
         NetworkMessage::Inv(vec![
-            Inventory::WTx(shared::bitcoin::Wtxid::from_byte_array([0x11; 32])),
+            Inventory::WTx(Wtxid::from_byte_array([0x11; 32])),
             Inventory::Block(block_hash),
             Inventory::Transaction(txid),
         ]),
@@ -96,11 +100,51 @@ fn network_messages() -> Vec<NetworkMessage> {
             addr: AddrV2::TorV3([0x33; 32]),
             port: 8333,
         }]),
-        NetworkMessage::Tx(tx),
+        NetworkMessage::Tx(tx.clone()),
         NetworkMessage::Unknown {
             command: "foobar".parse().expect("valid command"),
             payload: vec![1, 2, 3],
         },
+    ];
+    messages.extend(large_network_messages(&tx));
+    messages
+}
+
+/// Messages with many elements, so the fuzzer starts out with inputs that
+/// reach the block, header, and inventory conversion paths. The messages are
+/// not valid Bitcoin data (repeated transactions, bogus merkle roots), which
+/// rust-bitcoin does not check when decoding.
+fn large_network_messages(tx: &Transaction) -> Vec<NetworkMessage> {
+    let header = Header {
+        version: Version::TWO,
+        prev_blockhash: BlockHash::from_byte_array([0x42; 32]),
+        merkle_root: TxMerkleNode::from_byte_array([0x24; 32]),
+        time: 1_700_000_000,
+        bits: CompactTarget::from_consensus(0x1d00ffff),
+        nonce: 7,
+    };
+    let block = Block {
+        header,
+        txdata: vec![tx.clone(); 200],
+    };
+    let compact_block = HeaderAndShortIds::from_block(&block, 0x1122, 2, &[0, 1])
+        .expect("compact block from block");
+
+    vec![
+        NetworkMessage::Block(block.clone()),
+        NetworkMessage::Headers(vec![header; 500]),
+        NetworkMessage::Inv(
+            (0..5000u32)
+                .map(|i| Inventory::WTx(Wtxid::from_byte_array([i as u8; 32])))
+                .collect(),
+        ),
+        NetworkMessage::CmpctBlock(CmpctBlock { compact_block }),
+        NetworkMessage::BlockTxn(BlockTxn {
+            transactions: BlockTransactions {
+                block_hash: block.block_hash(),
+                transactions: vec![tx.clone(); 50],
+            },
+        }),
     ]
 }
 
