@@ -144,6 +144,84 @@ Options:
 ```
 
 
+## archiveinfo
+
+Streams one or more peer-observer archives, or all archives directly inside a directory, and
+reports which event categories and P2P message commands account for their uncompressed archive
+bytes. Rows are sorted by size and include counts, byte totals, share, and average and maximum
+event-frame sizes.
+
+Supports `.bin` and `.bin.zst`. Directory discovery is non-recursive and ignores unsupported
+filenames and nested directories. Each file gets a compact summary with its path, header,
+on-disk size, event count, uncompressed size, and completion status. Full-data and low-data
+archives then get separate summaries, each with its own totals, compression ratio, and tables.
+Archives written before the `low_data` header field existed are treated as full-data archives.
+
+On-disk size comes from filesystem metadata. Event sizes count the original uncompressed protobuf
+bytes and length delimiters, including unknown protobuf fields. Each summary also reports header
+bytes and the whole-file compression ratio. Zstd compresses a stream across event boundaries, so
+exact compressed bytes cannot be attributed to individual events or categories. Byte sizes and
+ratios are rounded for display; the exact uncompressed total is included in bytes.
+
+The P2P table also reports original message payload bytes from `message.meta.size`, excluding
+network framing. This is the message data size before low-data reduction, so low-data archives
+can retain much less data than their payload totals.
+Pass `--message-directions` to split rows into commands such as `block (received)` and `block (sent)`.
+Direction is relative to the observed node, independent of the peer connection's `conn_type`.
+Within each archive mode, category shares use all event bytes; P2P shares use all P2P event bytes,
+including both directions.
+
+Unrecognized P2P messages, including messages whose variant is missing or unknown to this build,
+are grouped into an `unknown` row by default. Pass `--show-unknown-commands` to show their
+individual command strings as `unknown "command"`. All displayed command strings are escaped
+so control characters cannot affect the terminal. This also works with `--message-directions`.
+Recognized commands such as `alert` and `reject` keep their own rows.
+
+`archiveinfo` continues after read errors and exits with a non-zero status if any input failed.
+Errors identify the path and, for event reads, the event number. Complete events preceding a
+malformed or truncated event or zstd frame remain in the report, marked `status: partial`.
+Compression ratios are unavailable for reports containing partially read archives. Inputs that
+cannot be opened or whose headers cannot be read are excluded from totals; they still cause a
+non-zero exit status, but do not make successfully read archives partial. Output is human-readable
+only.
+
+### Usage
+
+```bash
+cargo run -p archive --bin archiveinfo -- archive/test.0.bin.zst
+cargo run -p archive --bin archiveinfo -- archive/full.bin.zst archive/low-data.bin.zst
+cargo run -p archive --bin archiveinfo -- archive/
+cargo run -p archive --bin archiveinfo -- --message-directions archive/
+```
+
+Pass multiple directories to compare full-data and low-data archives in one run:
+
+```bash
+cargo run -p archive --bin archiveinfo -- \
+  archive/full-data/ archive/low-data/
+```
+
+You can also select individual files from different directories, for example:
+
+```bash
+cargo run -p archive --bin archiveinfo -- \
+  archive/full-data/example.bin.zst \
+  archive/low-data/example.bin.zst
+```
+
+Files and directories can be mixed. Each directory is scanned non-recursively, and summaries
+are grouped by the archive header's `low_data` flag, regardless of directory names.
+
+Set `-l` or `--log-level` to `error`, `warn`, `info` (the default), `debug`, or `trace`.
+Values are case-insensitive; `off` is not supported. This controls log verbosity; the archive
+report is still printed at every level.
+
+```bash
+cargo run -p archive --bin archiveinfo -- --log-level warn archive/full-data/ archive/low-data/
+```
+
+Run `cargo run -p archive --bin archiveinfo -- --help` for all options.
+
 ## replayer
 
 Reads peer-observer archive files and logs decoded events at info level.
