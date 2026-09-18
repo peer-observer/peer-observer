@@ -15,7 +15,7 @@ use shared::protobuf::ebpf_extractor::ctypes::{
 use shared::protobuf::ebpf_extractor::{connection, ebpf, mempool, message, validation, Ebpf};
 use shared::protobuf::event::event::PeerObserverEvent;
 use shared::protobuf::event::Event;
-use shared::tokio::sync::watch;
+use shared::tokio::sync::{mpsc, watch};
 use shared::{async_nats, clap, nats_util, tokio};
 use std::fmt;
 use std::fs::File;
@@ -23,6 +23,7 @@ use std::io::{BufReader, Read};
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use std::time::SystemTime;
 
@@ -32,6 +33,14 @@ mod tracing;
 const RINGBUFF_CALLBACK_OK: i32 = 0;
 const RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR: i32 = -5;
 const RINGBUFF_CALLBACK_UNABLE_TO_PARSE_P2P_MSG: i32 = -20;
+
+/// How many encoded events may wait to be published before we start dropping
+/// them. Publishing runs in its own task so that reading from the ring buffers
+/// never has to wait for the NATS server.
+const PUBLISH_QUEUE_SIZE: usize = 8192;
+
+/// Events we could not hand to the publisher task because its queue was full.
+static UNPUBLISHED_EVENTS: AtomicU64 = AtomicU64::new(0);
 
 const NO_EVENTS_ERROR_DURATION: Duration = Duration::from_secs(60 * 3);
 const NO_EVENTS_WARN_DURATION: Duration = Duration::from_secs(60);
@@ -372,7 +381,23 @@ fn read_dropped_events(object: &Object) -> Result<[u64; DROPPED_EVENT_NAMES.len(
 }
 
 /// Warns about events dropped since the last report.
-fn report_dropped_events(object: &Object, previous: &mut [u64; DROPPED_EVENT_NAMES.len()]) {
+fn report_dropped_events(
+    object: &Object,
+    previous: &mut [u64; DROPPED_EVENT_NAMES.len()],
+    previously_unpublished: &mut u64,
+) {
+    let unpublished = UNPUBLISHED_EVENTS.load(Ordering::Relaxed);
+    let new_unpublished = unpublished.saturating_sub(*previously_unpublished);
+    if new_unpublished > 0 {
+        log::warn!(
+            "Dropped {} event{} in the last {:?} (could not publish them fast enough).",
+            new_unpublished,
+            if new_unpublished > 1 { "s" } else { "" },
+            DROP_REPORT_INTERVAL,
+        );
+    }
+    *previously_unpublished = unpublished;
+
     let current = match read_dropped_events(object) {
         Ok(current) => current,
         Err(e) => {
@@ -445,7 +470,7 @@ fn skip_disabled_tracepoints(skel: &mut tracing::OpenTracingSkel, args: &Args) -
 fn init_bpf_listener<'a, 'b>(
     args: &Args,
     pid: i32,
-    nc: &'a async_nats::Client,
+    requests: &'a mpsc::Sender<PublishRequest>,
     obj_container: &'b mut MaybeUninit<libbpf_rs::OpenObject>,
 ) -> Result<(
     i32,
@@ -479,10 +504,10 @@ fn init_bpf_listener<'a, 'b>(
         active_tracepoints.extend(&TRACEPOINTS_NET_MESSAGE);
         #[rustfmt::skip]
         ringbuff_builder
-            .add(&map_net_msg_small,    |data| { handle_net_message(data, nc) })?
-            .add(&map_net_msg_medium,   |data| { handle_net_message(data, nc) })?
-            .add(&map_net_msg_large,    |data| { handle_net_message(data, nc) })?
-            .add(&map_net_msg_huge,     |data| { handle_net_message(data, nc) })?;
+            .add(&map_net_msg_small,    |data| { handle_net_message(data, requests) })?
+            .add(&map_net_msg_medium,   |data| { handle_net_message(data, requests) })?
+            .add(&map_net_msg_large,    |data| { handle_net_message(data, requests) })?
+            .add(&map_net_msg_huge,     |data| { handle_net_message(data, requests) })?;
     }
 
     // P2P connection tracepoints
@@ -495,11 +520,11 @@ fn init_bpf_listener<'a, 'b>(
         active_tracepoints.extend(&TRACEPOINTS_NET_CONN);
         #[rustfmt::skip]
         ringbuff_builder
-            .add(&map_net_conn_inbound,         |data| { handle_net_conn_inbound(data, nc) })?
-            .add(&map_net_conn_outbound,        |data| { handle_net_conn_outbound(data, nc) })?
-            .add(&map_net_conn_closed,          |data| { handle_net_conn_closed(data, nc) })?
-            .add(&map_net_conn_inbound_evicted, |data| { handle_net_conn_inbound_evicted(data, nc) })?
-            .add(&map_net_conn_misbehaving,     |data| { handle_net_conn_misbehaving(data, nc) })?;
+            .add(&map_net_conn_inbound,         |data| { handle_net_conn_inbound(data, requests) })?
+            .add(&map_net_conn_outbound,        |data| { handle_net_conn_outbound(data, requests) })?
+            .add(&map_net_conn_closed,          |data| { handle_net_conn_closed(data, requests) })?
+            .add(&map_net_conn_inbound_evicted, |data| { handle_net_conn_inbound_evicted(data, requests) })?
+            .add(&map_net_conn_misbehaving,     |data| { handle_net_conn_misbehaving(data, requests) })?;
     }
 
     // validation tracepoints
@@ -507,7 +532,7 @@ fn init_bpf_listener<'a, 'b>(
     if !args.no_validation_tracepoints {
         active_tracepoints.extend(&TRACEPOINTS_VALIDATION);
         ringbuff_builder.add(&map_validation_block_connected, |data| {
-            handle_validation_block_connected(data, nc)
+            handle_validation_block_connected(data, requests)
         })?;
     }
 
@@ -520,10 +545,10 @@ fn init_bpf_listener<'a, 'b>(
         active_tracepoints.extend(&TRACEPOINTS_MEMPOOL);
         #[rustfmt::skip]
         ringbuff_builder
-            .add(&map_mempool_added,    |data| { handle_mempool_added(data, nc) })?
-            .add(&map_mempool_removed,  |data| { handle_mempool_removed(data, nc) })?
-            .add(&map_mempool_rejected, |data| { handle_mempool_rejected(data, nc) })?
-            .add(&map_mempool_replaced, |data| { handle_mempool_replaced(data, nc) })?;
+            .add(&map_mempool_added,    |data| { handle_mempool_added(data, requests) })?
+            .add(&map_mempool_removed,  |data| { handle_mempool_removed(data, requests) })?
+            .add(&map_mempool_rejected, |data| { handle_mempool_rejected(data, requests) })?
+            .add(&map_mempool_replaced, |data| { handle_mempool_replaced(data, requests) })?;
     }
 
     // attach tracepoints
@@ -577,16 +602,20 @@ pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<()> {
         .with_context(|| format!("connecting to NATS at {}", args.nats.address))?;
     log::info!("Connected to NATS server at {}", args.nats.address);
 
+    let (publish_requests, requests) = mpsc::channel(PUBLISH_QUEUE_SIZE);
+    tokio::spawn(publish_events(nc, requests));
+
     let mut obj_container = MaybeUninit::uninit();
     // Keeping _loaded_obj and _links alive is important. Dropping them triggers deleletion from the
     // kernel space of the corresponding bpf maps.
     let (mut pid, mut _loaded_obj, mut ring_buffers, mut _links) =
-        init_bpf_listener(&args, pid, &nc, &mut obj_container)?;
+        init_bpf_listener(&args, pid, &publish_requests, &mut obj_container)?;
 
     let mut last_event_timestamp = SystemTime::now();
     let mut has_warned_about_no_events = false;
     let mut last_drop_report = SystemTime::now();
     let mut reported_drops = [0u64; DROPPED_EVENT_NAMES.len()];
+    let mut reported_unpublished = 0u64;
     loop {
         // Check for shutdown signal (non-blocking).
         // Max latency is ~1 second (the poll_raw timeout).
@@ -639,7 +668,7 @@ pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<()> {
                     drop(_loaded_obj);
                     drop(ring_buffers);
                     (pid, _loaded_obj, ring_buffers, _links) =
-                        init_bpf_listener(&args, new_pid, &nc, &mut obj_container)
+                        init_bpf_listener(&args, new_pid, &publish_requests, &mut obj_container)
                             .context("re-initializing the BPF listener after bitcoind restart")?;
                     last_event_timestamp = SystemTime::now();
                     has_warned_about_no_events = false;
@@ -658,7 +687,11 @@ pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<()> {
 
         if last_drop_report.elapsed().unwrap_or_default() >= DROP_REPORT_INTERVAL {
             last_drop_report = SystemTime::now();
-            report_dropped_events(_loaded_obj.object(), &mut reported_drops);
+            report_dropped_events(
+                _loaded_obj.object(),
+                &mut reported_drops,
+                &mut reported_unpublished,
+            );
         }
 
         let duration_since_last_event = SystemTime::now().duration_since(last_event_timestamp)?;
@@ -686,156 +719,98 @@ pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<()> {
     }
 }
 
-fn handle_net_conn_closed(data: &[u8], nc: &async_nats::Client) -> i32 {
+/// An encoded event waiting to be published.
+struct PublishRequest {
+    subject: Subject,
+    payload: Vec<u8>,
+}
+
+/// Publishes events in the order they were read out of the ring buffers.
+async fn publish_events(nc: async_nats::Client, mut requests: mpsc::Receiver<PublishRequest>) {
+    while let Some(request) = requests.recv().await {
+        if let Err(e) = nc
+            .publish(request.subject.to_string(), request.payload.into())
+            .await
+        {
+            error!("could not publish a {} event: {}", request.subject, e);
+        }
+    }
+}
+
+/// Encodes an event and hands it to the publisher task. Never waits: if the
+/// publisher can't keep up we'd rather drop an event here than stall reading
+/// from the ring buffers, which would make bitcoind drop events instead.
+fn publish(
+    requests: &mpsc::Sender<PublishRequest>,
+    subject: Subject,
+    event: PeerObserverEvent,
+) -> i32 {
+    let event = match Event::new(event) {
+        Ok(event) => event,
+        Err(e) => {
+            error!("Could not create new Event due to SystemTimeError: {}", e);
+            return RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR;
+        }
+    };
+    let request = PublishRequest {
+        subject,
+        payload: event.encode_to_vec(),
+    };
+    if requests.try_send(request).is_err() {
+        // Logging each one would only add to the backlog. The count is
+        // reported together with the events dropped by the BPF programs.
+        UNPUBLISHED_EVENTS.fetch_add(1, Ordering::Relaxed);
+    }
+    RINGBUFF_CALLBACK_OK
+}
+
+fn connection_event(event: connection::connection_event::Event) -> PeerObserverEvent {
+    PeerObserverEvent::EbpfExtractor(Ebpf {
+        ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+            event: Some(event),
+        })),
+    })
+}
+
+fn mempool_event(event: mempool::mempool_event::Event) -> PeerObserverEvent {
+    PeerObserverEvent::EbpfExtractor(Ebpf {
+        ebpf_event: Some(ebpf::EbpfEvent::Mempool(mempool::MempoolEvent {
+            event: Some(event),
+        })),
+    })
+}
+
+fn handle_net_conn_closed(data: &[u8], requests: &mpsc::Sender<PublishRequest>) -> i32 {
     let closed = ClosedConnection::from_bytes(data);
-    let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
-            event: Some(connection::connection_event::Event::Closed(closed.into())),
-        })),
-    })) {
-        Ok(p) => p,
-        Err(e) => {
-            error!("Could not create new Event due to SystemTimeError: {}", e);
-            return RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR;
-        }
-    };
-    let nc = nc.clone();
-    tokio::spawn(async move {
-        if let Err(e) = nc
-            .publish(Subject::NetConn.to_string(), proto.encode_to_vec().into())
-            .await
-        {
-            error!(
-                "could not publish message in 'handle_net_conn_closed': {}",
-                e
-            );
-        }
-    });
-    RINGBUFF_CALLBACK_OK
+    let event = connection::connection_event::Event::Closed(closed.into());
+    publish(requests, Subject::NetConn, connection_event(event))
 }
 
-fn handle_net_conn_outbound(data: &[u8], nc: &async_nats::Client) -> i32 {
+fn handle_net_conn_outbound(data: &[u8], requests: &mpsc::Sender<PublishRequest>) -> i32 {
     let outbound = OutboundConnection::from_bytes(data);
-    let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
-            event: Some(connection::connection_event::Event::Outbound(
-                outbound.into(),
-            )),
-        })),
-    })) {
-        Ok(p) => p,
-        Err(e) => {
-            error!("Could not create new Event due to SystemTimeError: {}", e);
-            return RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR;
-        }
-    };
-    let nc = nc.clone();
-    tokio::spawn(async move {
-        if let Err(e) = nc
-            .publish(Subject::NetConn.to_string(), proto.encode_to_vec().into())
-            .await
-        {
-            error!(
-                "could not publish message in 'handle_net_conn_outbound': {}",
-                e
-            );
-        }
-    });
-    RINGBUFF_CALLBACK_OK
+    let event = connection::connection_event::Event::Outbound(outbound.into());
+    publish(requests, Subject::NetConn, connection_event(event))
 }
 
-fn handle_net_conn_inbound(data: &[u8], nc: &async_nats::Client) -> i32 {
+fn handle_net_conn_inbound(data: &[u8], requests: &mpsc::Sender<PublishRequest>) -> i32 {
     let inbound = InboundConnection::from_bytes(data);
-    let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
-            event: Some(connection::connection_event::Event::Inbound(inbound.into())),
-        })),
-    })) {
-        Ok(p) => p,
-        Err(e) => {
-            error!("Could not create new Event due to SystemTimeError: {}", e);
-            return RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR;
-        }
-    };
-
-    let nc = nc.clone();
-    tokio::spawn(async move {
-        if let Err(e) = nc
-            .publish(Subject::NetConn.to_string(), proto.encode_to_vec().into())
-            .await
-        {
-            error!(
-                "could not publish message in 'handle_net_conn_inbound': {}",
-                e
-            );
-        }
-    });
-    RINGBUFF_CALLBACK_OK
+    let event = connection::connection_event::Event::Inbound(inbound.into());
+    publish(requests, Subject::NetConn, connection_event(event))
 }
 
-fn handle_net_conn_inbound_evicted(data: &[u8], nc: &async_nats::Client) -> i32 {
+fn handle_net_conn_inbound_evicted(data: &[u8], requests: &mpsc::Sender<PublishRequest>) -> i32 {
     let evicted = ClosedConnection::from_bytes(data);
-    let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
-            event: Some(connection::connection_event::Event::InboundEvicted(
-                evicted.into(),
-            )),
-        })),
-    })) {
-        Ok(p) => p,
-        Err(e) => {
-            error!("Could not create new Event due to SystemTimeError: {}", e);
-            return RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR;
-        }
-    };
-
-    let nc = nc.clone();
-    tokio::spawn(async move {
-        if let Err(e) = nc
-            .publish(Subject::NetConn.to_string(), proto.encode_to_vec().into())
-            .await
-        {
-            error!(
-                "could not publish message in 'handle_net_conn_inbound_evicted': {}",
-                e
-            );
-        }
-    });
-    RINGBUFF_CALLBACK_OK
+    let event = connection::connection_event::Event::InboundEvicted(evicted.into());
+    publish(requests, Subject::NetConn, connection_event(event))
 }
 
-fn handle_net_conn_misbehaving(data: &[u8], nc: &async_nats::Client) -> i32 {
+fn handle_net_conn_misbehaving(data: &[u8], requests: &mpsc::Sender<PublishRequest>) -> i32 {
     let misbehaving = MisbehavingConnection::from_bytes(data);
-    let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
-            event: Some(connection::connection_event::Event::Misbehaving(
-                misbehaving.into(),
-            )),
-        })),
-    })) {
-        Ok(p) => p,
-        Err(e) => {
-            error!("Could not create new Event due to SystemTimeError: {}", e);
-            return RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR;
-        }
-    };
-
-    let nc = nc.clone();
-    tokio::spawn(async move {
-        if let Err(e) = nc
-            .publish(Subject::NetConn.to_string(), proto.encode_to_vec().into())
-            .await
-        {
-            error!(
-                "could not publish message in 'handle_net_conn_misbehaving': {}",
-                e
-            );
-        }
-    });
-    RINGBUFF_CALLBACK_OK
+    let event = connection::connection_event::Event::Misbehaving(misbehaving.into());
+    publish(requests, Subject::NetConn, connection_event(event))
 }
 
-fn handle_net_message(data: &[u8], nc: &async_nats::Client) -> i32 {
+fn handle_net_message(data: &[u8], requests: &mpsc::Sender<PublishRequest>) -> i32 {
     let message = P2PMessage::from_bytes(data);
     let protobuf_message = match message.decode_to_protobuf_network_message() {
         Ok(msg) => msg,
@@ -844,168 +819,47 @@ fn handle_net_message(data: &[u8], nc: &async_nats::Client) -> i32 {
             return RINGBUFF_CALLBACK_UNABLE_TO_PARSE_P2P_MSG;
         }
     };
-    let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+    let event = PeerObserverEvent::EbpfExtractor(Ebpf {
         ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
             meta: message.meta.create_protobuf_metadata(),
             msg: Some(protobuf_message),
         })),
-    })) {
-        Ok(p) => p,
-        Err(e) => {
-            error!("Could not create new Event due to SystemTimeError: {}", e);
-            return RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR;
-        }
-    };
-    let nc = nc.clone();
-    tokio::spawn(async move {
-        if let Err(e) = nc
-            .publish(Subject::NetMsg.to_string(), proto.encode_to_vec().into())
-            .await
-        {
-            error!("could not publish message in 'handle_net_message': {}", e);
-        }
     });
-    RINGBUFF_CALLBACK_OK
+    publish(requests, Subject::NetMsg, event)
 }
 
-fn handle_mempool_added(data: &[u8], nc: &async_nats::Client) -> i32 {
+fn handle_mempool_added(data: &[u8], requests: &mpsc::Sender<PublishRequest>) -> i32 {
     let added = MempoolAdded::from_bytes(data);
-    let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Mempool(mempool::MempoolEvent {
-            event: Some(mempool::mempool_event::Event::Added(added.into())),
-        })),
-    })) {
-        Ok(p) => p,
-        Err(e) => {
-            error!("Could not create new Event due to SystemTimeError: {}", e);
-            return RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR;
-        }
-    };
-    let nc = nc.clone();
-    tokio::spawn(async move {
-        if let Err(e) = nc
-            .publish(Subject::Mempool.to_string(), proto.encode_to_vec().into())
-            .await
-        {
-            error!("could not publish message in 'handle_mempool_added': {}", e);
-        }
-    });
-    RINGBUFF_CALLBACK_OK
+    let event = mempool::mempool_event::Event::Added(added.into());
+    publish(requests, Subject::Mempool, mempool_event(event))
 }
 
-fn handle_mempool_removed(data: &[u8], nc: &async_nats::Client) -> i32 {
+fn handle_mempool_removed(data: &[u8], requests: &mpsc::Sender<PublishRequest>) -> i32 {
     let removed = MempoolRemoved::from_bytes(data);
-    let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Mempool(mempool::MempoolEvent {
-            event: Some(mempool::mempool_event::Event::Removed(removed.into())),
-        })),
-    })) {
-        Ok(p) => p,
-        Err(e) => {
-            error!("Could not create new Event due to SystemTimeError: {}", e);
-            return RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR;
-        }
-    };
-    let nc = nc.clone();
-    tokio::spawn(async move {
-        if let Err(e) = nc
-            .publish(Subject::Mempool.to_string(), proto.encode_to_vec().into())
-            .await
-        {
-            error!(
-                "could not publish message in 'handle_mempool_removed': {}",
-                e
-            );
-        }
-    });
-    RINGBUFF_CALLBACK_OK
+    let event = mempool::mempool_event::Event::Removed(removed.into());
+    publish(requests, Subject::Mempool, mempool_event(event))
 }
 
-fn handle_mempool_replaced(data: &[u8], nc: &async_nats::Client) -> i32 {
+fn handle_mempool_replaced(data: &[u8], requests: &mpsc::Sender<PublishRequest>) -> i32 {
     let replaced = MempoolReplaced::from_bytes(data);
-    let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Mempool(mempool::MempoolEvent {
-            event: Some(mempool::mempool_event::Event::Replaced(replaced.into())),
-        })),
-    })) {
-        Ok(p) => p,
-        Err(e) => {
-            error!("Could not create new Event due to SystemTimeError: {}", e);
-            return RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR;
-        }
-    };
-    let nc = nc.clone();
-    tokio::spawn(async move {
-        if let Err(e) = nc
-            .publish(Subject::Mempool.to_string(), proto.encode_to_vec().into())
-            .await
-        {
-            error!(
-                "could not publish message in 'handle_mempool_replaced': {}",
-                e
-            );
-        }
-    });
-    RINGBUFF_CALLBACK_OK
+    let event = mempool::mempool_event::Event::Replaced(replaced.into());
+    publish(requests, Subject::Mempool, mempool_event(event))
 }
 
-fn handle_mempool_rejected(data: &[u8], nc: &async_nats::Client) -> i32 {
+fn handle_mempool_rejected(data: &[u8], requests: &mpsc::Sender<PublishRequest>) -> i32 {
     let rejected = MempoolRejected::from_bytes(data);
-    let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
-        ebpf_event: Some(ebpf::EbpfEvent::Mempool(mempool::MempoolEvent {
-            event: Some(mempool::mempool_event::Event::Rejected(rejected.into())),
-        })),
-    })) {
-        Ok(p) => p,
-        Err(e) => {
-            error!("Could not create new Event due to SystemTimeError: {}", e);
-            return RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR;
-        }
-    };
-    let nc = nc.clone();
-    tokio::spawn(async move {
-        if let Err(e) = nc
-            .publish(Subject::Mempool.to_string(), proto.encode_to_vec().into())
-            .await
-        {
-            error!(
-                "could not publish message in 'handle_mempool_rejected': {}",
-                e
-            );
-        }
-    });
-    RINGBUFF_CALLBACK_OK
+    let event = mempool::mempool_event::Event::Rejected(rejected.into());
+    publish(requests, Subject::Mempool, mempool_event(event))
 }
 
-fn handle_validation_block_connected(data: &[u8], nc: &async_nats::Client) -> i32 {
+fn handle_validation_block_connected(data: &[u8], requests: &mpsc::Sender<PublishRequest>) -> i32 {
     let connected = ValidationBlockConnected::from_bytes(data);
-    let proto = match Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+    let event = PeerObserverEvent::EbpfExtractor(Ebpf {
         ebpf_event: Some(ebpf::EbpfEvent::Validation(validation::ValidationEvent {
             event: Some(validation::validation_event::Event::BlockConnected(
                 connected.into(),
             )),
         })),
-    })) {
-        Ok(p) => p,
-        Err(e) => {
-            error!("Could not create new Event due to SystemTimeError: {}", e);
-            return RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR;
-        }
-    };
-    let nc = nc.clone();
-    tokio::spawn(async move {
-        if let Err(e) = nc
-            .publish(
-                Subject::Validation.to_string(),
-                proto.encode_to_vec().into(),
-            )
-            .await
-        {
-            error!(
-                "could not publish message in 'handle_validation_block_connected': {}",
-                e
-            );
-        }
     });
-    RINGBUFF_CALLBACK_OK
+    publish(requests, Subject::Validation, event)
 }
