@@ -86,25 +86,27 @@ impl fmt::Display for P2PMessageMetadata {
     }
 }
 
-pub struct P2PMessage {
+/// A P2P message as it was put into the ring buffer. The payload points
+/// straight at the ring buffer, so nothing is copied to read it.
+pub struct P2PMessage<'a> {
     pub meta: P2PMessageMetadata,
-    pub payload: Vec<u8>,
+    pub payload: &'a [u8],
 }
 
-impl P2PMessage {
-    pub fn from_bytes(x: &[u8]) -> P2PMessage {
+impl<'a> P2PMessage<'a> {
+    pub fn from_bytes(x: &'a [u8]) -> P2PMessage<'a> {
         const SIZEOF_METADATA_STRUCT: usize = mem::size_of::<P2PMessageMetadata>();
         let meta_bytes = &x[..SIZEOF_METADATA_STRUCT];
         let meta = unsafe { ptr::read_unaligned(meta_bytes.as_ptr() as *const P2PMessageMetadata) };
         let payload_size = cmp::min(meta.msg_size as usize, MAX_P2P_MESSAGE_SIZE);
-        let payload = x[SIZEOF_METADATA_STRUCT..SIZEOF_METADATA_STRUCT + payload_size].to_vec();
+        let payload = &x[SIZEOF_METADATA_STRUCT..SIZEOF_METADATA_STRUCT + payload_size];
         P2PMessage { meta, payload }
     }
 
     pub fn decode_to_protobuf_network_message(
         &self,
     ) -> Result<message::message_event::Msg, P2PMessageDecodeError> {
-        decode_network_message(&self.meta, &self.payload)
+        decode_network_message(&self.meta, self.payload)
     }
 }
 
