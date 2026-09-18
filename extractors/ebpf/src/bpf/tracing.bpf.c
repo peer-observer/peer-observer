@@ -67,115 +67,62 @@ RINGBUFFER(net_msg_huge, 8192 * PAGE_SIZE) // 32 MB, 7 messages
 
 
 // Helper function to set some of the tracepoint arguments to Metadata.
-void set_meta_data1(struct Metadata *meta, u64 id, bool inbound, u64 msg_size) {
+static __always_inline void set_meta_data1(struct Metadata *meta, u64 id, bool inbound, u64 msg_size) {
   meta->id = id;
   meta->msg_inbound = inbound;
   meta->msg_size = msg_size;
 }
 
 // Helper function to set some of the tracepoint arguments to Metadata.
-void set_meta_data2(struct Metadata *meta, void *addr, void* conn_type, void* msg_type) {
+static __always_inline void set_meta_data2(struct Metadata *meta, void *addr, void* conn_type, void* msg_type) {
   bpf_probe_read_user_str(&meta->addr, sizeof(meta->addr), addr);
   bpf_probe_read_user_str(&meta->conn_type, sizeof(meta->conn_type), conn_type);
   bpf_probe_read_user_str(&meta->msg_type, sizeof(meta->msg_type), msg_type);
 }
 
+// Puts a message into the ring buffer of the given size class and returns.
+#define SUBMIT_NET_MSG(struct_name, ringbuffer, name)                                  \
+  {                                                                                    \
+    struct struct_name *msg =                                                          \
+        bpf_ringbuf_reserve(&ringbuffer, sizeof(struct struct_name), 0);                \
+    if (!msg) {                                                                        \
+      bpf_printk(name " msg: not able to reserve. msg size is %d", msg_size);           \
+      return -1;                                                                       \
+    }                                                                                  \
+    set_meta_data1(&msg->meta, id, inbound, msg_size);                                  \
+    set_meta_data2(&msg->meta, addr, conn_type, msg_type);                              \
+    bpf_probe_read_user(&msg->payload, msg_size, msg_payload);                          \
+    bpf_ringbuf_submit(msg, 0);                                                         \
+    return 0;                                                                           \
+  }
+
+// Inbound and outbound messages are handled the same way apart from the
+// inbound flag, so both tracepoints share this function.
+static __always_inline int handle_net_msg(u64 id, void *addr, void *conn_type, void *msg_type,
+                                     u64 msg_size, void *msg_payload, bool inbound) {
+  if (msg_size <= MAX_SMALL_MSG_LENGTH) {
+    SUBMIT_NET_MSG(SmallP2PMessage, net_msg_small, "small")
+  } else if (msg_size <= MAX_MEDIUM_MSG_LENGTH) {
+    SUBMIT_NET_MSG(MediumP2PMessage, net_msg_medium, "medium")
+  } else if (msg_size <= MAX_LARGE_MSG_LENGTH) {
+    SUBMIT_NET_MSG(LargeP2PMessage, net_msg_large, "large")
+  } else if (msg_size <= MAX_HUGE_MSG_LENGTH) {
+    SUBMIT_NET_MSG(HugeP2PMessage, net_msg_huge, "huge")
+  }
+  bpf_printk("msg: too big to handle. msg size is %d", msg_size);
+  return -1;
+}
+
 SEC("usdt")
 int BPF_USDT(handle_net_msg_inbound, u64 id, void *addr, void *conn_type, void *msg_type, u64 msg_size, void *msg_payload)
 {
-  bool IS_INBOUND = true;
-  if (msg_size <= MAX_SMALL_MSG_LENGTH) {
-    struct SmallP2PMessage *msg = bpf_ringbuf_reserve(&net_msg_small, sizeof(struct SmallP2PMessage), 0);
-    if (msg) {
-      set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
-      set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
-      bpf_ringbuf_submit(msg, 0);
-      return 0;
-    }
-    bpf_printk("small inbound msg: not able to reserve. msg size is %d", msg_size);
-  } else if (msg_size <= MAX_MEDIUM_MSG_LENGTH) {
-    struct MediumP2PMessage *msg = bpf_ringbuf_reserve(&net_msg_medium, sizeof(struct MediumP2PMessage), 0);
-    if (msg) {
-      set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
-      set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
-      bpf_ringbuf_submit(msg, 0);
-      return 0;
-    }
-    bpf_printk("medium inbound msg: not able to reserve. msg size is %d", msg_size);
-  } else if (msg_size <= MAX_LARGE_MSG_LENGTH) {
-    struct LargeP2PMessage *msg = bpf_ringbuf_reserve(&net_msg_large, sizeof(struct LargeP2PMessage), 0);
-    if (msg) {
-      set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
-      set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
-      bpf_ringbuf_submit(msg, 0);
-      return 0;
-    }
-    bpf_printk("large inbound msg: not able to reserve. msg size is %d", msg_size);
-  } else if (msg_size <= MAX_HUGE_MSG_LENGTH) {
-    struct HugeP2PMessage *msg = bpf_ringbuf_reserve(&net_msg_huge, sizeof(struct HugeP2PMessage), 0);
-    if (msg) {
-      set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
-      set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
-      bpf_ringbuf_submit(msg, 0);
-      return 0;
-    }
-    bpf_printk("huge inbound msg: not able to reserve. msg size is %d", msg_size);
-  }
-  bpf_printk("inbound msg: return -1.( msg size is %d", msg_size);
-  return -1;
+  return handle_net_msg(id, addr, conn_type, msg_type, msg_size, msg_payload, true);
 }
 
 SEC("usdt")
 int BPF_USDT(handle_net_msg_outbound, u64 id, void *addr, void *conn_type, void *msg_type, u64 msg_size, void *msg_payload)
 {
-  bool IS_INBOUND = false;
-  if (msg_size <= MAX_SMALL_MSG_LENGTH) {
-    struct SmallP2PMessage *msg = bpf_ringbuf_reserve(&net_msg_small, sizeof(struct SmallP2PMessage), 0);
-    if (msg) {
-      set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
-      set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
-      bpf_ringbuf_submit(msg, 0);
-      return 0;
-    }
-    bpf_printk("small outbound msg: not able to reserve. msg size is %d", msg_size);
-  } else if (msg_size <= MAX_MEDIUM_MSG_LENGTH) {
-    struct MediumP2PMessage *msg = bpf_ringbuf_reserve(&net_msg_medium, sizeof(struct MediumP2PMessage), 0);
-    if (msg) {
-      set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
-      set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
-      bpf_ringbuf_submit(msg, 0);
-      return 0;
-    }
-    bpf_printk("medium outbound msg: not able to reserve. msg size is %d", msg_size);
-  } else if (msg_size <= MAX_LARGE_MSG_LENGTH) {
-    struct LargeP2PMessage *msg = bpf_ringbuf_reserve(&net_msg_large, sizeof(struct LargeP2PMessage), 0);
-    if (msg) {
-      set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
-      set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
-      bpf_ringbuf_submit(msg, 0);
-      return 0;
-    }
-    bpf_printk("large outbound msg: not able to reserve. msg size is %d", msg_size);
-  } else if (msg_size <= MAX_HUGE_MSG_LENGTH) {
-    struct HugeP2PMessage *msg = bpf_ringbuf_reserve(&net_msg_huge, sizeof(struct HugeP2PMessage), 0);
-    if (msg) {
-      set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
-      set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
-      bpf_ringbuf_submit(msg, 0);
-      return 0;
-    }
-    bpf_printk("huge outbound msg: not able to reserve. msg size is %d", msg_size);
-  }
-  bpf_printk("outbound msg: return -1. msg size is %d", msg_size);
-  return -1;
+  return handle_net_msg(id, addr, conn_type, msg_type, msg_size, msg_payload, false);
 }
 
 // NET CONNECTIONS
@@ -223,13 +170,13 @@ struct MisbehavingConnection
 };
 
 // Helper function to set some of the tracepoint arguments to Connection.
-void set_conn_data1(struct Connection *conn, u64 id, u64 network) {
+static __always_inline void set_conn_data1(struct Connection *conn, u64 id, u64 network) {
   conn->id = id;
   conn->network = network;
 }
 
 // Helper function to set some of the tracepoint arguments to Connection.
-void set_conn_data2(struct Connection *conn, void *addr, void *type) {
+static __always_inline void set_conn_data2(struct Connection *conn, void *addr, void *type) {
   bpf_probe_read_user_str(&conn->addr, sizeof(conn->addr), addr);
   bpf_probe_read_user_str(&conn->type, sizeof(conn->type), type);
 }
