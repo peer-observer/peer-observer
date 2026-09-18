@@ -1,7 +1,7 @@
 #![cfg_attr(feature = "strict", deny(warnings))]
 
 use libbpf_rs::skel::{OpenSkel, Skel, SkelBuilder};
-use libbpf_rs::{Link, Map, MapCore, Object, ProgramMut, RingBuffer, RingBufferBuilder};
+use libbpf_rs::{Link, Map, MapCore, MapFlags, Object, ProgramMut, RingBuffer, RingBufferBuilder};
 use shared::anyhow::{bail, Context, Result};
 use shared::clap::Parser;
 use shared::log::{self, error};
@@ -325,6 +325,75 @@ fn try_get_running_process_pid(args: &Args) -> Result<i32> {
     }
 }
 
+/// Names for the slots of the `dropped_events` BPF map. Must stay in sync
+/// with the DROP_* defines in tracing.bpf.c.
+const DROPPED_EVENT_NAMES: [&str; 15] = [
+    "small P2P message",
+    "medium P2P message",
+    "large P2P message",
+    "huge P2P message",
+    "oversized P2P message",
+    "inbound connection",
+    "outbound connection",
+    "closed connection",
+    "evicted inbound connection",
+    "misbehaving connection",
+    "mempool added",
+    "mempool removed",
+    "mempool replaced",
+    "mempool rejected",
+    "block connected",
+];
+
+/// How often we report events that bitcoind produced faster than we could
+/// read them.
+const DROP_REPORT_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Reads how many events the BPF programs had to drop so far. The counters
+/// are kept per CPU, so we sum them up.
+fn read_dropped_events(object: &Object) -> Result<[u64; DROPPED_EVENT_NAMES.len()]> {
+    let map = find_map(object, "dropped_events")?;
+    let mut totals = [0u64; DROPPED_EVENT_NAMES.len()];
+    for (slot, total) in totals.iter_mut().enumerate() {
+        let per_cpu = map
+            .lookup_percpu(&(slot as u32).to_ne_bytes(), MapFlags::ANY)
+            .with_context(|| format!("looking up the drop counter of slot {slot}"))?
+            .unwrap_or_default();
+        for value in per_cpu {
+            let counter: [u8; 8] = value
+                .get(..8)
+                .and_then(|bytes| bytes.try_into().ok())
+                .context("drop counter is too short")?;
+            *total = total.saturating_add(u64::from_ne_bytes(counter));
+        }
+    }
+    Ok(totals)
+}
+
+/// Warns about events dropped since the last report.
+fn report_dropped_events(object: &Object, previous: &mut [u64; DROPPED_EVENT_NAMES.len()]) {
+    let current = match read_dropped_events(object) {
+        Ok(current) => current,
+        Err(e) => {
+            log::warn!("Could not read the dropped event counters: {:#}", e);
+            return;
+        }
+    };
+    for (slot, name) in DROPPED_EVENT_NAMES.iter().enumerate() {
+        let dropped = current[slot].saturating_sub(previous[slot]);
+        if dropped > 0 {
+            log::warn!(
+                "Dropped {} {} event{} in the last {:?}. The ring buffer was full.",
+                dropped,
+                name,
+                if dropped > 1 { "s" } else { "" },
+                DROP_REPORT_INTERVAL,
+            );
+        }
+    }
+    *previous = current;
+}
+
 /// Tells libbpf to skip the BPF programs and ring buffers of the tracepoint
 /// groups that are turned off. Ring buffers are created even when nobody
 /// reads from them, and the kernel reserves their memory right away, so the
@@ -515,6 +584,8 @@ pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<()> {
 
     let mut last_event_timestamp = SystemTime::now();
     let mut has_warned_about_no_events = false;
+    let mut last_drop_report = SystemTime::now();
+    let mut reported_drops = [0u64; DROPPED_EVENT_NAMES.len()];
     loop {
         // Check for shutdown signal (non-blocking).
         // Max latency is ~1 second (the poll_raw timeout).
@@ -571,6 +642,8 @@ pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<()> {
                             .context("re-initializing the BPF listener after bitcoind restart")?;
                     last_event_timestamp = SystemTime::now();
                     has_warned_about_no_events = false;
+                    // The counters start over with the freshly created maps.
+                    reported_drops = [0u64; DROPPED_EVENT_NAMES.len()];
                 }
                 // Restarting the bitcoind process can take some time, so keep
                 // retrying on transient errors and only bail on real failures.
@@ -580,6 +653,11 @@ pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<()> {
                     }
                 }
             }
+        }
+
+        if last_drop_report.elapsed().unwrap_or_default() >= DROP_REPORT_INTERVAL {
+            last_drop_report = SystemTime::now();
+            report_dropped_events(_loaded_obj.object(), &mut reported_drops);
         }
 
         let duration_since_last_event = SystemTime::now().duration_since(last_event_timestamp)?;
