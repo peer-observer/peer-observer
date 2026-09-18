@@ -30,9 +30,9 @@ use std::time::SystemTime;
 #[path = "tracing.gen.rs"]
 mod tracing;
 
+/// Returned from the ring buffer callbacks. Anything else makes libbpf stop
+/// reading for this round, so we report problems and carry on instead.
 const RINGBUFF_CALLBACK_OK: i32 = 0;
-const RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR: i32 = -5;
-const RINGBUFF_CALLBACK_UNABLE_TO_PARSE_P2P_MSG: i32 = -20;
 
 /// How many encoded events may wait to be published before we start dropping
 /// them. Publishing runs in its own task so that reading from the ring buffers
@@ -634,24 +634,18 @@ pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<()> {
         }
 
         match ring_buffers.poll_raw(Duration::from_secs(1)) {
-            RINGBUFF_CALLBACK_OK => (),
-            RINGBUFF_CALLBACK_UNABLE_TO_PARSE_P2P_MSG => log::warn!("Could not parse P2P message."),
-            RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR => log::warn!("SystemTimeError"),
-            _other => {
-                // values >0 are the number of handled events
-                if _other <= 0 {
-                    log::warn!("Unhandled ringbuffer callback error: {}", _other)
-                } else {
-                    last_event_timestamp = SystemTime::now();
-                    has_warned_about_no_events = false;
-                    log::trace!(
-                        "Extracted {} event{} from ring buffers and tried to publish {}",
-                        _other,
-                        if _other > 1 { "s" } else { "" },
-                        if _other > 1 { "them" } else { "it" },
-                    );
-                }
+            0 => (),
+            handled if handled > 0 => {
+                last_event_timestamp = SystemTime::now();
+                has_warned_about_no_events = false;
+                log::trace!(
+                    "Extracted {} event{} from ring buffers and tried to publish {}",
+                    handled,
+                    if handled > 1 { "s" } else { "" },
+                    if handled > 1 { "them" } else { "it" },
+                );
             }
+            error => log::warn!("Error while reading from the ring buffers: {}", error),
         };
 
         if pid == 0 || !process_exists(pid) {
@@ -752,7 +746,7 @@ fn publish(
         Ok(event) => event,
         Err(e) => {
             error!("Could not create new Event due to SystemTimeError: {}", e);
-            return RINGBUFF_CALLBACK_SYSTEM_TIME_ERROR;
+            return RINGBUFF_CALLBACK_OK;
         }
     };
     let request = PublishRequest {
@@ -819,7 +813,7 @@ fn handle_net_message(data: &[u8], requests: &mpsc::Sender<PublishRequest>) -> i
         Ok(msg) => msg,
         Err(e) => {
             log::warn!("Could not parse P2P msg with size={}: {}", data.len(), e);
-            return RINGBUFF_CALLBACK_UNABLE_TO_PARSE_P2P_MSG;
+            return RINGBUFF_CALLBACK_OK;
         }
     };
     let event = PeerObserverEvent::EbpfExtractor(Ebpf {
