@@ -8,9 +8,10 @@
 
 #define RINGBUFFER(name, size) struct {__uint(type, BPF_MAP_TYPE_RINGBUF); __uint(max_entries, size); } name SEC(".maps");
 
-// Counters for events we had to drop because a ring buffer was full. The
-// extractor reads and reports them every now and then. The slot numbers must
-// stay in sync with DROPPED_EVENT_NAMES in lib.rs.
+// Counters for events we had to drop, either because a ring buffer was full
+// or because we could not read the event. The extractor reads and reports
+// them every now and then. The slot numbers must stay in sync with
+// DROPPED_EVENT_NAMES in lib.rs.
 #define DROP_NET_MSG_SMALL 0
 #define DROP_NET_MSG_MEDIUM 1
 #define DROP_NET_MSG_LARGE 2
