@@ -729,7 +729,10 @@ struct PublishRequest {
 async fn publish_events(nc: async_nats::Client, mut requests: mpsc::Receiver<PublishRequest>) {
     while let Some(request) = requests.recv().await {
         if let Err(e) = nc
-            .publish(request.subject.to_string(), request.payload.into())
+            .publish(
+                async_nats::Subject::from_static(request.subject.as_str()),
+                request.payload.into(),
+            )
             .await
         {
             error!("could not publish a {} event: {}", request.subject, e);
