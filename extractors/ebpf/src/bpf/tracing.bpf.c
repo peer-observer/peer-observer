@@ -21,8 +21,9 @@
 #define MAX_LARGE_MSG_LENGTH 65536
 #define MAX_HUGE_MSG_LENGTH 4194304
 
+// Ring buffer sizes are given in bytes. libbpf rounds them up to a
+// power-of-two multiple of the page size, so we use such values directly.
 #define PAGE_SIZE 4096
-#define NET_MSG_PAGES 128
 
 // NET MESSAGES
 
@@ -183,13 +184,13 @@ int BPF_USDT(handle_net_msg_outbound, u64 id, void *addr, void *conn_type, void 
 
 #define MAX_MISBEHAVING_MESSAGE_LENGTH 128
 
-#define NET_CONN_PAGES 64
+#define NET_CONN_RINGBUFFER_SIZE (64 * PAGE_SIZE) // 256 KB
 
-RINGBUFFER(net_conn_inbound, NET_CONN_PAGES)
-RINGBUFFER(net_conn_outbound, NET_CONN_PAGES)
-RINGBUFFER(net_conn_closed, NET_CONN_PAGES)
-RINGBUFFER(net_conn_inbound_evicted, NET_CONN_PAGES)
-RINGBUFFER(net_conn_misbehaving, NET_CONN_PAGES)
+RINGBUFFER(net_conn_inbound, NET_CONN_RINGBUFFER_SIZE)
+RINGBUFFER(net_conn_outbound, NET_CONN_RINGBUFFER_SIZE)
+RINGBUFFER(net_conn_closed, NET_CONN_RINGBUFFER_SIZE)
+RINGBUFFER(net_conn_inbound_evicted, NET_CONN_RINGBUFFER_SIZE)
+RINGBUFFER(net_conn_misbehaving, NET_CONN_RINGBUFFER_SIZE)
 
 struct Connection
 {
@@ -281,12 +282,14 @@ int BPF_USDT(handle_net_conn_misbehaving, u64 id, void *message) {
 
 // MEMPOOL
 
-#define MEMPOOL_PAGES 64
+// A connecting block removes every transaction it contains from the mempool
+// in one go, so these need room for a few thousand events at once.
+#define MEMPOOL_RINGBUFFER_SIZE (256 * PAGE_SIZE) // 1 MB
 
-RINGBUFFER(mempool_added, MEMPOOL_PAGES)
-RINGBUFFER(mempool_removed, MEMPOOL_PAGES)
-RINGBUFFER(mempool_replaced, MEMPOOL_PAGES)
-RINGBUFFER(mempool_rejected, MEMPOOL_PAGES)
+RINGBUFFER(mempool_added, MEMPOOL_RINGBUFFER_SIZE)
+RINGBUFFER(mempool_removed, MEMPOOL_RINGBUFFER_SIZE)
+RINGBUFFER(mempool_replaced, MEMPOOL_RINGBUFFER_SIZE)
+RINGBUFFER(mempool_rejected, MEMPOOL_RINGBUFFER_SIZE)
 
 #define TXID_LENGHT 32
 #define REMOVAL_REASON_LENGTH 9
@@ -369,9 +372,9 @@ int BPF_USDT(handle_mempool_rejected, void *txid, void *reason) {
 
 // VALIDATION
 
-#define VALIDATION_BLOCK_CONNECTED_PAGES 64
+#define VALIDATION_RINGBUFFER_SIZE (64 * PAGE_SIZE) // 256 KB
 
-RINGBUFFER(validation_block_connected, VALIDATION_BLOCK_CONNECTED_PAGES)
+RINGBUFFER(validation_block_connected, VALIDATION_RINGBUFFER_SIZE)
 
 #define HASH_LENGHT 32
 
