@@ -44,6 +44,17 @@ const LOG_TARGET: &str = "main";
 // See https://github.com/bitcoin/bitcoin/blob/9ec1ae0e98c0d60fa6ebc9713dd344b454ebe0b6/src/net_processing.cpp#L1559
 const PRIVATE_TRANSACTION_BROADCAST_USERAGENT: &str = "/pynode:0.0.1/";
 
+// Bitcoin Core considers an addrman entry with a timestamp older than 30 days terrible.
+// See ADDRMAN_HORIZON in https://github.com/bitcoin/bitcoin/blob/master/src/addrman.cpp
+const ADDRMAN_HORIZON_SECONDS: i64 = 30 * 24 * 60 * 60;
+
+// Bitcoin Core considers an addrman entry with a timestamp more than 10 minutes in the
+// future terrible.
+const ADDRMAN_FUTURE_TOLERANCE_SECONDS: i64 = 10 * 60;
+
+// The quantiles we report the addrman entry age for.
+const ADDRMAN_ENTRY_AGE_QUANTILES: [f64; 5] = [0.1, 0.25, 0.5, 0.75, 0.9];
+
 /// A peer-observer tool that produces Prometheus metrics for received events
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -194,7 +205,7 @@ fn handle_event(
             },
             PeerObserverEvent::RpcExtractor(r) => {
                 if let Some(e) = r.rpc_event {
-                    handle_rpc_event(&e, state_arc, metrics);
+                    handle_rpc_event(&e, unwrapped.timestamp, state_arc, metrics);
                 }
             }
             PeerObserverEvent::P2pExtractor(p) => {
@@ -216,7 +227,12 @@ fn handle_event(
     Ok(())
 }
 
-fn handle_rpc_event(e: &rpc::RpcEvent, state_arc: Arc<Mutex<State>>, metrics: metrics::Metrics) {
+fn handle_rpc_event(
+    e: &rpc::RpcEvent,
+    timestamp_ms: u64,
+    state_arc: Arc<Mutex<State>>,
+    metrics: metrics::Metrics,
+) {
     match e {
         rpc::RpcEvent::Uptime(uptime_seconds) => {
             metrics.rpc_uptime.set(*uptime_seconds as i64);
@@ -793,6 +809,16 @@ fn handle_rpc_event(e: &rpc::RpcEvent, state_arc: Arc<Mutex<State>>, metrics: me
             metrics.rpc_getrawaddrman_ports.reset();
             metrics.rpc_getrawaddrman_services.reset();
             metrics.rpc_getrawaddrman_service_bits.reset();
+            metrics.rpc_getrawaddrman_entries.reset();
+            metrics.rpc_getrawaddrman_terrible_entries.reset();
+            metrics.rpc_getrawaddrman_future_entries.reset();
+            metrics.rpc_getrawaddrman_distinct_entries.reset();
+            metrics.rpc_getrawaddrman_distinct_addresses.reset();
+
+            // We use the timestamp of the event, and not our current time, as reference.
+            // The event timestamp is set by the RPC extractor when it received the
+            // addrman from the node, which is closer to the node's clock than ours.
+            let now = (timestamp_ms / 1000) as i64;
 
             #[derive(Default)]
             struct TableStats {
@@ -802,18 +828,82 @@ fn handle_rpc_event(e: &rpc::RpcEvent, state_arc: Arc<Mutex<State>>, metrics: me
                 distinct_asns: i64,
                 distinct_sources: i64,
                 distinct_source_asn: i64,
+                // Ages (in seconds) of the entry timestamps, sorted ascending.
+                ages: Vec<f64>,
+                entries_per_network: BTreeMap<String, i64>,
+                terrible_per_network: BTreeMap<String, i64>,
+                // Entries with a timestamp in the future, by network.
+                future_per_network: BTreeMap<String, i64>,
+                // Entries with a timestamp more than 10 minutes in the future, by network.
+                far_future_per_network: BTreeMap<String, i64>,
+                // Distinct address and port combinations, by network.
+                distinct_entries_per_network: BTreeMap<String, i64>,
+                // Distinct addresses, ignoring the port, by network.
+                distinct_addresses_per_network: BTreeMap<String, i64>,
             }
 
             impl TableStats {
-                fn new(table: &HashMap<u32, AddrmanBucket>) -> TableStats {
+                fn new(table: &HashMap<u32, AddrmanBucket>, now: i64) -> TableStats {
                     let mut table_stats = TableStats::default();
 
                     let mut asns: BTreeSet<u32> = BTreeSet::new();
                     let mut sources: BTreeSet<String> = BTreeSet::new();
                     let mut source_asn: BTreeSet<u32> = BTreeSet::new();
 
+                    // Borrowing from the entries here keeps us from copying an address
+                    // per entry. A table can hold tens of thousands of them.
+                    let mut distinct_addresses_per_network: BTreeMap<&str, BTreeSet<&str>> =
+                        BTreeMap::new();
+                    let mut distinct_entries_per_network: BTreeMap<&str, BTreeSet<(&str, u32)>> =
+                        BTreeMap::new();
+
                     for bucket in table.values() {
                         for entry in bucket.entries.values() {
+                            let offset = entry.time - now;
+                            // Entries with a timestamp in the future have an age of zero.
+                            table_stats.ages.push(max(0, -offset) as f64);
+
+                            table_stats
+                                .entries_per_network
+                                .entry(entry.network.clone())
+                                .and_modify(|c| *c += 1)
+                                .or_insert(1);
+
+                            distinct_addresses_per_network
+                                .entry(&entry.network)
+                                .or_default()
+                                .insert(&entry.address);
+
+                            distinct_entries_per_network
+                                .entry(&entry.network)
+                                .or_default()
+                                .insert((&entry.address, entry.port));
+
+                            if offset > 0 {
+                                table_stats
+                                    .future_per_network
+                                    .entry(entry.network.clone())
+                                    .and_modify(|c| *c += 1)
+                                    .or_insert(1);
+                            }
+
+                            let far_future = offset > ADDRMAN_FUTURE_TOLERANCE_SECONDS;
+                            if far_future {
+                                table_stats
+                                    .far_future_per_network
+                                    .entry(entry.network.clone())
+                                    .and_modify(|c| *c += 1)
+                                    .or_insert(1);
+                            }
+
+                            if far_future || -offset > ADDRMAN_HORIZON_SECONDS {
+                                table_stats
+                                    .terrible_per_network
+                                    .entry(entry.network.clone())
+                                    .and_modify(|c| *c += 1)
+                                    .or_insert(1);
+                            }
+
                             table_stats
                                 .port_count
                                 .entry(entry.port as u16)
@@ -845,13 +935,32 @@ fn handle_rpc_event(e: &rpc::RpcEvent, state_arc: Arc<Mutex<State>>, metrics: me
                     table_stats.distinct_asns = asns.len() as i64;
                     table_stats.distinct_sources = sources.len() as i64;
                     table_stats.distinct_source_asn = source_asn.len() as i64;
+                    table_stats.distinct_addresses_per_network = distinct_addresses_per_network
+                        .into_iter()
+                        .map(|(network, addresses)| (network.to_string(), addresses.len() as i64))
+                        .collect();
+                    table_stats.distinct_entries_per_network = distinct_entries_per_network
+                        .into_iter()
+                        .map(|(network, entries)| (network.to_string(), entries.len() as i64))
+                        .collect();
+
+                    // Sorting once here allows us to read all quantiles and all age
+                    // buckets from the ages without sorting them again.
+                    table_stats
+                        .ages
+                        .sort_by(|a, b| a.partial_cmp(b).expect("ages should not be NaN"));
 
                     table_stats
                 }
+
+                // Number of entries with an age smaller than or equal to the passed age.
+                fn entries_with_age_up_to(&self, age: f64) -> i64 {
+                    self.ages.partition_point(|a| *a <= age) as i64
+                }
             }
 
-            let new = TableStats::new(&addrman.new);
-            let tried = TableStats::new(&addrman.tried);
+            let new = TableStats::new(&addrman.new, now);
+            let tried = TableStats::new(&addrman.tried, now);
 
             metrics
                 .rpc_getrawaddrman_distinct_asns
@@ -915,6 +1024,72 @@ fn handle_rpc_event(e: &rpc::RpcEvent, state_arc: Arc<Mutex<State>>, metrics: me
                     .rpc_getrawaddrman_services
                     .with_label_values(&["tried", &services.to_string()])
                     .set(*count);
+            }
+
+            for (table, stats) in [("new", &new), ("tried", &tried)] {
+                for quantile in ADDRMAN_ENTRY_AGE_QUANTILES {
+                    metrics
+                        .rpc_getrawaddrman_entry_age_seconds
+                        .with_label_values(&[table, &quantile.to_string()])
+                        .set(stat_util::percentile_of_sorted_f64(&stats.ages, quantile));
+                }
+
+                for age in metrics::BUCKETS_ADDRMAN_ENTRY_AGE {
+                    metrics
+                        .rpc_getrawaddrman_entry_age_seconds_bucket
+                        .with_label_values(&[table, &age.to_string()])
+                        .set(stats.entries_with_age_up_to(age));
+                }
+                metrics
+                    .rpc_getrawaddrman_entry_age_seconds_bucket
+                    .with_label_values(&[table, "+Inf"])
+                    .set(stats.ages.len() as i64);
+
+                for (network, count) in stats.entries_per_network.iter() {
+                    metrics
+                        .rpc_getrawaddrman_entries
+                        .with_label_values(&[table, network])
+                        .set(*count);
+                }
+
+                for (network, count) in stats.distinct_entries_per_network.iter() {
+                    metrics
+                        .rpc_getrawaddrman_distinct_entries
+                        .with_label_values(&[table, network])
+                        .set(*count);
+                }
+
+                for (network, count) in stats.distinct_addresses_per_network.iter() {
+                    metrics
+                        .rpc_getrawaddrman_distinct_addresses
+                        .with_label_values(&[table, network])
+                        .set(*count);
+                }
+
+                for (network, count) in stats.terrible_per_network.iter() {
+                    metrics
+                        .rpc_getrawaddrman_terrible_entries
+                        .with_label_values(&[table, network])
+                        .set(*count);
+                }
+
+                for (network, count) in stats.future_per_network.iter() {
+                    metrics
+                        .rpc_getrawaddrman_future_entries
+                        .with_label_values(&[table, network, "0"])
+                        .set(*count);
+                }
+
+                for (network, count) in stats.far_future_per_network.iter() {
+                    metrics
+                        .rpc_getrawaddrman_future_entries
+                        .with_label_values(&[
+                            table,
+                            network,
+                            &ADDRMAN_FUTURE_TOLERANCE_SECONDS.to_string(),
+                        ])
+                        .set(*count);
+                }
             }
 
             // metrics that require the previous addrman state:

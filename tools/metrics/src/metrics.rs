@@ -106,6 +106,21 @@ pub const BUCKETS_ADDR_ADDRESS_TIMESTAMP_OFFSET: [f64; 26] = [
     16777216f64,
 ];
 
+// Buckets for the age of addrman entries in seconds. 30 days is the horizon after
+// which Bitcoin Core considers an addrman entry to be terrible. The two buckets
+// after it show how far past that horizon the older entries are.
+pub const BUCKETS_ADDRMAN_ENTRY_AGE: [f64; 9] = [
+    3600f64,    // 1 hour
+    21600f64,   // 6 hours
+    86400f64,   // 1 day
+    259200f64,  // 3 days
+    604800f64,  // 7 days
+    1209600f64, // 14 days
+    2592000f64, // 30 days
+    5184000f64, // 60 days
+    7776000f64, // 90 days
+];
+
 macro_rules! g {
     ($name:ident, $desc:expr, $registry:expr) => {
         let $name: Gauge =
@@ -367,6 +382,13 @@ pub struct Metrics {
     pub rpc_getrawaddrman_replaced_entry: IntCounterVec,
     pub rpc_getrawaddrman_changed_services: IntCounterVec,
     pub rpc_getrawaddrman_changed_timestamps: IntCounterVec,
+    pub rpc_getrawaddrman_entry_age_seconds: GaugeVec,
+    pub rpc_getrawaddrman_entry_age_seconds_bucket: IntGaugeVec,
+    pub rpc_getrawaddrman_entries: IntGaugeVec,
+    pub rpc_getrawaddrman_terrible_entries: IntGaugeVec,
+    pub rpc_getrawaddrman_future_entries: IntGaugeVec,
+    pub rpc_getrawaddrman_distinct_entries: IntGaugeVec,
+    pub rpc_getrawaddrman_distinct_addresses: IntGaugeVec,
 
     // estimatesmartfee
     pub rpc_estimatesmartfee_feerate: GaugeVec,
@@ -590,6 +612,13 @@ impl Metrics {
         icv!(rpc_getrawaddrman_replaced_entry, "Number of entries replaced (by bucket/position) since the last fetch to the addrman by table.", ["table"], registry);
         icv!(rpc_getrawaddrman_changed_services, "Number of entries where the services changed since the last fetch to the addrman by table.", ["table"], registry);
         icv!(rpc_getrawaddrman_changed_timestamps, "Number of entries where the timestamp changed since the last fetch to the addrman by table.", ["table"], registry);
+        gv!(rpc_getrawaddrman_entry_age_seconds, "Age (in seconds) of the addrman entry timestamps by table and quantile. Entries with a timestamp in the future are counted as age zero.", ["table", "quantile"], registry);
+        igv!(rpc_getrawaddrman_entry_age_seconds_bucket, "Number of addrman entries with an age (in seconds) of less than or equal to 'le' by table. Entries with a timestamp in the future are counted as age zero.", ["table", "le"], registry);
+        igv!(rpc_getrawaddrman_entries, "Number of entries in the addrman by table and network.", ["table", "network"], registry);
+        igv!(rpc_getrawaddrman_terrible_entries, "Number of addrman entries Bitcoin Core would consider terrible by table and network. This is a lower bound: only the timestamp based conditions (timestamp more than 10 minutes in the future or older than 30 days) can be checked, as getrawaddrman does not tell us about the connection attempts, the last try, and the last success of an entry.", ["table", "network"], registry);
+        igv!(rpc_getrawaddrman_future_entries, "Number of addrman entries with a timestamp at least 'min_offset_seconds' in the future by table and network. Entries more than 10 minutes (600 seconds) in the future are considered terrible by Bitcoin Core.", ["table", "network", "min_offset_seconds"], registry);
+        igv!(rpc_getrawaddrman_distinct_entries, "Number of distinct address and port combinations in the addrman by table and network. Bitcoin Core can keep the same address in up to eight buckets of the new table, where it takes up a position in each of them. This metric counts each address and port only once, while rpc_getrawaddrman_entries counts the positions they take up.", ["table", "network"], registry);
+        igv!(rpc_getrawaddrman_distinct_addresses, "Number of distinct addresses in the addrman by table and network, ignoring the port. Lower than rpc_getrawaddrman_distinct_entries when the addrman holds the same address on more than one port.", ["table", "network"], registry);
 
         // estimatesmartfee
         gv!(rpc_estimatesmartfee_feerate, "The feerate estimate in sat/vB by target block and mode.", ["target_block", "mode"], registry);
@@ -810,6 +839,13 @@ impl Metrics {
             rpc_getrawaddrman_replaced_entry,
             rpc_getrawaddrman_changed_timestamps,
             rpc_getrawaddrman_changed_services,
+            rpc_getrawaddrman_entry_age_seconds,
+            rpc_getrawaddrman_entry_age_seconds_bucket,
+            rpc_getrawaddrman_entries,
+            rpc_getrawaddrman_terrible_entries,
+            rpc_getrawaddrman_future_entries,
+            rpc_getrawaddrman_distinct_entries,
+            rpc_getrawaddrman_distinct_addresses,
 
             // estimatesmartfee
             rpc_estimatesmartfee_feerate,
