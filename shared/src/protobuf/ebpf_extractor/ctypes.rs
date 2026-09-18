@@ -17,9 +17,11 @@ const MAX_MISBEHAVING_MESSAGE_LENGTH: usize = 128;
 /// Based on Bitcoin Core's MAX_PROTOCOL_MESSAGE_LENGTH. Longer messages are rejected.
 const MAX_P2P_MESSAGE_SIZE: usize = 4194304; // 4 MB
 
+// These must match the lengths in the BPF program, or reading its events
+// back into these structs reads past the end of them.
 const TXID_LENGTH: usize = 32;
 const REMOVAL_REASON_LENGTH: usize = 9;
-const REJECTION_REASON_LENGTH: usize = 118;
+const REJECTION_REASON_LENGTH: usize = 113;
 const HASH_LENGTH: usize = 32;
 
 /// The metadata for a P2P message.
