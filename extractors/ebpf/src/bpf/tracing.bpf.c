@@ -99,7 +99,6 @@ int BPF_USDT(handle_net_msg_inbound, u64 id, void *addr, void *conn_type, void *
     if (msg) {
       set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
       set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user_str(&msg->meta.msg_type, sizeof(msg->meta.msg_type), msg_type);
       bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
       bpf_ringbuf_submit(msg, 0);
       return 0;
@@ -149,7 +148,6 @@ int BPF_USDT(handle_net_msg_outbound, u64 id, void *addr, void *conn_type, void 
     if (msg) {
       set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
       set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user_str(&msg->meta.msg_type, sizeof(msg->meta.msg_type), msg_type);
       bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
       bpf_ringbuf_submit(msg, 0);
       return 0;
