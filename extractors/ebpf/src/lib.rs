@@ -15,7 +15,7 @@ use shared::protobuf::ebpf_extractor::ctypes::{
 use shared::protobuf::ebpf_extractor::{connection, ebpf, mempool, message, validation, Ebpf};
 use shared::protobuf::event::event::PeerObserverEvent;
 use shared::protobuf::event::Event;
-use shared::tokio::sync::watch;
+use shared::tokio::sync::{oneshot, watch};
 use shared::{async_nats, clap, nats_util, tokio};
 use std::fmt;
 use std::fs::File;
@@ -445,7 +445,11 @@ fn init_bpf_listener<'a, 'b>(
     ))
 }
 
-pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<()> {
+pub async fn run(
+    args: Args,
+    shutdown_rx: watch::Receiver<bool>,
+    ready_tx: Option<oneshot::Sender<()>>,
+) -> Result<()> {
     if args.no_tracepoints_enabled() {
         log::error!("No tracepoints enabled.");
         return Ok(());
@@ -465,6 +469,13 @@ pub async fn run(args: Args, shutdown_rx: watch::Receiver<bool>) -> Result<()> {
     // kernel space of the corresponding bpf maps.
     let (mut pid, mut _loaded_obj, mut ring_buffers, mut _links) =
         init_bpf_listener(&args, pid, &nc, &mut obj_container)?;
+
+    // The tracepoints are hooked up now, so everything the bitcoind process
+    // does from here on is seen. The integration tests wait for this before
+    // making the node do something.
+    if let Some(ready_tx) = ready_tx {
+        let _ = ready_tx.send(());
+    }
 
     let mut last_event_timestamp = SystemTime::now();
     let mut has_warned_about_no_events = false;
