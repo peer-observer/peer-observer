@@ -27,8 +27,6 @@
 
 // NET MESSAGES
 
-#define METADATA_SIZE 8 + MAX_PEER_ADDR_LENGTH + MAX_PEER_CONN_TYPE_LENGTH + MAX_MSG_TYPE_LENGTH + 1 + 8
-
 struct Metadata {
     u64     id;
     char    addr[MAX_PEER_ADDR_LENGTH];
@@ -60,10 +58,12 @@ struct HugeP2PMessage
     u8                payload[MAX_HUGE_MSG_LENGTH];
 };
 
-RINGBUFFER(net_msg_small, (MAX_SMALL_MSG_LENGTH + METADATA_SIZE) * 1024) // ~ 1 MB
-RINGBUFFER(net_msg_medium, (MAX_MEDIUM_MSG_LENGTH + METADATA_SIZE) * 1024) // ~ 4.2 MB
-RINGBUFFER(net_msg_large, (MAX_LARGE_MSG_LENGTH + METADATA_SIZE) * 1024) // ~ 67 MB
-RINGBUFFER(net_msg_huge, (MAX_HUGE_MSG_LENGTH + METADATA_SIZE) * 128) // ~ 536 MB
+// Each buffer holds whole messages of its size class. A message takes its
+// class size plus 120 bytes of metadata and an 8 byte header.
+RINGBUFFER(net_msg_small, 256 * PAGE_SIZE) // 1 MB, ~2700 messages
+RINGBUFFER(net_msg_medium, 2048 * PAGE_SIZE) // 8 MB, ~1900 messages
+RINGBUFFER(net_msg_large, 4096 * PAGE_SIZE) // 16 MB, ~250 messages
+RINGBUFFER(net_msg_huge, 8192 * PAGE_SIZE) // 32 MB, 7 messages
 
 
 // Helper function to set some of the tracepoint arguments to Metadata.
