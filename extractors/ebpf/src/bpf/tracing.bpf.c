@@ -26,7 +26,8 @@
 #define DROP_MEMPOOL_REPLACED 12
 #define DROP_MEMPOOL_REJECTED 13
 #define DROP_VALIDATION_BLOCK_CONNECTED 14
-#define DROP_SLOT_COUNT 15
+#define DROP_NET_MSG_UNREADABLE 15
+#define DROP_SLOT_COUNT 16
 
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
@@ -132,10 +133,16 @@ static __always_inline void set_meta_data2(struct Metadata *meta, void *addr, vo
       count_drop(slot);                                                                \
       return -1;                                                                       \
     }                                                                                  \
-    set_meta_data1(&msg->meta, id, inbound, msg_size);                                  \
-    set_meta_data2(&msg->meta, addr, conn_type, msg_type);                              \
-    bpf_probe_read_user(&msg->payload, msg_size, msg_payload);                          \
-    bpf_ringbuf_submit(msg, 0);                                                         \
+    /* the reserved memory is not blank, so clear what we may not fill in */           \
+    __builtin_memset(&msg->meta, 0, sizeof(msg->meta));                                \
+    set_meta_data1(&msg->meta, id, inbound, msg_size);                                 \
+    set_meta_data2(&msg->meta, addr, conn_type, msg_type);                             \
+    if (bpf_probe_read_user(&msg->payload, msg_size, msg_payload) < 0) {               \
+      bpf_ringbuf_discard(msg, 0);                                                     \
+      count_drop(DROP_NET_MSG_UNREADABLE);                                             \
+      return -1;                                                                       \
+    }                                                                                  \
+    bpf_ringbuf_submit(msg, 0);                                                        \
     return 0;                                                                           \
   }
 

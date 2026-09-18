@@ -327,22 +327,23 @@ fn try_get_running_process_pid(args: &Args) -> Result<i32> {
 
 /// Names for the slots of the `dropped_events` BPF map. Must stay in sync
 /// with the DROP_* defines in tracing.bpf.c.
-const DROPPED_EVENT_NAMES: [&str; 15] = [
-    "small P2P message",
-    "medium P2P message",
-    "large P2P message",
-    "huge P2P message",
-    "oversized P2P message",
-    "inbound connection",
-    "outbound connection",
-    "closed connection",
-    "evicted inbound connection",
-    "misbehaving connection",
-    "mempool added",
-    "mempool removed",
-    "mempool replaced",
-    "mempool rejected",
-    "block connected",
+const DROPPED_EVENT_NAMES: [&str; 16] = [
+    "small P2P message, buffer full",
+    "medium P2P message, buffer full",
+    "large P2P message, buffer full",
+    "huge P2P message, buffer full",
+    "P2P message, too big for us",
+    "inbound connection, buffer full",
+    "outbound connection, buffer full",
+    "closed connection, buffer full",
+    "evicted inbound connection, buffer full",
+    "misbehaving connection, buffer full",
+    "mempool added, buffer full",
+    "mempool removed, buffer full",
+    "mempool replaced, buffer full",
+    "mempool rejected, buffer full",
+    "block connected, buffer full",
+    "P2P message, could not read it from bitcoind",
 ];
 
 /// How often we report events that bitcoind produced faster than we could
@@ -383,11 +384,11 @@ fn report_dropped_events(object: &Object, previous: &mut [u64; DROPPED_EVENT_NAM
         let dropped = current[slot].saturating_sub(previous[slot]);
         if dropped > 0 {
             log::warn!(
-                "Dropped {} {} event{} in the last {:?}. The ring buffer was full.",
+                "Dropped {} event{} in the last {:?} ({}).",
                 dropped,
-                name,
                 if dropped > 1 { "s" } else { "" },
                 DROP_REPORT_INTERVAL,
+                name,
             );
         }
     }
