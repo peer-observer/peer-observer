@@ -325,6 +325,52 @@ fn try_get_running_process_pid(args: &Args) -> Result<i32> {
     }
 }
 
+/// Tells libbpf to skip the BPF programs and ring buffers of the tracepoint
+/// groups that are turned off. Ring buffers are created even when nobody
+/// reads from them, and the kernel reserves their memory right away, so the
+/// P2P message ones in particular are worth leaving out.
+fn skip_disabled_tracepoints(skel: &mut tracing::OpenTracingSkel, args: &Args) -> Result<()> {
+    if args.no_p2pmsg_tracepoints {
+        skel.progs.handle_net_msg_inbound.set_autoload(false);
+        skel.progs.handle_net_msg_outbound.set_autoload(false);
+        skel.maps.net_msg_small.set_autocreate(false)?;
+        skel.maps.net_msg_medium.set_autocreate(false)?;
+        skel.maps.net_msg_large.set_autocreate(false)?;
+        skel.maps.net_msg_huge.set_autocreate(false)?;
+    }
+    if args.no_connection_tracepoints {
+        skel.progs.handle_net_conn_inbound.set_autoload(false);
+        skel.progs.handle_net_conn_outbound.set_autoload(false);
+        skel.progs.handle_net_conn_closed.set_autoload(false);
+        skel.progs
+            .handle_net_conn_inbound_evicted
+            .set_autoload(false);
+        skel.progs.handle_net_conn_misbehaving.set_autoload(false);
+        skel.maps.net_conn_inbound.set_autocreate(false)?;
+        skel.maps.net_conn_outbound.set_autocreate(false)?;
+        skel.maps.net_conn_closed.set_autocreate(false)?;
+        skel.maps.net_conn_inbound_evicted.set_autocreate(false)?;
+        skel.maps.net_conn_misbehaving.set_autocreate(false)?;
+    }
+    if args.no_mempool_tracepoints {
+        skel.progs.handle_mempool_added.set_autoload(false);
+        skel.progs.handle_mempool_removed.set_autoload(false);
+        skel.progs.handle_mempool_replaced.set_autoload(false);
+        skel.progs.handle_mempool_rejected.set_autoload(false);
+        skel.maps.mempool_added.set_autocreate(false)?;
+        skel.maps.mempool_removed.set_autocreate(false)?;
+        skel.maps.mempool_replaced.set_autocreate(false)?;
+        skel.maps.mempool_rejected.set_autocreate(false)?;
+    }
+    if args.no_validation_tracepoints {
+        skel.progs
+            .handle_validation_block_connected
+            .set_autoload(false);
+        skel.maps.validation_block_connected.set_autocreate(false)?;
+    }
+    Ok(())
+}
+
 #[allow(clippy::type_complexity)]
 fn init_bpf_listener<'a, 'b>(
     args: &Args,
@@ -340,9 +386,10 @@ fn init_bpf_listener<'a, 'b>(
     let mut skel_builder = tracing::TracingSkelBuilder::default();
     skel_builder.obj_builder.debug(args.libbpf_debug);
     log::info!("Opening BPF skeleton with debug={}..", args.libbpf_debug);
-    let open_skel: tracing::OpenTracingSkel = skel_builder
+    let mut open_skel: tracing::OpenTracingSkel = skel_builder
         .open(obj_container)
         .context("opening the BPF skeleton")?;
+    skip_disabled_tracepoints(&mut open_skel, args)?;
     log::info!("Loading BPF functions and maps into kernel..");
     let skel: tracing::TracingSkel = open_skel
         .load()
