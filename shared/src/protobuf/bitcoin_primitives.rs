@@ -163,6 +163,8 @@ impl From<String> for ConnType {
             "outbound-full-relay" => ConnType::OutboundFullRelay,
             "block-relay-only" => ConnType::BlockRelayOnly,
             "feeler" => ConnType::Feeler,
+            "manual" => ConnType::Manual,
+            "addr-fetch" => ConnType::AddrFetch,
             _ => ConnType::Unknown,
         }
     }
@@ -385,14 +387,17 @@ mod tests {
             ConnType::BlockRelayOnly
         );
         assert_eq!(ConnType::from(String::from("feeler")), ConnType::Feeler);
-
-        // Not (yet) represented in the ConnType enum.
-        assert_eq!(ConnType::from(String::from("manual")), ConnType::Unknown);
+        assert_eq!(ConnType::from(String::from("manual")), ConnType::Manual);
         assert_eq!(
             ConnType::from(String::from("addr-fetch")),
-            ConnType::Unknown
+            ConnType::AddrFetch
         );
 
+        // Anything else maps to Unknown.
         assert_eq!(ConnType::from(String::from("")), ConnType::Unknown);
+        assert_eq!(
+            ConnType::from(String::from("something-new")),
+            ConnType::Unknown
+        );
     }
 }

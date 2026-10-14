@@ -77,4 +77,6 @@ enum ConnType {
   OutboundFullRelay = 2;
   BlockRelayOnly = 3;
   Feeler = 4;
+  Manual = 5;
+  AddrFetch = 6;
  }
