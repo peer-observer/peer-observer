@@ -162,7 +162,7 @@ impl From<String> for ConnType {
             "inbound" => ConnType::Inbound,
             "outbound-full-relay" => ConnType::OutboundFullRelay,
             "block-relay-only" => ConnType::BlockRelayOnly,
-            "feeler" => ConnType::OutboundFullRelay,
+            "feeler" => ConnType::Feeler,
             _ => ConnType::Unknown,
         }
     }
@@ -368,5 +368,31 @@ mod tests {
             bitcoin_primitives::address::Address::from(a),
             bitcoin_primitives::address::Address::Torv2(String::from("5wyqrzbvrdsumnok.onion"))
         );
+    }
+
+    #[test]
+    fn test_string_into_conntype() {
+        use crate::protobuf::bitcoin_primitives::ConnType;
+
+        // The strings Bitcoin Core's ConnectionTypeAsString() produces.
+        assert_eq!(ConnType::from(String::from("inbound")), ConnType::Inbound);
+        assert_eq!(
+            ConnType::from(String::from("outbound-full-relay")),
+            ConnType::OutboundFullRelay
+        );
+        assert_eq!(
+            ConnType::from(String::from("block-relay-only")),
+            ConnType::BlockRelayOnly
+        );
+        assert_eq!(ConnType::from(String::from("feeler")), ConnType::Feeler);
+
+        // Not (yet) represented in the ConnType enum.
+        assert_eq!(ConnType::from(String::from("manual")), ConnType::Unknown);
+        assert_eq!(
+            ConnType::from(String::from("addr-fetch")),
+            ConnType::Unknown
+        );
+
+        assert_eq!(ConnType::from(String::from("")), ConnType::Unknown);
     }
 }
