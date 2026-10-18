@@ -165,6 +165,7 @@ impl From<String> for ConnType {
             "feeler" => ConnType::Feeler,
             "manual" => ConnType::Manual,
             "addr-fetch" => ConnType::AddrFetch,
+            "private-broadcast" => ConnType::PrivateBroadcast,
             _ => ConnType::Unknown,
         }
     }
@@ -391,6 +392,10 @@ mod tests {
         assert_eq!(
             ConnType::from(String::from("addr-fetch")),
             ConnType::AddrFetch
+        );
+        assert_eq!(
+            ConnType::from(String::from("private-broadcast")),
+            ConnType::PrivateBroadcast
         );
 
         // Anything else maps to Unknown.

@@ -79,4 +79,5 @@ enum ConnType {
   Feeler = 4;
   Manual = 5;
   AddrFetch = 6;
+  PrivateBroadcast = 7;
  }
