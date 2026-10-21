@@ -31,6 +31,7 @@ use shared::{
         task::JoinHandle,
         time::sleep,
     },
+    zstd,
 };
 use std::{
     sync::Once,
@@ -923,4 +924,83 @@ fn msg_of(event: &Event) -> &Msg {
         },
         _ => panic!("expected an ebpf event"),
     }
+}
+
+/// Service managers like systemd stop the archiver with SIGTERM. The archiver
+/// must handle it like Ctrl+C and finalize the archive file, otherwise the
+/// zstd frame is left incomplete.
+#[tokio::test]
+async fn test_sigterm_finalizes_archive() {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+
+    setup();
+
+    let tmp_dir = std::env::temp_dir().join("archiver_test_sigterm");
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+
+    let nats_server = NatsServerForTesting::new(&[]).await;
+
+    let mut archiver = tokio::process::Command::new(env!("CARGO_BIN_EXE_archiver"))
+        .arg("--nats-address")
+        .arg(format!("127.0.0.1:{}", nats_server.port))
+        .arg("--output-dir")
+        .arg(&tmp_dir)
+        .arg("--base-name")
+        .arg("test")
+        .arg("--compression-level")
+        .arg("3")
+        .stdout(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .expect("should be able to spawn the archiver binary");
+
+    // Wait until the archive file has been created.
+    let mut lines = BufReader::new(archiver.stdout.take().unwrap()).lines();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while let Some(line) = lines.next_line().await.unwrap() {
+            log::debug!("archiver: {}", line);
+            if line.contains("Created archive file") {
+                return;
+            }
+        }
+        panic!("archiver exited before creating an archive file");
+    })
+    .await
+    .expect("timed out waiting for the archiver to create an archive file");
+    // Keep draining stdout so the archiver doesn't block on a full pipe.
+    tokio::spawn(async move { while let Ok(Some(_)) = lines.next_line().await {} });
+
+    let pid = archiver.id().expect("archiver should be running");
+    let kill_status = std::process::Command::new("kill")
+        .args(["-TERM", &pid.to_string()])
+        .status()
+        .expect("should be able to run kill");
+    assert!(kill_status.success());
+
+    let status = tokio::time::timeout(Duration::from_secs(20), archiver.wait())
+        .await
+        .expect("archiver should exit after SIGTERM")
+        .unwrap();
+    assert!(
+        status.success(),
+        "archiver should exit cleanly on SIGTERM, got {}",
+        status
+    );
+
+    let archive_path = find_files(&tmp_dir, ".bin.zst")
+        .into_iter()
+        .next()
+        .expect("expected a .<timestamp>.bin.zst file");
+    // The ArchiveReader treats an EOF between events as the end of the
+    // archive, which an incomplete zstd frame also produces. Decode the
+    // whole file to check that the frame was finished.
+    zstd::decode_all(std::fs::File::open(&archive_path).unwrap())
+        .expect("archive should be a complete zstd frame");
+    let events: Vec<Event> = ArchiveReader::open(&archive_path)
+        .expect("archive header should be readable")
+        .collect::<std::io::Result<_>>()
+        .expect("archive events should be readable");
+    assert!(events.is_empty());
+
+    let _ = std::fs::remove_dir_all(&tmp_dir);
 }
