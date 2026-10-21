@@ -8,22 +8,29 @@ use shared::{
     prost::Message,
     protobuf::{
         event::{Event, event::PeerObserverEvent},
-        ipc_extractor,
+        ipc_extractor::{self, ipc::IpcEvent},
     },
     tokio::{
         self,
         net::UnixStream,
-        sync::{oneshot, watch},
+        sync::{
+            mpsc::{self, error::TrySendError},
+            oneshot, watch,
+        },
         time::{self, Duration},
     },
 };
 use std::net::SocketAddr;
 
+mod chain_notifications;
 mod ipc;
 mod metrics;
 
-use ipc::IpcClient;
+use ipc::connect_stream;
 use metrics::Metrics;
+
+/// Number of notifications that can wait to be published before new ones are dropped.
+const NOTIFICATION_CHANNEL_CAPACITY: usize = 4096;
 
 /// The peer-observer ipc-extractor periodically queries data from the
 /// Bitcoin Core IPC interface and publishes the results as events into
@@ -75,9 +82,19 @@ pub async fn run(
         })?;
     log::info!("Connected to IPC socket at {}", args.ipc_socket_path);
 
-    let mut ipc_session = IpcClient::init(stream)
+    let (mut ipc_client, mut connection) = connect_stream(stream)
         .await
-        .context("initializing the IPC session")?;
+        .context("bootstrapping and initializing IPC capabilities")?;
+
+    let (notifications_tx, mut notifications) = mpsc::channel(NOTIFICATION_CHANNEL_CAPACITY);
+    ipc_client
+        .chain_handle_notifications(Box::new(move |event| {
+            if let Err(TrySendError::Full(_)) = notifications_tx.try_send(event) {
+                log::warn!("Notificacion handling queue is full. Dropping a notification...");
+            }
+        }))
+        .await
+        .context("subscribing to chain notifications")?;
 
     let metrics = Metrics::new().context("creating metrics registry")?;
     let local_addr =
@@ -94,19 +111,48 @@ pub async fn run(
         duration_sec
     );
 
+    let mut connection_lost = false;
     loop {
         tokio::select! {
             _ = interval.tick() => {
-                if let Err(e) = fetch_and_publish_tip(&ipc_session, &nats_client, &metrics).await {
-                    log::error!("Could not fetch and publish 'BlockTip': {:#}", e);
+                // nothing polls yet.
+            }
+            Some(event) = notifications.recv() => {
+                match event {
+                    IpcEvent::UpdatedBlockTip(_) => {
+                        let tip = match measure_ipc_call("mining_get_tip", &metrics, ipc_client.mining_get_tip())
+                            .await
+                            .context("measuring mining_get_tip IPC")?
+                        {
+                            Some(t) => t,
+                            None => return Ok(()), // the node has no tip loaded yet, skip NATS publish
+                        };
+                        let publish_result = publish_ipc_event(IpcEvent::BlockTip(tip), &nats_client)
+                            .await
+                            .inspect_err(|_| {
+                                metrics
+                                    .nats_publish_errors
+                                    .with_label_values(&["mining_get_tip"])
+                                    .inc();
+                            })
+                            .context("publishing the block tip to NATS");
+                        if let Err(e) = publish_result {
+                            log::error!("Error publishing 'BlockTip': {:#}", e);
+                        }
+                    }
+                    event => {
+                        if let Err(e) = publish_ipc_event(event, &nats_client).await {
+                            log::error!("Could not publish IPC notification: {:#}", e);
+                        }
+                    }
                 }
             }
-            res = &mut ipc_session.rpc_task => {
+            res = connection.closed() => {
                 match res {
-                    Ok(Ok(())) => log::warn!("Lost IPC connection to bitcoin-node."),
-                    Ok(Err(e)) => log::error!("Lost IPC connection to bitcoin-node: {e}"),
-                    Err(e) => log::error!("IPC task panicked or was cancelled: {e}"),
+                    Ok(()) => log::warn!("Lost IPC connection to bitcoin-node."),
+                    Err(e) => log::error!("Lost IPC connection to bitcoin-node: {e:#}"),
                 }
+                connection_lost = true;
                 break;
             }
             res = shutdown_rx.changed() => {
@@ -124,11 +170,12 @@ pub async fn run(
         }
     }
 
-    if let Err(e) = ipc_session.disconnector.await {
-        log::error!("could not run disconnector during shutdown: {}", e);
-    }
-    if !ipc_session.rpc_task.is_finished() {
-        let _ = ipc_session.rpc_task.await;
+    // Only clean up while the connection is still alive.
+    if !connection_lost {
+        if let Err(e) = ipc_client.release().await {
+            log::error!("Error while releasing capabilities: {:#}", e);
+        }
+        connection.shutdown().await;
     }
     Ok(())
 }
@@ -157,32 +204,14 @@ where
     res
 }
 
-async fn fetch_and_publish_tip(
-    ipc_client: &IpcClient,
-    nats_client: &async_nats::Client,
-    metrics: &Metrics,
-) -> Result<()> {
-    let tip = match measure_ipc_call("get_tip", metrics, ipc_client.get_tip())
-        .await
-        .context("measuring get_tip IPC")?
-    {
-        Some(t) => t,
-        None => return Ok(()), // the node has no tip loaded yet, skip NATS publish
-    };
-
+async fn publish_ipc_event(event: IpcEvent, nats_client: &async_nats::Client) -> Result<()> {
     let proto = Event::new(PeerObserverEvent::IpcExtractor(ipc_extractor::Ipc {
-        ipc_event: Some(ipc_extractor::ipc::IpcEvent::BlockTip(tip)),
+        ipc_event: Some(event),
     }))
-    .context("creating the protobuf block tip event")?;
+    .context("creating the protobuf IPC event")?;
     nats_client
         .publish(Subject::Ipc.to_string(), proto.encode_to_vec().into())
         .await
-        .inspect_err(|_| {
-            metrics
-                .nats_publish_errors
-                .with_label_values(&["get_tip"])
-                .inc();
-        })
-        .context("publishing the block tip to NATS")?;
+        .context("publishing the IPC event to NATS")?;
     Ok(())
 }

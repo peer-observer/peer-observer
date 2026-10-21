@@ -3,10 +3,11 @@
 
 mod common;
 
-use common::{QUERY_INTERVAL_SECONDS, configure_node, ipc_socket_path, make_test_args, setup};
+use common::{configure_node, ipc_socket_path, make_test_args, setup};
 
 use shared::{
     testing::{
+        REGTEST_ADDRESS,
         metrics_fetcher::{fetch_metrics, get_metric_value},
         nats_server::NatsServerForTesting,
     },
@@ -87,8 +88,16 @@ async fn test_integration_metrics_ipc_fetch_duration() {
                 }
             };
 
-            // Wait for at least one query cycle.
-            sleep(Duration::from_secs(QUERY_INTERVAL_SECONDS + 1)).await;
+            // A new block makes the extractor fetch the tip.
+            let _node = tokio::task::spawn_blocking(move || {
+                node.client
+                    .generate_to_address(1, &REGTEST_ADDRESS)
+                    .unwrap();
+                node
+            })
+            .await
+            .unwrap();
+            sleep(Duration::from_secs(1)).await;
 
             let metrics = fetch_metrics(metrics_port, "/metrics").expect("Should fetch metrics");
 
@@ -96,11 +105,11 @@ async fn test_integration_metrics_ipc_fetch_duration() {
                 &metrics,
                 "ipcextractor_ipc_fetch_duration_seconds_count",
                 "ipc_method",
-                "get_tip",
+                "mining_get_tip",
             );
             assert!(
                 count >= 1,
-                "Should have recorded at least one get_tip call, got: {}",
+                "Should have recorded at least one mining_get_tip call, got: {}",
                 count
             );
 
