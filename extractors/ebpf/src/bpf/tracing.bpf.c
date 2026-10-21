@@ -8,6 +8,51 @@
 
 #define RINGBUFFER(name, size) struct {__uint(type, BPF_MAP_TYPE_RINGBUF); __uint(max_entries, size); } name SEC(".maps");
 
+// Counters for events we had to drop, either because a ring buffer was full
+// or because we could not read the event. The extractor reads and reports
+// them every now and then. The slot numbers must stay in sync with
+// DROPPED_EVENT_NAMES in lib.rs.
+#define DROP_NET_MSG_SMALL 0
+#define DROP_NET_MSG_MEDIUM 1
+#define DROP_NET_MSG_LARGE 2
+#define DROP_NET_MSG_HUGE 3
+#define DROP_NET_MSG_TOO_BIG 4
+#define DROP_NET_CONN_INBOUND 5
+#define DROP_NET_CONN_OUTBOUND 6
+#define DROP_NET_CONN_CLOSED 7
+#define DROP_NET_CONN_INBOUND_EVICTED 8
+#define DROP_NET_CONN_MISBEHAVING 9
+#define DROP_MEMPOOL_ADDED 10
+#define DROP_MEMPOOL_REMOVED 11
+#define DROP_MEMPOOL_REPLACED 12
+#define DROP_MEMPOOL_REJECTED 13
+#define DROP_VALIDATION_BLOCK_CONNECTED 14
+#define DROP_NET_MSG_UNREADABLE 15
+#define DROP_SLOT_COUNT 16
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, DROP_SLOT_COUNT);
+    __type(key, u32);
+    __type(value, u64);
+} dropped_events SEC(".maps");
+
+static __always_inline void count_drop(u32 slot) {
+  u64 *counter = bpf_map_lookup_elem(&dropped_events, &slot);
+  if (counter) {
+    (*counter)++;
+  }
+}
+
+// Copies a struct into a ring buffer and counts it if the buffer is full.
+#define RINGBUFFER_OUTPUT(ringbuffer, value, slot) ({                       \
+    long __err = bpf_ringbuf_output(&ringbuffer, &value, sizeof(value), 0); \
+    if (__err) {                                                           \
+      count_drop(slot);                                                    \
+    }                                                                      \
+    __err;                                                                 \
+  })
+
 #define MAX_PEER_ADDR_LENGTH 62 + 6
 #define MAX_PEER_CONN_TYPE_LENGTH 20
 #define MAX_MSG_TYPE_LENGTH 12
@@ -21,12 +66,11 @@
 #define MAX_LARGE_MSG_LENGTH 65536
 #define MAX_HUGE_MSG_LENGTH 4194304
 
+// Ring buffer sizes are given in bytes. libbpf rounds them up to a
+// power-of-two multiple of the page size, so we use such values directly.
 #define PAGE_SIZE 4096
-#define NET_MSG_PAGES 128
 
 // NET MESSAGES
-
-#define METADATA_SIZE 8 + MAX_PEER_ADDR_LENGTH + MAX_PEER_CONN_TYPE_LENGTH + MAX_MSG_TYPE_LENGTH + 1 + 8
 
 struct Metadata {
     u64     id;
@@ -59,137 +103,90 @@ struct HugeP2PMessage
     u8                payload[MAX_HUGE_MSG_LENGTH];
 };
 
-RINGBUFFER(net_msg_small, (MAX_SMALL_MSG_LENGTH + METADATA_SIZE) * 1024) // ~ 1 MB
-RINGBUFFER(net_msg_medium, (MAX_MEDIUM_MSG_LENGTH + METADATA_SIZE) * 1024) // ~ 4.2 MB
-RINGBUFFER(net_msg_large, (MAX_LARGE_MSG_LENGTH + METADATA_SIZE) * 1024) // ~ 67 MB
-RINGBUFFER(net_msg_huge, (MAX_HUGE_MSG_LENGTH + METADATA_SIZE) * 128) // ~ 536 MB
+// Each buffer holds whole messages of its size class. A message takes its
+// class size plus 120 bytes of metadata and an 8 byte header.
+RINGBUFFER(net_msg_small, 256 * PAGE_SIZE) // 1 MB, ~2700 messages
+RINGBUFFER(net_msg_medium, 2048 * PAGE_SIZE) // 8 MB, ~1900 messages
+RINGBUFFER(net_msg_large, 4096 * PAGE_SIZE) // 16 MB, ~250 messages
+RINGBUFFER(net_msg_huge, 8192 * PAGE_SIZE) // 32 MB, 7 messages
 
 
 // Helper function to set some of the tracepoint arguments to Metadata.
-void set_meta_data1(struct Metadata *meta, u64 id, bool inbound, u64 msg_size) {
+static __always_inline void set_meta_data1(struct Metadata *meta, u64 id, bool inbound, u64 msg_size) {
   meta->id = id;
   meta->msg_inbound = inbound;
   meta->msg_size = msg_size;
 }
 
 // Helper function to set some of the tracepoint arguments to Metadata.
-void set_meta_data2(struct Metadata *meta, void *addr, void* conn_type, void* msg_type) {
+static __always_inline void set_meta_data2(struct Metadata *meta, void *addr, void* conn_type, void* msg_type) {
   bpf_probe_read_user_str(&meta->addr, sizeof(meta->addr), addr);
   bpf_probe_read_user_str(&meta->conn_type, sizeof(meta->conn_type), conn_type);
   bpf_probe_read_user_str(&meta->msg_type, sizeof(meta->msg_type), msg_type);
 }
 
+// Puts a message into the ring buffer of the given size class and returns.
+#define SUBMIT_NET_MSG(struct_name, ringbuffer, slot)                                  \
+  {                                                                                    \
+    struct struct_name *msg =                                                          \
+        bpf_ringbuf_reserve(&ringbuffer, sizeof(struct struct_name), 0);                \
+    if (!msg) {                                                                        \
+      count_drop(slot);                                                                \
+      return -1;                                                                       \
+    }                                                                                  \
+    /* the reserved memory is not blank, so clear what we may not fill in */           \
+    __builtin_memset(&msg->meta, 0, sizeof(msg->meta));                                \
+    set_meta_data1(&msg->meta, id, inbound, msg_size);                                 \
+    set_meta_data2(&msg->meta, addr, conn_type, msg_type);                             \
+    if (bpf_probe_read_user(&msg->payload, msg_size, msg_payload) < 0) {               \
+      bpf_ringbuf_discard(msg, 0);                                                     \
+      count_drop(DROP_NET_MSG_UNREADABLE);                                             \
+      return -1;                                                                       \
+    }                                                                                  \
+    bpf_ringbuf_submit(msg, 0);                                                        \
+    return 0;                                                                           \
+  }
+
+// Inbound and outbound messages are handled the same way apart from the
+// inbound flag, so both tracepoints share this function.
+static __always_inline int handle_net_msg(u64 id, void *addr, void *conn_type, void *msg_type,
+                                     u64 msg_size, void *msg_payload, bool inbound) {
+  if (msg_size <= MAX_SMALL_MSG_LENGTH) {
+    SUBMIT_NET_MSG(SmallP2PMessage, net_msg_small, DROP_NET_MSG_SMALL)
+  } else if (msg_size <= MAX_MEDIUM_MSG_LENGTH) {
+    SUBMIT_NET_MSG(MediumP2PMessage, net_msg_medium, DROP_NET_MSG_MEDIUM)
+  } else if (msg_size <= MAX_LARGE_MSG_LENGTH) {
+    SUBMIT_NET_MSG(LargeP2PMessage, net_msg_large, DROP_NET_MSG_LARGE)
+  } else if (msg_size <= MAX_HUGE_MSG_LENGTH) {
+    SUBMIT_NET_MSG(HugeP2PMessage, net_msg_huge, DROP_NET_MSG_HUGE)
+  }
+  count_drop(DROP_NET_MSG_TOO_BIG);
+  return -1;
+}
+
 SEC("usdt")
 int BPF_USDT(handle_net_msg_inbound, u64 id, void *addr, void *conn_type, void *msg_type, u64 msg_size, void *msg_payload)
 {
-  bool IS_INBOUND = true;
-  if (msg_size <= MAX_SMALL_MSG_LENGTH) {
-    struct SmallP2PMessage *msg = bpf_ringbuf_reserve(&net_msg_small, sizeof(struct SmallP2PMessage), 0);
-    if (msg) {
-      set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
-      set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
-      bpf_ringbuf_submit(msg, 0);
-      return 0;
-    }
-    bpf_printk("small inbound msg: not able to reserve. msg size is %d", msg_size);
-  } else if (msg_size <= MAX_MEDIUM_MSG_LENGTH) {
-    struct MediumP2PMessage *msg = bpf_ringbuf_reserve(&net_msg_medium, sizeof(struct MediumP2PMessage), 0);
-    if (msg) {
-      set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
-      set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user_str(&msg->meta.msg_type, sizeof(msg->meta.msg_type), msg_type);
-      bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
-      bpf_ringbuf_submit(msg, 0);
-      return 0;
-    }
-    bpf_printk("medium inbound msg: not able to reserve. msg size is %d", msg_size);
-  } else if (msg_size <= MAX_LARGE_MSG_LENGTH) {
-    struct LargeP2PMessage *msg = bpf_ringbuf_reserve(&net_msg_large, sizeof(struct LargeP2PMessage), 0);
-    if (msg) {
-      set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
-      set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
-      bpf_ringbuf_submit(msg, 0);
-      return 0;
-    }
-    bpf_printk("large inbound msg: not able to reserve. msg size is %d", msg_size);
-  } else if (msg_size <= MAX_HUGE_MSG_LENGTH) {
-    struct HugeP2PMessage *msg = bpf_ringbuf_reserve(&net_msg_huge, sizeof(struct HugeP2PMessage), 0);
-    if (msg) {
-      set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
-      set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
-      bpf_ringbuf_submit(msg, 0);
-      return 0;
-    }
-    bpf_printk("huge inbound msg: not able to reserve. msg size is %d", msg_size);
-  }
-  bpf_printk("inbound msg: return -1.( msg size is %d", msg_size);
-  return -1;
+  return handle_net_msg(id, addr, conn_type, msg_type, msg_size, msg_payload, true);
 }
 
 SEC("usdt")
 int BPF_USDT(handle_net_msg_outbound, u64 id, void *addr, void *conn_type, void *msg_type, u64 msg_size, void *msg_payload)
 {
-  bool IS_INBOUND = false;
-  if (msg_size <= MAX_SMALL_MSG_LENGTH) {
-    struct SmallP2PMessage *msg = bpf_ringbuf_reserve(&net_msg_small, sizeof(struct SmallP2PMessage), 0);
-    if (msg) {
-      set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
-      set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
-      bpf_ringbuf_submit(msg, 0);
-      return 0;
-    }
-    bpf_printk("small outbound msg: not able to reserve. msg size is %d", msg_size);
-  } else if (msg_size <= MAX_MEDIUM_MSG_LENGTH) {
-    struct MediumP2PMessage *msg = bpf_ringbuf_reserve(&net_msg_medium, sizeof(struct MediumP2PMessage), 0);
-    if (msg) {
-      set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
-      set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user_str(&msg->meta.msg_type, sizeof(msg->meta.msg_type), msg_type);
-      bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
-      bpf_ringbuf_submit(msg, 0);
-      return 0;
-    }
-    bpf_printk("medium outbound msg: not able to reserve. msg size is %d", msg_size);
-  } else if (msg_size <= MAX_LARGE_MSG_LENGTH) {
-    struct LargeP2PMessage *msg = bpf_ringbuf_reserve(&net_msg_large, sizeof(struct LargeP2PMessage), 0);
-    if (msg) {
-      set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
-      set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
-      bpf_ringbuf_submit(msg, 0);
-      return 0;
-    }
-    bpf_printk("large outbound msg: not able to reserve. msg size is %d", msg_size);
-  } else if (msg_size <= MAX_HUGE_MSG_LENGTH) {
-    struct HugeP2PMessage *msg = bpf_ringbuf_reserve(&net_msg_huge, sizeof(struct HugeP2PMessage), 0);
-    if (msg) {
-      set_meta_data1(&msg->meta, id, IS_INBOUND, msg_size);
-      set_meta_data2(&msg->meta, addr, conn_type, msg_type);
-      bpf_probe_read_user(&msg->payload, msg_size, msg_payload);
-      bpf_ringbuf_submit(msg, 0);
-      return 0;
-    }
-    bpf_printk("huge outbound msg: not able to reserve. msg size is %d", msg_size);
-  }
-  bpf_printk("outbound msg: return -1. msg size is %d", msg_size);
-  return -1;
+  return handle_net_msg(id, addr, conn_type, msg_type, msg_size, msg_payload, false);
 }
 
 // NET CONNECTIONS
 
 #define MAX_MISBEHAVING_MESSAGE_LENGTH 128
 
-#define NET_CONN_PAGES 64
+#define NET_CONN_RINGBUFFER_SIZE (64 * PAGE_SIZE) // 256 KB
 
-RINGBUFFER(net_conn_inbound, NET_CONN_PAGES)
-RINGBUFFER(net_conn_outbound, NET_CONN_PAGES)
-RINGBUFFER(net_conn_closed, NET_CONN_PAGES)
-RINGBUFFER(net_conn_inbound_evicted, NET_CONN_PAGES)
-RINGBUFFER(net_conn_misbehaving, NET_CONN_PAGES)
+RINGBUFFER(net_conn_inbound, NET_CONN_RINGBUFFER_SIZE)
+RINGBUFFER(net_conn_outbound, NET_CONN_RINGBUFFER_SIZE)
+RINGBUFFER(net_conn_closed, NET_CONN_RINGBUFFER_SIZE)
+RINGBUFFER(net_conn_inbound_evicted, NET_CONN_RINGBUFFER_SIZE)
+RINGBUFFER(net_conn_misbehaving, NET_CONN_RINGBUFFER_SIZE)
 
 struct Connection
 {
@@ -224,13 +221,13 @@ struct MisbehavingConnection
 };
 
 // Helper function to set some of the tracepoint arguments to Connection.
-void set_conn_data1(struct Connection *conn, u64 id, u64 network) {
+static __always_inline void set_conn_data1(struct Connection *conn, u64 id, u64 network) {
   conn->id = id;
   conn->network = network;
 }
 
 // Helper function to set some of the tracepoint arguments to Connection.
-void set_conn_data2(struct Connection *conn, void *addr, void *type) {
+static __always_inline void set_conn_data2(struct Connection *conn, void *addr, void *type) {
   bpf_probe_read_user_str(&conn->addr, sizeof(conn->addr), addr);
   bpf_probe_read_user_str(&conn->type, sizeof(conn->type), type);
 }
@@ -241,7 +238,7 @@ int BPF_USDT(handle_net_conn_inbound, u64 id, void *addr, void *type, u64 networ
     set_conn_data1(&inbound.conn, id, network);
     set_conn_data2(&inbound.conn, addr, type);
     inbound.existing_connections = existing_connections;
-    return bpf_ringbuf_output(&net_conn_inbound, &inbound, sizeof(inbound), 0);
+    return RINGBUFFER_OUTPUT(net_conn_inbound, inbound, DROP_NET_CONN_INBOUND);
 };
 
 SEC("usdt")
@@ -250,7 +247,7 @@ int BPF_USDT(handle_net_conn_outbound, u64 id, void *addr, void *type, u64 netwo
     set_conn_data1(&outbound.conn, id, network);
     set_conn_data2(&outbound.conn, addr, type);
     outbound.existing_connections = existing_connections;
-    return bpf_ringbuf_output(&net_conn_outbound, &outbound, sizeof(outbound), 0);
+    return RINGBUFFER_OUTPUT(net_conn_outbound, outbound, DROP_NET_CONN_OUTBOUND);
 };
 
 SEC("usdt")
@@ -259,7 +256,7 @@ int BPF_USDT(handle_net_conn_closed, u64 id, void *addr, void *type, u64 network
     set_conn_data1(&closed.conn, id, network);
     set_conn_data2(&closed.conn, addr, type);
     closed.time_established = time_established;
-    return bpf_ringbuf_output(&net_conn_closed, &closed, sizeof(closed), 0);
+    return RINGBUFFER_OUTPUT(net_conn_closed, closed, DROP_NET_CONN_CLOSED);
 };
 
 SEC("usdt")
@@ -268,7 +265,7 @@ int BPF_USDT(handle_net_conn_inbound_evicted, u64 id, void *addr, void *type, u6
     set_conn_data1(&evicted.conn, id, network);
     set_conn_data2(&evicted.conn, addr, type);
     evicted.time_established = time_established;
-    return bpf_ringbuf_output(&net_conn_inbound_evicted, &evicted, sizeof(evicted), 0);
+    return RINGBUFFER_OUTPUT(net_conn_inbound_evicted, evicted, DROP_NET_CONN_INBOUND_EVICTED);
 };
 
 SEC("usdt")
@@ -276,17 +273,19 @@ int BPF_USDT(handle_net_conn_misbehaving, u64 id, void *message) {
     struct MisbehavingConnection misbehaving = {};
     misbehaving.id = id;
     bpf_probe_read_user_str(&misbehaving.message, sizeof(misbehaving.message), message);
-    return bpf_ringbuf_output(&net_conn_misbehaving, &misbehaving, sizeof(misbehaving), 0);
+    return RINGBUFFER_OUTPUT(net_conn_misbehaving, misbehaving, DROP_NET_CONN_MISBEHAVING);
 };
 
 // MEMPOOL
 
-#define MEMPOOL_PAGES 64
+// A connecting block removes every transaction it contains from the mempool
+// in one go, so these need room for a few thousand events at once.
+#define MEMPOOL_RINGBUFFER_SIZE (256 * PAGE_SIZE) // 1 MB
 
-RINGBUFFER(mempool_added, MEMPOOL_PAGES)
-RINGBUFFER(mempool_removed, MEMPOOL_PAGES)
-RINGBUFFER(mempool_replaced, MEMPOOL_PAGES)
-RINGBUFFER(mempool_rejected, MEMPOOL_PAGES)
+RINGBUFFER(mempool_added, MEMPOOL_RINGBUFFER_SIZE)
+RINGBUFFER(mempool_removed, MEMPOOL_RINGBUFFER_SIZE)
+RINGBUFFER(mempool_replaced, MEMPOOL_RINGBUFFER_SIZE)
+RINGBUFFER(mempool_rejected, MEMPOOL_RINGBUFFER_SIZE)
 
 #define TXID_LENGHT 32
 #define REMOVAL_REASON_LENGTH 9
@@ -328,7 +327,7 @@ int BPF_USDT(handle_mempool_added, void *txid, s32 vsize, s64 fee) {
     bpf_probe_read_user(&added.txid, sizeof(added.txid), txid);
     added.vsize = vsize;
     added.fee = fee;
-    return bpf_ringbuf_output(&mempool_added, &added, sizeof(added), 0);
+    return RINGBUFFER_OUTPUT(mempool_added, added, DROP_MEMPOOL_ADDED);
 };
 
 SEC("usdt")
@@ -339,7 +338,7 @@ int BPF_USDT(handle_mempool_removed, void *txid, void *reason, s32 vsize, s64 fe
     removed.vsize = vsize;
     removed.fee = fee;
     removed.entry_time = entry_time;
-    return bpf_ringbuf_output(&mempool_removed, &removed, sizeof(removed), 0);
+    return RINGBUFFER_OUTPUT(mempool_removed, removed, DROP_MEMPOOL_REMOVED);
 };
 
 SEC("usdt")
@@ -356,7 +355,7 @@ int BPF_USDT(handle_mempool_replaced,
     replaced.replacement_vsize = replacement_vsize;
     replaced.replacement_fee = replacement_fee;
     replaced.replaced_by_transaction = replaced_by_transaction;
-    return bpf_ringbuf_output(&mempool_replaced, &replaced, sizeof(replaced), 0);
+    return RINGBUFFER_OUTPUT(mempool_replaced, replaced, DROP_MEMPOOL_REPLACED);
 };
 
 SEC("usdt")
@@ -364,14 +363,14 @@ int BPF_USDT(handle_mempool_rejected, void *txid, void *reason) {
     struct MempoolRejected rejected = {};
     bpf_probe_read_user(&rejected.txid, sizeof(rejected.txid), txid);
     bpf_probe_read_user_str(&rejected.reason, sizeof(rejected.reason), reason);
-    return bpf_ringbuf_output(&mempool_rejected, &rejected, sizeof(rejected), 0);
+    return RINGBUFFER_OUTPUT(mempool_rejected, rejected, DROP_MEMPOOL_REJECTED);
 };
 
 // VALIDATION
 
-#define VALIDATION_BLOCK_CONNECTED_PAGES 64
+#define VALIDATION_RINGBUFFER_SIZE (64 * PAGE_SIZE) // 256 KB
 
-RINGBUFFER(validation_block_connected, VALIDATION_BLOCK_CONNECTED_PAGES)
+RINGBUFFER(validation_block_connected, VALIDATION_RINGBUFFER_SIZE)
 
 #define HASH_LENGHT 32
 
@@ -393,7 +392,7 @@ int BPF_USDT(handle_validation_block_connected, void *hash, s32 height, u64 tran
     connected.inputs = inputs;
     connected.sigops = sigops;
     connected.connection_time = connection_time;
-    return bpf_ringbuf_output(&validation_block_connected, &connected, sizeof(connected), 0);
+    return RINGBUFFER_OUTPUT(validation_block_connected, connected, DROP_VALIDATION_BLOCK_CONNECTED);
 };
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
