@@ -120,15 +120,22 @@ impl PeerState {
     }
 }
 
-struct AlertState {
+/// Per-peer state of the spam detection.
+pub struct AlertState {
     peers: HashMap<u64, PeerState>,
 }
 
 impl AlertState {
-    fn new() -> Self {
+    pub fn new() -> Self {
         AlertState {
             peers: HashMap::new(),
         }
+    }
+}
+
+impl Default for AlertState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -236,7 +243,10 @@ pub async fn run<A: Alerter>(
 }
 
 /// Routes a NATS event to the appropriate handler
-fn handle_event(event: Event, state: &mut AlertState, args: &Args, alerter: &impl Alerter) {
+/// Updates the state for one event and emits alerts through `alerter`.
+///
+/// Public so the fuzz targets in `fuzz/` can feed it events.
+pub fn handle_event(event: Event, state: &mut AlertState, args: &Args, alerter: &impl Alerter) {
     let now = Instant::now();
     if let Some(shared::protobuf::event::event::PeerObserverEvent::EbpfExtractor(ebpf)) =
         event.peer_observer_event

@@ -3,6 +3,7 @@ use bitcoin::hashes::Hash;
 use bitcoin::hex::*;
 use bitcoin::p2p;
 
+use crate::protobuf::display_hash;
 use std::fmt;
 
 use crate::protobuf::bitcoin_primitives::{Address, BlockHeader, PrefilledTransaction};
@@ -283,14 +284,14 @@ impl fmt::Display for GetHeaders {
         let hashes_strs: Vec<String> = self
             .locator_hashes
             .iter()
-            .map(|h| bitcoin::BlockHash::from_slice(h).unwrap().to_string())
+            .map(|h| display_hash::<bitcoin::BlockHash>(h))
             .collect();
         write!(
             f,
             "GetHeaders(version={}, locator_hashes=[{}], stop_hash={})",
             self.version,
             hashes_strs.join(", "),
-            bitcoin::BlockHash::from_slice(&self.stop_hash).unwrap()
+            display_hash::<bitcoin::BlockHash>(&self.stop_hash)
         )
     }
 }
@@ -300,14 +301,14 @@ impl fmt::Display for GetBlocks {
         let hashes_strs: Vec<String> = self
             .locator_hashes
             .iter()
-            .map(|h| bitcoin::BlockHash::from_slice(h).unwrap().to_string())
+            .map(|h| display_hash::<bitcoin::BlockHash>(h))
             .collect();
         write!(
             f,
             "GetBlocks(version={}, locator_hashes=[{}], stop_hash={})",
             self.version,
             hashes_strs.join(", "),
-            bitcoin::BlockHash::from_slice(&self.stop_hash).unwrap()
+            display_hash::<bitcoin::BlockHash>(&self.stop_hash)
         )
     }
 }
@@ -355,7 +356,7 @@ impl fmt::Display for Reject {
             self.rejected_command,
             self.reason,
             self.reason_details,
-            bitcoin::BlockHash::from_slice(&self.hash).unwrap()
+            display_hash::<bitcoin::BlockHash>(&self.hash)
         )
     }
 }
@@ -423,7 +424,7 @@ impl fmt::Display for GetBlockTxn {
         write!(
             f,
             "GetBlockTxn(hash={}, tx_indexes={})",
-            bitcoin::BlockHash::from_slice(&self.block_hash).unwrap(),
+            display_hash::<bitcoin::BlockHash>(&self.block_hash),
             index_strs.join(", ")
         )
     }
@@ -435,7 +436,7 @@ impl fmt::Display for BlockTxn {
         write!(
             f,
             "BlockTxn(hash={}, transactions={})",
-            bitcoin::BlockHash::from_slice(&self.block_hash).unwrap(),
+            display_hash::<bitcoin::BlockHash>(&self.block_hash),
             tx_strs.join(", ")
         )
     }
@@ -469,7 +470,7 @@ impl fmt::Display for GetCfCheckpt {
             f,
             "GetCFCheckpt(filter_type={}, stop_hash={})",
             self.filter_type,
-            bitcoin::BlockHash::from_slice(&self.stop_hash).unwrap(),
+            display_hash::<bitcoin::BlockHash>(&self.stop_hash),
         )
     }
 }
@@ -481,7 +482,7 @@ impl fmt::Display for GetCfHeaders {
             "GetCFHeaders(filter_type={}, start_height={}, stop_hash={})",
             self.filter_type,
             self.start_height,
-            bitcoin::BlockHash::from_slice(&self.stop_hash).unwrap(),
+            display_hash::<bitcoin::BlockHash>(&self.stop_hash),
         )
     }
 }
@@ -493,7 +494,7 @@ impl fmt::Display for GetCFilter {
             "GetCFilter(filter_type={}, start_height={}, stop_hash={})",
             self.filter_type,
             self.start_height,
-            bitcoin::BlockHash::from_slice(&self.stop_hash).unwrap(),
+            display_hash::<bitcoin::BlockHash>(&self.stop_hash),
         )
     }
 }
@@ -504,7 +505,7 @@ impl fmt::Display for CFilter {
             f,
             "CFilter(filter_type={}, block_hash={}, filter={})",
             self.filter_type,
-            bitcoin::BlockHash::from_slice(&self.block_hash).unwrap(),
+            display_hash::<bitcoin::BlockHash>(&self.block_hash),
             self.filter.to_lower_hex_string(),
         )
     }
@@ -515,18 +516,14 @@ impl fmt::Display for CfHeaders {
         let filter_hash_strs: Vec<String> = self
             .filter_hashes
             .iter()
-            .map(|h| {
-                bitcoin::hash_types::FilterHash::from_slice(h)
-                    .unwrap()
-                    .to_string()
-            })
+            .map(|h| display_hash::<bitcoin::hash_types::FilterHash>(h))
             .collect();
         write!(
             f,
             "CFHeaders(filter_type={}, stop_hash={}, prev_filter_header={}, filter_hashes=[{}])",
             self.filter_type,
-            bitcoin::BlockHash::from_slice(&self.stop_hash).unwrap(),
-            bitcoin::hash_types::FilterHeader::from_slice(&self.previous_filter_header).unwrap(),
+            display_hash::<bitcoin::BlockHash>(&self.stop_hash),
+            display_hash::<bitcoin::hash_types::FilterHeader>(&self.previous_filter_header),
             filter_hash_strs.join(", "),
         )
     }
@@ -537,17 +534,13 @@ impl fmt::Display for CfCheckpt {
         let filter_header_strs: Vec<String> = self
             .filter_headers
             .iter()
-            .map(|h| {
-                bitcoin::hash_types::FilterHeader::from_slice(h)
-                    .unwrap()
-                    .to_string()
-            })
+            .map(|h| display_hash::<bitcoin::hash_types::FilterHeader>(h))
             .collect();
         write!(
             f,
             "CFCheckpt(filter_type={}, stop_hash={}, filter_headers=[{}])",
             self.filter_type,
-            bitcoin::BlockHash::from_slice(&self.stop_hash).unwrap(),
+            display_hash::<bitcoin::BlockHash>(&self.stop_hash),
             filter_header_strs.join(", "),
         )
     }
@@ -583,11 +576,7 @@ impl fmt::Display for MerkleBlock {
         let hash_strs: Vec<String> = self
             .hashes
             .iter()
-            .map(|h| {
-                bitcoin::hash_types::TxMerkleNode::from_slice(h)
-                    .unwrap()
-                    .to_string()
-            })
+            .map(|h| display_hash::<bitcoin::hash_types::TxMerkleNode>(h))
             .collect();
         write!(
             f,
@@ -765,4 +754,21 @@ impl From<&p2p::message::NetworkMessage> for message_event::Msg {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+
+    // Found by the event_decode fuzz target: a decoded GetHeaders event with
+    // hash fields of the wrong length must not panic when displayed.
+    #[test]
+    fn display_does_not_panic_on_malformed_hashes() {
+        let getheaders = GetHeaders {
+            version: 70016,
+            locator_hashes: vec![vec![0x42; 4], vec![]],
+            stop_hash: vec![],
+        };
+        assert_eq!(
+            getheaders.to_string(),
+            "GetHeaders(version=70016, locator_hashes=[invalid-hash(42424242), invalid-hash()], stop_hash=invalid-hash())"
+        );
+    }
+}

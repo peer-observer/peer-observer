@@ -1,4 +1,4 @@
-use crate::bitcoin::hashes::Hash;
+use crate::protobuf::display_hash;
 use std::fmt;
 
 // structs are generated via the ipc_extractor.proto file
@@ -18,7 +18,7 @@ impl fmt::Display for BlockTip {
             f,
             "BlockTip(height={}, hash={})",
             self.height,
-            bitcoin::BlockHash::from_slice(&self.hash).unwrap()
+            display_hash::<bitcoin::BlockHash>(&self.hash)
         )
     }
 }

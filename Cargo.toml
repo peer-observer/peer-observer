@@ -15,3 +15,7 @@ members = [
   "tools/archive",
   "tools/alerts",
 ]
+
+# The fuzz crate is a standalone workspace (see fuzz/README.md) so that the
+# libFuzzer runtime is not built or tested together with the main workspace.
+exclude = ["fuzz"]
