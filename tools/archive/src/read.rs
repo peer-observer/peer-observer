@@ -80,6 +80,11 @@ fn read_message<M: Message + Default>(
 /// Returns `Ok(None)` on a clean EOF at a message boundary (the normal end of
 /// the archive); an EOF partway through the varint surfaces as `UnexpectedEof`.
 ///
+/// Only a read returning `Ok(0)` counts as a clean EOF. Errors from the reader
+/// are passed on, even at a message boundary: a zstd decoder reports an
+/// incomplete frame as an `UnexpectedEof` error, which must not be mistaken
+/// for the end of the archive.
+///
 /// prost only decodes a length delimiter from an in-memory `Buf`, so the prefix
 /// has to be pulled off the stream first. Its encoded length is not known up
 /// front, so we read one byte at a time until the varint's continuation bit
@@ -88,11 +93,16 @@ fn read_length_delimiter(reader: &mut impl Read) -> io::Result<Option<usize>> {
     let mut bytes = Vec::with_capacity(10);
     loop {
         let mut byte = [0u8; 1];
-        match reader.read_exact(&mut byte) {
-            Ok(()) => {}
-            Err(e) if e.kind() == ErrorKind::UnexpectedEof && bytes.is_empty() => {
-                return Ok(None);
+        match reader.read(&mut byte) {
+            Ok(0) if bytes.is_empty() => return Ok(None),
+            Ok(0) => {
+                return Err(io::Error::new(
+                    ErrorKind::UnexpectedEof,
+                    "truncated length prefix",
+                ))
             }
+            Ok(_) => {}
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
             Err(e) => return Err(e),
         }
         bytes.push(byte[0]);
@@ -153,6 +163,64 @@ mod tests {
         // A lone continuation byte with no follow-up is a truncated varint.
         let mut reader = Cursor::new(vec![0x80]);
         let err = read_length_delimiter(&mut reader).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
+    }
+
+    #[test]
+    fn errors_on_reader_error_at_boundary() {
+        // A reader error at a message boundary is not a clean EOF, even when
+        // it is an UnexpectedEof.
+        struct FailingReader;
+        impl Read for FailingReader {
+            fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+                Err(io::Error::new(ErrorKind::UnexpectedEof, "incomplete frame"))
+            }
+        }
+        let err = read_length_delimiter(&mut FailingReader).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
+    }
+
+    fn test_event() -> Event {
+        Event {
+            timestamp: 1,
+            ..Default::default()
+        }
+    }
+
+    fn compressed_archive(finish: bool) -> Vec<u8> {
+        use std::io::Write;
+
+        let mut bytes = ArchiveHeader::default().encode_length_delimited_to_vec();
+        test_event().encode_length_delimited(&mut bytes).unwrap();
+        let mut encoder = zstd::Encoder::new(Vec::new(), 3).unwrap();
+        encoder.write_all(&bytes).unwrap();
+        if finish {
+            encoder.finish().unwrap()
+        } else {
+            // Flushed but never finished, like an archiver that was killed.
+            encoder.flush().unwrap();
+            encoder.get_ref().clone()
+        }
+    }
+
+    #[test]
+    fn reads_finished_zstd_archive() {
+        let decoder = zstd::Decoder::new(Cursor::new(compressed_archive(true))).unwrap();
+        let mut archive = ArchiveReader::new(decoder).unwrap();
+        assert_eq!(archive.next().unwrap().unwrap(), test_event());
+        assert!(archive.next().is_none());
+    }
+
+    #[test]
+    fn errors_on_incomplete_zstd_frame() {
+        let decoder = zstd::Decoder::new(Cursor::new(compressed_archive(false))).unwrap();
+        let mut archive = ArchiveReader::new(decoder).unwrap();
+        // Events before the truncation are still returned.
+        assert_eq!(archive.next().unwrap().unwrap(), test_event());
+        let err = archive
+            .next()
+            .expect("an incomplete frame should not look like a clean EOF")
+            .unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
     }
 
