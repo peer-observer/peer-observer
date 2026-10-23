@@ -159,7 +159,7 @@ async fn test_integration_rpc_getmempoolinfo() {
                             assert_eq!(info.incrementalrelayfee, 0.1);
 
                             assert_eq!(info.unbroadcastcount, 0);
-                            assert!(info.fullrbf);
+                            assert!(info.fullrbf.unwrap_or(true));
                         }
                         _ => panic!("unexpected RPC data {:?}", r.rpc_event),
                     }

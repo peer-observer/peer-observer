@@ -2811,7 +2811,7 @@ async fn test_integration_metrics_rpc_mempoolinfo() {
                     mempoolminfee: 7.2,
                     minrelaytxfee: 8.3,
                     unbroadcastcount: 0, // not covered
-                    fullrbf: false,      // not covered
+                    fullrbf: None,       // not covered
                 })),
             }))
             .unwrap(),

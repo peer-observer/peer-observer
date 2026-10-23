@@ -84,7 +84,7 @@ message MempoolInfo {
   required double   minrelaytxfee           = 8; // Current minimum relay fee for transactions
   required double   incrementalrelayfee     = 9; // minimum fee rate increment for mempool limiting or replacement in BTC/kvB
   required int64    unbroadcastcount        = 10; // Current number of transactions that haven't passed initial broadcast yet
-  required bool     fullrbf                 = 11; // True if the mempool accepts RBF without replaceability signaling inspection (DEPRECATED)
+  optional bool     fullrbf                 = 11; // True if the mempool accepts RBF without replaceability signaling inspection (DEPRECATED in v31.0; only returned by v32.0 and later when started with -deprecatedrpc=fullrbf)
   // These were both added in v30.0, but aren't in v29. Can be added later, if needed
   // required bool     permitbaremultisig      = 12; // True if the mempool accepts transactions with bare multisig outputs
   // required uint32   maxdatacarriersize      = 13; // Maximum number of bytes that can be used by OP_RETURN outputs in the mempool

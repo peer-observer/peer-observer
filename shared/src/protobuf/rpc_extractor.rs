@@ -162,7 +162,7 @@ impl From<GetMempoolInfo> for MempoolInfo {
     fn from(info: GetMempoolInfo) -> Self {
         MempoolInfo {
             bytes: info.bytes as i64,
-            fullrbf: info.full_rbf.unwrap_or_default(),
+            fullrbf: info.full_rbf,
             incrementalrelayfee: info
                 .incremental_relay_fee
                 .unwrap_or(FeeRate::ZERO)

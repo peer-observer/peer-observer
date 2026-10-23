@@ -15,6 +15,9 @@ use std::net::SocketAddr;
 
 pub mod metrics;
 
+/// RPC results the rpc-extractor deserializes itself.
+mod rpc_compat;
+
 use metrics::Metrics;
 
 /// The peer-observer rpc-extractor periodically queries data from the
@@ -397,7 +400,7 @@ async fn getmempoolinfo(
         "getmempoolinfo",
         nats_client,
         metrics,
-        || rpc_client.get_mempool_info(),
+        || rpc_compat::get_mempool_info(rpc_client),
         |r| {
             Ok(rpc_extractor::rpc::RpcEvent::MempoolInfo(
                 r.into_model()?.into(),
