@@ -288,12 +288,6 @@ pub struct Metrics {
     pub rpc_peer_info_invtosend_median: Gauge,
     pub rpc_peer_info_invtosend_mean: Gauge,
     pub rpc_peer_info_invtosend_min: IntGauge,
-    // temporary: umerged PR https://github.com/bitcoin/bitcoin/pull/31672
-    pub rpc_peer_info_cpuload_sum: Gauge,
-    pub rpc_peer_info_cpuload_max: Gauge,
-    pub rpc_peer_info_cpuload_median: Gauge,
-    pub rpc_peer_info_cpuload_mean: Gauge,
-    pub rpc_peer_info_cpuload_min: Gauge,
 
     // getmempoolinfo
     pub rpc_mempoolinfo_mempool_loaded: IntGauge,
@@ -518,12 +512,6 @@ impl Metrics {
         g!(rpc_peer_info_invtosend_median, "The median inv-to-send value across all peers that requested transactions from us (fRelay in verison set).", registry);
         g!(rpc_peer_info_invtosend_mean, "The mean inv-to-send value across all peers that requested transactions from us (fRelay in verison set).", registry);
         ig!(rpc_peer_info_invtosend_min, "The min inv-to-send value across all peers that requested transactions from us (fRelay in verison set).", registry);
-        // temporary:
-        g!(rpc_peer_info_cpuload_sum, "Sum of the cpu_load values across all peers.", registry);
-        g!(rpc_peer_info_cpuload_max, "The maximum cpu_load value a peers has.", registry);
-        g!(rpc_peer_info_cpuload_median, "The median cpu_load value across all peers.", registry);
-        g!(rpc_peer_info_cpuload_mean, "The mean cpu_load value across all peers.", registry);
-        g!(rpc_peer_info_cpuload_min, "The min cpu_load value across all peers.", registry);
 
         // getmempoolinfo
         ig!(rpc_mempoolinfo_mempool_loaded, "1 if the initial load attempt of the persisted mempool finished", registry);
@@ -745,12 +733,6 @@ impl Metrics {
             rpc_peer_info_invtosend_median,
             rpc_peer_info_invtosend_mean,
             rpc_peer_info_invtosend_min,
-            // temporary:
-            rpc_peer_info_cpuload_sum,
-            rpc_peer_info_cpuload_max,
-            rpc_peer_info_cpuload_median,
-            rpc_peer_info_cpuload_mean,
-            rpc_peer_info_cpuload_min,
 
             // getmempoolinfo
             rpc_mempoolinfo_mempool_loaded,

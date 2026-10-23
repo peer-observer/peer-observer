@@ -68,9 +68,8 @@ message PeerInfo {
   // session ID is not implemented, since I'm not sure we need them?
 
 
-  // temporary fields
+  // temporary field
   required uint64   inv_to_send             = 38; // How many txs we have queued to announce to this peer
-  required double   cpu_load                = 129; // Total CPU time spent processing messages to/from the peer, in per milles (‰) of the connection duration, if supported by the platform and measured.
 }
 
 // A getmempoolinfo RPC result: Returns details on the active state of the TX memory pool.

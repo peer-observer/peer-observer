@@ -1992,7 +1992,6 @@ async fn test_integration_metrics_rpc_peerinfo() {
                             time_offset: 1234,
                             transport_protocol_type: "v1".to_string(),
                             version: 2841,
-                            cpu_load: 0.0,
                             inv_to_send: 0,
                         },
                         PeerInfo {
@@ -2033,7 +2032,6 @@ async fn test_integration_metrics_rpc_peerinfo() {
                             time_offset: -1239,
                             transport_protocol_type: "v2".to_string(),
                             version: 2342,
-                            cpu_load: 0.0,
                             inv_to_send: 0,
                         },
                         PeerInfo {
@@ -2074,7 +2072,6 @@ async fn test_integration_metrics_rpc_peerinfo() {
                             time_offset: -1239,
                             transport_protocol_type: "v2".to_string(),
                             version: 2342,
-                            cpu_load: 0.0,
                             inv_to_send: 0,
                         },
                     ],
@@ -2173,7 +2170,6 @@ async fn test_integration_metrics_rpc_peerinfo_sub1satvbyte() {
                             time_offset: 1234,
                             transport_protocol_type: "v1".to_string(),
                             version: 2841,
-                            cpu_load: 0.0,
                             inv_to_send: 0,
                         },
                         // This peer is not a sub-1 sat/vbyte peer as the minfeefilter is 1 sat/vbyte.
@@ -2215,7 +2211,6 @@ async fn test_integration_metrics_rpc_peerinfo_sub1satvbyte() {
                             time_offset: -1239,
                             transport_protocol_type: "v2".to_string(),
                             version: 2342,
-                            cpu_load: 0.0,
                             inv_to_send: 0,
                         },
                         // This peer is not counted as a sub-1 sat/vbyte peer even if the the minfeefilter is 0.5 sat/vbyte.
@@ -2258,7 +2253,6 @@ async fn test_integration_metrics_rpc_peerinfo_sub1satvbyte() {
                             time_offset: -1239,
                             transport_protocol_type: "v2".to_string(),
                             version: 2342,
-                            cpu_load: 0.0,
                             inv_to_send: 0,
                         },
                     ],
@@ -2324,7 +2318,6 @@ async fn test_integration_metrics_rpc_peerinfo_invtosend() {
                             time_offset: 1234,
                             transport_protocol_type: "v1".to_string(),
                             version: 2841,
-                            cpu_load: 0.0,
                             inv_to_send: 77,
                         },
                         // This peer has an inv-to-send queue of 1, but is not relaying transactions -> it's not counted.
@@ -2366,7 +2359,6 @@ async fn test_integration_metrics_rpc_peerinfo_invtosend() {
                             time_offset: -1239,
                             transport_protocol_type: "v2".to_string(),
                             version: 2342,
-                            cpu_load: 0.0,
                             inv_to_send: 1,
                         },
                         // This peer has an inv-to-send queue of 33.
@@ -2408,7 +2400,6 @@ async fn test_integration_metrics_rpc_peerinfo_invtosend() {
                             time_offset: -1239,
                             transport_protocol_type: "v2".to_string(),
                             version: 2342,
-                            cpu_load: 0.0,
                             inv_to_send: 33,
                         },
                     ],
@@ -2423,160 +2414,6 @@ async fn test_integration_metrics_rpc_peerinfo_invtosend() {
         peerobserver_rpc_peer_info_invtosend_median 55
         peerobserver_rpc_peer_info_invtosend_min 33
         peerobserver_rpc_peer_info_invtosend_sum 110
-        "#,
-    )
-    .await;
-}
-
-#[tokio::test]
-async fn test_integration_metrics_rpc_peerinfo_cpuload() {
-    println!("test that the cpuload metrics work");
-
-    publish_and_check(
-        &[
-            Event::new(PeerObserverEvent::RpcExtractor(rpc_extractor::Rpc {
-                rpc_event: Some(rpc_extractor::rpc::RpcEvent::PeerInfos(PeerInfos {
-                    infos: vec![
-                        // This peer has a cpu_load 5.0
-                        PeerInfo {
-                            addr_processed: 1234,
-                            addr_rate_limited: 1234,
-                            addr_relay_enabled: false,
-                            // a random IP belonging to a tor exit node.
-                            // This might not be a tor exit node IP in the future and the IP would need to updated.
-                            address: "179.43.182.232:1234".to_string(),
-                            address_bind: "1.2.3.4:8332".to_string(),
-                            address_local: "1.2.3.4:8332".to_string(),
-                            bip152_hb_from: true,
-                            bip152_hb_to: false,
-                            bytes_received: 1,
-                            bytes_received_per_message: HashMap::new(),
-                            bytes_sent_per_message: HashMap::new(),
-                            bytes_sent: 0,
-                            connection_time: 1,
-                            connection_type: "type0".to_string(),
-                            id: 1,
-                            inbound: true,
-                            inflight: vec![1337, 45324],
-                            last_block: 1337,
-                            last_received: 1234,
-                            last_send: 1234,
-                            last_transaction: 1234,
-                            mapped_as: 1234,
-                            minfeefilter: 0.000001, // 0.1 sat/vbyte
-                            minimum_ping: 1234.0,
-                            network: "ipv4".to_string(),
-                            permissions: vec!["permission".to_string()],
-                            ping_time: 1234.0,
-                            ping_wait: 1234.0,
-                            relay_transactions: true,
-                            services: "service".to_string(),
-                            starting_height: 1337,
-                            subversion: "subversion".to_string(),
-                            synced_blocks: 4,
-                            synced_headers: 5,
-                            time_offset: 1234,
-                            transport_protocol_type: "v1".to_string(),
-                            version: 2841,
-                            cpu_load: 5.0,
-                            inv_to_send: 0,
-                        },
-                        // This peer has a cpu_load of 0.5.
-                        PeerInfo {
-                            addr_processed: 342,
-                            addr_rate_limited: 0,
-                            addr_relay_enabled: true,
-                            address: "162.218.65.123:8332".to_string(), // LinkingLion IP
-                            address_bind: "1.2.3.4:8332".to_string(),
-                            address_local: "1.2.3.4:8332".to_string(),
-                            bip152_hb_from: false,
-                            bip152_hb_to: true,
-                            bytes_received: 2344,
-                            bytes_received_per_message: HashMap::new(),
-                            bytes_sent_per_message: HashMap::new(),
-                            bytes_sent: 3483,
-                            connection_time: 8432,
-                            connection_type: "type1".to_string(),
-                            id: 2,
-                            inbound: false,
-                            inflight: vec![],
-                            last_block: 1337,
-                            last_received: 1234,
-                            last_send: 1234,
-                            last_transaction: 1234,
-                            mapped_as: 0,
-                            minfeefilter: 0.00001, // 1 sat/vbyte,
-                            minimum_ping: 13.0,
-                            network: "ipv6".to_string(),
-                            permissions: vec!["permission".to_string()],
-                            ping_time: 23.0,
-                            ping_wait: 53.0,
-                            relay_transactions: false,
-                            services: "service".to_string(),
-                            starting_height: 231,
-                            subversion: "subversion2".to_string(),
-                            synced_blocks: 4,
-                            synced_headers: 5,
-                            time_offset: -1239,
-                            transport_protocol_type: "v2".to_string(),
-                            version: 2342,
-                            cpu_load: 0.5,
-                            inv_to_send: 1,
-                        },
-                        // This peer has a cpu_load of 1.5.
-                        PeerInfo {
-                            addr_processed: 342,
-                            addr_rate_limited: 434,
-                            addr_relay_enabled: true,
-                            address: "162.218.65.123:8332".to_string(), // LinkingLion IP
-                            address_bind: "1.2.3.4:8332".to_string(),
-                            address_local: "1.2.3.4:8332".to_string(),
-                            bip152_hb_from: false,
-                            bip152_hb_to: true,
-                            bytes_received: 2344,
-                            bytes_received_per_message: HashMap::new(),
-                            bytes_sent_per_message: HashMap::new(),
-                            bytes_sent: 3483,
-                            connection_time: 8432,
-                            connection_type: "type1".to_string(),
-                            id: 2,
-                            inbound: false,
-                            inflight: vec![],
-                            last_block: 1337,
-                            last_received: 1234,
-                            last_send: 1234,
-                            last_transaction: 1234,
-                            mapped_as: 1234,
-                            minfeefilter: 0.000005, // 0.5 sat/vbyte,
-                            minimum_ping: 13.0,
-                            network: "ipv6".to_string(),
-                            permissions: vec!["permission".to_string()],
-                            ping_time: 23.0,
-                            ping_wait: 53.0,
-                            relay_transactions: true,
-                            services: "service".to_string(),
-                            starting_height: 231,
-                            subversion: "subversion2".to_string(),
-                            synced_blocks: 4,
-                            synced_headers: 5,
-                            time_offset: -1239,
-                            transport_protocol_type: "v2".to_string(),
-                            version: 2342,
-                            cpu_load: 1.5,
-                            inv_to_send: 0,
-                        },
-                    ],
-                })),
-            }))
-            .unwrap(),
-        ],
-        Subject::Rpc,
-        r#"
-        peerobserver_rpc_peer_info_cpuload_max 5
-        peerobserver_rpc_peer_info_cpuload_mean 2.3333333333333335
-        peerobserver_rpc_peer_info_cpuload_median 1.5
-        peerobserver_rpc_peer_info_cpuload_min 0.5
-        peerobserver_rpc_peer_info_cpuload_sum 7
         "#,
     )
     .await;
@@ -2632,7 +2469,6 @@ async fn test_integration_metrics_rpc_peerinfo_ipv4_inbound_diversity() {
                             time_offset: 1234,
                             transport_protocol_type: "v1".to_string(),
                             version: 2841,
-                            cpu_load: 0.0,
                             inv_to_send: 0,
                         },
                         PeerInfo {
@@ -2673,7 +2509,6 @@ async fn test_integration_metrics_rpc_peerinfo_ipv4_inbound_diversity() {
                             time_offset: -1239,
                             transport_protocol_type: "v2".to_string(),
                             version: 2342,
-                            cpu_load: 0.0,
                             inv_to_send: 0,
                         },
                         PeerInfo {
@@ -2714,7 +2549,6 @@ async fn test_integration_metrics_rpc_peerinfo_ipv4_inbound_diversity() {
                             time_offset: -1239,
                             transport_protocol_type: "v2".to_string(),
                             version: 2342,
-                            cpu_load: 0.0,
                             inv_to_send: 0,
                         },
                     ],
@@ -2778,7 +2612,6 @@ async fn test_integration_metrics_rpc_peerinfo_peer_list_bitprojects() {
                             time_offset: 1234,
                             transport_protocol_type: "v1".to_string(),
                             version: 2841,
-                            cpu_load: 0.0,
                             inv_to_send: 0,
                         },
                         // A bitprojects outbound peer.
@@ -2820,7 +2653,6 @@ async fn test_integration_metrics_rpc_peerinfo_peer_list_bitprojects() {
                             time_offset: -1239,
                             transport_protocol_type: "v2".to_string(),
                             version: 2342,
-                            cpu_load: 0.0,
                             inv_to_send: 0,
                         },
                         // not related to bitprojects
@@ -2862,7 +2694,6 @@ async fn test_integration_metrics_rpc_peerinfo_peer_list_bitprojects() {
                             time_offset: -1239,
                             transport_protocol_type: "v2".to_string(),
                             version: 2342,
-                            cpu_load: 0.0,
                             inv_to_send: 0,
                         },
                     ],

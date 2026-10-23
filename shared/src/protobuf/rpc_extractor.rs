@@ -118,7 +118,6 @@ impl From<RPCPeerInfo> for PeerInfo {
 
             // temporary
             inv_to_send: info.inv_to_send.unwrap_or_default() as u64,
-            cpu_load: info.cpu_load.unwrap_or_default() as f64,
         }
     }
 }
