@@ -156,7 +156,10 @@ async fn check(
             .unwrap();
         sleep(Duration::from_secs(1)).await;
         let peers = node.client.get_peer_info().unwrap().0;
-        if peers.len() == 1 && peers[0].transport_protocol_type == "v1" {
+        if peers.len() == 1
+            && peers[0].transport_protocol_type
+                == shared::bitcoind::vtype::TransportProtocolType::V1
+        {
             log::info!("p2p-extractor and node are connected: {:?}", peers[0]);
             connected = true;
             break;

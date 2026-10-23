@@ -3,13 +3,14 @@ use bitcoin::FeeRate;
 // Types that don't have a generic model type in corepc (yet).
 // Once they have a model, move them down to the mtypes!
 // CORE_VERSION_GREP: When updating the corepc node crate version, bump this too.
-use corepc_client::client_sync::v30::FeeEstimateMode as RPCFeeEstimateMode;
-use corepc_client::types::v30::{
-    AddrManInfoNetwork as RPCAddrManInfoNetwork, GetAddrManInfo as RPCGetAddrManInfo,
-    GetMemoryInfoStats as RPCGetMemoryInfoStats, GetNetTotals as RPCGetNetTotals,
-    GetPeerInfo as RPCGetPeerInfo, GetRawAddrMan, PeerInfo as RPCPeerInfo, RawAddrManEntry,
+use corepc_regtest_client::types::v31::{
+    AddrManInfoNetwork as RPCAddrManInfoNetwork, ConnectionType as RPCConnectionType,
+    GetAddrManInfo as RPCGetAddrManInfo, GetMemoryInfoStats as RPCGetMemoryInfoStats,
+    GetNetTotals as RPCGetNetTotals, GetPeerInfo as RPCGetPeerInfo, GetRawAddrMan,
+    PeerInfo as RPCPeerInfo, RawAddrManEntry, TransportProtocolType as RPCTransportProtocolType,
     UploadTarget as RPCUploadTarget,
 };
+use corepc_regtest_client::v31::FeeEstimateMode as RPCFeeEstimateMode;
 
 // Ideally, all type imports should use the generic mtype types.
 use bitcoind::mtype::{
@@ -75,6 +76,36 @@ impl fmt::Display for rpc::RpcEvent {
     }
 }
 
+/// Bitcoin Core's string representation of a `getpeerinfo` connection type.
+///
+/// corepc types the field as an enum, while we pass Bitcoin Core's string on as-is.
+/// These have to match `ConnectionTypeAsString()` in Bitcoin Core, as they end up as
+/// Prometheus label values.
+fn connection_type_as_string(connection_type: RPCConnectionType) -> String {
+    match connection_type {
+        RPCConnectionType::OutboundFullRelay => "outbound-full-relay",
+        RPCConnectionType::BlockRelayOnly => "block-relay-only",
+        RPCConnectionType::Inbound => "inbound",
+        RPCConnectionType::Manual => "manual",
+        RPCConnectionType::AddrFetch => "addr-fetch",
+        RPCConnectionType::Feeler => "feeler",
+        RPCConnectionType::PrivateBroadcast => "private-broadcast",
+    }
+    .to_string()
+}
+
+/// Bitcoin Core's string representation of a `getpeerinfo` transport protocol type.
+///
+/// Like [`connection_type_as_string`], but has to match `TransportTypeAsString()`.
+fn transport_protocol_type_as_string(transport: RPCTransportProtocolType) -> String {
+    match transport {
+        RPCTransportProtocolType::Detecting => "detecting",
+        RPCTransportProtocolType::V1 => "v1",
+        RPCTransportProtocolType::V2 => "v2",
+    }
+    .to_string()
+}
+
 impl From<RPCPeerInfo> for PeerInfo {
     fn from(info: RPCPeerInfo) -> Self {
         PeerInfo {
@@ -91,7 +122,10 @@ impl From<RPCPeerInfo> for PeerInfo {
             bytes_sent: info.bytes_sent,
             bytes_sent_per_message: info.bytes_sent_per_message.into_iter().collect(),
             connection_time: info.connection_time,
-            connection_type: info.connection_type.unwrap_or_default(),
+            connection_type: info
+                .connection_type
+                .map(connection_type_as_string)
+                .unwrap_or_default(),
             id: info.id,
             inbound: info.inbound,
             inflight: info.inflight.unwrap_or_default(),
@@ -113,11 +147,13 @@ impl From<RPCPeerInfo> for PeerInfo {
             synced_blocks: info.synced_blocks.unwrap_or_default(),
             synced_headers: info.synced_headers.unwrap_or_default(),
             time_offset: info.time_offset,
-            transport_protocol_type: info.transport_protocol_type,
+            transport_protocol_type: transport_protocol_type_as_string(
+                info.transport_protocol_type,
+            ),
             version: info.version,
 
             // temporary
-            inv_to_send: info.inv_to_send.unwrap_or_default() as u64,
+            inv_to_send: info.inv_to_send,
         }
     }
 }

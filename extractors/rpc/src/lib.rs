@@ -1,7 +1,7 @@
 use shared::anyhow::{Context, Result};
 use shared::clap::{ArgGroup, Parser};
-use shared::corepc_client::client_sync::Auth;
-use shared::corepc_client::client_sync::v30::{Client, FeeEstimateMode};
+use shared::corepc_regtest_client::Auth;
+use shared::corepc_regtest_client::v31::{Client, FeeEstimateMode};
 use shared::log;
 use shared::nats_subjects::Subject;
 use shared::nats_util;

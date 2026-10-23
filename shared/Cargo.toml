@@ -25,13 +25,10 @@ regex = "1.12"
 anyhow = "1.0.102"
 zstd = "0.14"
 
-# Use custom commit to support:
-# - cpu_load and inv_to_send in getpeerinfo
-# (branch 2026-05-corepc-0.12+custom-peer-observer-patches)
 # When updating the Bitcoin Core version used, grep for CORE_VERSION_GREP
-# and update the corepc_client::types::v* to the new version.
-bitcoind = { git = "https://github.com/0xb10c/corepc", rev = "3ceda10f34e945bbf8532f881d6dbc13d98a5d88", features = ["download", "31_0"] }
-corepc-client = { git = "https://github.com/0xb10c/corepc", rev = "3ceda10f34e945bbf8532f881d6dbc13d98a5d88", features = ["client-sync"]}
+# and update the corepc_regtest_client::types::v* to the new version.
+bitcoind = { version = "0.43.2", features = ["download", "31_0"] }
+corepc-regtest-client = { version = "0.18.0" }
 
 [build-dependencies]
 prost-build = "0.14"
