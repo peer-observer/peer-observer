@@ -16,7 +16,6 @@ runs:
           libelf-dev \
           clang \
           llvm \
-          llvm-14 \
           zstd \
           binutils-dev \
           elfutils \
