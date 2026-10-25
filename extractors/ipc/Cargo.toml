@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 # Import the Cap'N Proto schemas for Bitcoin Core v31.0.
-bitcoin-capnp-types = "0.2.1"
+bitcoin-capnp-types = { git = "https://github.com/xyzconstant/bitcoin-capnp-types", rev = "243378ad93efb7d73d7d47fe82703e900a1ee457" }
 shared = { path = "../../shared" }
 
 [features]

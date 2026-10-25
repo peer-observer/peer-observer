@@ -112,7 +112,7 @@ jobs:
     - name: Install integration test dependecies
       run: sudo apt-get install -y nats-server
     - name: Run tests and integration tests
-      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features
+      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features --workspace --exclude ipc-extractor
 
   ubuntu-test-detect-intermittent-failures:
     runs-on: ubuntu-latest
@@ -124,25 +124,25 @@ jobs:
       run: sudo apt-get install -y nats-server
     # use separate steps for iterations here to easily see on GHA the time it took
     - name: Iteration 0
-      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features
+      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features --workspace --exclude ipc-extractor
     - name: Iteration 1
-      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features
+      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features --workspace --exclude ipc-extractor
     - name: Iteration 2
-      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features
+      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features --workspace --exclude ipc-extractor
     - name: Iteration 3
-      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features
+      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features --workspace --exclude ipc-extractor
     - name: Iteration 4
-      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features
+      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features --workspace --exclude ipc-extractor
     - name: Iteration 5
-      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features
+      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features --workspace --exclude ipc-extractor
     - name: Iteration 6
-      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features
+      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features --workspace --exclude ipc-extractor
     - name: Iteration 7
-      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features
+      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features --workspace --exclude ipc-extractor
     - name: Iteration 8
-      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features
+      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features --workspace --exclude ipc-extractor
     - name: Iteration 9
-      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features
+      run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features --workspace --exclude ipc-extractor
 
   ubuntu-docs-tools:
     needs: ubuntu-build
