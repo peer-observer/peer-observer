@@ -1516,6 +1516,60 @@ async fn test_integration_metrics_conn_inbound() {
 }
 
 #[tokio::test]
+async fn test_integration_metrics_ebpf_empty_oneof() {
+    println!("test that ebpf events with an empty oneof don't crash the metrics tool");
+
+    // Empty oneofs decode to None, e.g. when the extractor uses a newer
+    // schema with a variant the metrics tool doesn't know about.
+    publish_and_check(
+        &[
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf { ebpf_event: None })).unwrap(),
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                    event: None,
+                })),
+            }))
+            .unwrap(),
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Mempool(mempool::MempoolEvent {
+                    event: None,
+                })),
+            }))
+            .unwrap(),
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Validation(validation::ValidationEvent {
+                    event: None,
+                })),
+            }))
+            .unwrap(),
+            // a valid event afterwards to check that the metrics tool is still running
+            Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+                ebpf_event: Some(ebpf::EbpfEvent::Connection(connection::ConnectionEvent {
+                    event: Some(connection::connection_event::Event::Inbound(
+                        InboundConnection {
+                            conn: Connection {
+                                addr: "127.0.0.1:8333".to_string(),
+                                conn_type: 1,
+                                network: 2,
+                                peer_id: 7,
+                            },
+                            existing_connections: 123,
+                        },
+                    )),
+                })),
+            }))
+            .unwrap(),
+        ],
+        Subject::NetConn,
+        r#"
+        peerobserver_conn_inbound 1
+        peerobserver_conn_inbound_current 123
+        "#,
+    )
+    .await;
+}
+
+#[tokio::test]
 async fn test_integration_metrics_conn_outbound() {
     println!("test that the outbound connection metrics work");
 
