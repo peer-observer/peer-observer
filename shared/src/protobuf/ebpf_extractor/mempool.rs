@@ -1,5 +1,5 @@
+use crate::protobuf::display_hash;
 use crate::protobuf::ebpf_extractor::ctypes;
-use bitcoin::hashes::Hash;
 use std::fmt;
 
 // structs are generated via the mempool.proto file
@@ -20,7 +20,7 @@ impl fmt::Display for Added {
         write!(
             f,
             "Added({}, fee={}, vsize={})",
-            bitcoin::Txid::from_slice(&self.txid).unwrap(),
+            display_hash::<bitcoin::Txid>(&self.txid),
             self.fee,
             self.vsize,
         )
@@ -44,7 +44,7 @@ impl fmt::Display for Removed {
         write!(
             f,
             "Removed({}, reason={}, vsize={}, fee={}, entry_time={})",
-            bitcoin::Txid::from_slice(&self.txid).unwrap(),
+            display_hash::<bitcoin::Txid>(&self.txid),
             self.reason,
             self.vsize,
             self.fee,
@@ -67,7 +67,7 @@ impl fmt::Display for Rejected {
         write!(
             f,
             "Rejected({}, reason={})",
-            bitcoin::Txid::from_slice(&self.txid).unwrap(),
+            display_hash::<bitcoin::Txid>(&self.txid),
             self.reason,
         )
     }
@@ -78,18 +78,18 @@ impl fmt::Display for Replaced {
         let replacement_id = if self.replaced_by_transaction {
             format!(
                 "txid={}",
-                bitcoin::Txid::from_slice(&self.replacement_id).unwrap()
+                display_hash::<bitcoin::Txid>(&self.replacement_id)
             )
         } else {
             format!(
                 "package_hash={}",
-                bitcoin::Txid::from_slice(&self.replacement_id).unwrap()
+                display_hash::<bitcoin::Txid>(&self.replacement_id)
             )
         };
         write!(
             f,
             "Replaced(old=(txid={}, vsize={}, fee={}, entry_time={}) new=({}, vsize={}, fee={}))",
-            bitcoin::Txid::from_slice(&self.replaced_txid).unwrap(),
+            display_hash::<bitcoin::Txid>(&self.replaced_txid),
             self.replaced_vsize,
             self.replaced_fee,
             self.replaced_entry_time,

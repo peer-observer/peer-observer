@@ -7,7 +7,7 @@ use shared::{
         io::Cursor as BitcoinCursor,
         p2p::{
             ServiceFlags, address,
-            message::{self, NetworkMessage, RawNetworkMessage},
+            message::{self, MAX_MSG_SIZE, NetworkMessage, RawNetworkMessage},
             message_network,
         },
     },
@@ -431,7 +431,11 @@ async fn publish_ping_measurement_event(duration: u64, nats_client: &async_nats:
     }
 }
 
-async fn read_and_decode_message<R: AsyncRead + Unpin>(
+/// Reads one P2P message (24-byte header followed by the payload) from `reader`
+/// and decodes it. Only v1 messages with the expected network magic are accepted.
+///
+/// Public so the fuzz targets in `fuzz/` can feed it arbitrary bytes.
+pub async fn read_and_decode_message<R: AsyncRead + Unpin>(
     reader: &mut BufReader<R>,
     network: BitcoinNetwork,
     addr: &str,
@@ -467,6 +471,16 @@ async fn read_and_decode_message<R: AsyncRead + Unpin>(
     }
 
     let payload_length = u32::from_le_bytes(header[16..20].try_into()?);
+    // Check the length before allocating: a peer could otherwise make us
+    // allocate up to 4 GiB per connection.
+    if payload_length as usize > MAX_MSG_SIZE {
+        log::debug!(target: addr, "P2P message payload length {} exceeds the maximum", payload_length);
+        bail!(
+            "P2P message payload length {} exceeds the maximum of {} bytes",
+            payload_length,
+            MAX_MSG_SIZE
+        )
+    }
     let mut payload = vec![0u8; payload_length as usize];
     if let Err(e) = reader.read_exact(&mut payload).await {
         log::debug!(target: addr,
@@ -519,4 +533,33 @@ fn build_version_message() -> message::NetworkMessage {
         start_height: 0,
         relay: true, // indicates to the node that we want to receive transactions
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A message header announcing a 4 GiB payload must be rejected before the
+    // payload buffer is allocated.
+    #[test]
+    fn read_and_decode_message_rejects_oversized_payload_length() {
+        let mut header = Vec::new();
+        header.extend_from_slice(&BitcoinNetwork::Bitcoin.magic().to_bytes());
+        header.extend_from_slice(b"ping\0\0\0\0\0\0\0\0");
+        header.extend_from_slice(&u32::MAX.to_le_bytes());
+        header.extend_from_slice(&[0u8; 4]);
+        assert_eq!(header.len(), 24);
+
+        let mut reader = BufReader::new(header.as_slice());
+        let err = shared::futures::executor::block_on(read_and_decode_message(
+            &mut reader,
+            BitcoinNetwork::Bitcoin,
+            "test",
+        ))
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("exceeds the maximum"),
+            "unexpected error: {err}"
+        );
+    }
 }

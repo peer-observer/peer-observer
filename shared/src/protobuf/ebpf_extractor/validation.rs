@@ -1,4 +1,4 @@
-use crate::bitcoin::hashes::Hash;
+use crate::protobuf::display_hash;
 use crate::protobuf::ebpf_extractor::ctypes;
 use std::fmt;
 
@@ -23,7 +23,7 @@ impl fmt::Display for BlockConnected {
         write!(
             f,
             "BlockConnected(hash={}, height={}, transactions={}, inputs={}, sigops={}, time={}ns)",
-            bitcoin::BlockHash::from_slice(&self.hash).unwrap(),
+            display_hash::<bitcoin::BlockHash>(&self.hash),
             self.height,
             self.transactions,
             self.inputs,
@@ -55,6 +55,7 @@ impl fmt::Display for ValidationEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bitcoin::hashes::Hash;
     use bitcoin::BlockHash;
     use std::str::FromStr;
 
