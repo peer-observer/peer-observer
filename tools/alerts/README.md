@@ -30,9 +30,10 @@ Each peer/kind combination fires at most one alert per session (one-shot).
 
 ## Peer lifecycle
 
-When a previously flagged peer disconnects (either via a `ConnectionEvent::Close`
-or by being evicted after `--peer-stale-secs` of inactivity), the same `Alerter`
-emits a `PeerDisconnected` alert with the duration of the spamming episode:
+When a peer that one of the per-peer heuristics flagged disconnects (either via a
+`ConnectionEvent::Close` or by being evicted after `--peer-stale-secs` of
+inactivity), the same `Alerter` emits a `PeerDisconnected` alert with how long
+the peer stayed around after it was first flagged:
 
 ```
 PeerDisconnected | peer_id=<id> addr=<addr> | active=<duration>s

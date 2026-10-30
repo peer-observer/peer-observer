@@ -5,9 +5,7 @@ use alerts::{alerter::IntegrationTestAlerter, Alert, Args, SpammerKind};
 use shared::{
     anyhow,
     async_nats::ConnectError,
-    log,
     nats_subjects::Subject,
-    nats_util,
     prost::Message,
     protobuf::{
         ebpf_extractor::{
@@ -50,20 +48,13 @@ impl Default for AlertSettingsInTest {
 
 /// Builds an `Args` instance pointing at the given NATS server
 fn make_test_args(nats_port: u16, settings: AlertSettingsInTest) -> Args {
-    Args {
-        nats: nats_util::NatsArgs {
-            address: format!("127.0.0.1:{}", nats_port),
-            username: None,
-            password: None,
-            password_file: None,
-        },
-        ping_threshold: settings.ping_threshold,
-        ping_window_secs: settings.ping_window_secs,
-        addr_threshold: settings.addr_threshold,
-        addr_window_secs: settings.addr_window_secs,
-        log_level: log::Level::Trace,
-        peer_stale_secs: settings.peer_stale_secs,
-    }
+    let mut args = Args::for_tests(&format!("127.0.0.1:{}", nats_port));
+    args.ping_spammer.ping_threshold = settings.ping_threshold;
+    args.ping_spammer.ping_window_secs = settings.ping_window_secs;
+    args.addr_spammer.addr_threshold = settings.addr_threshold;
+    args.addr_spammer.addr_window_secs = settings.addr_window_secs;
+    args.peer_stale_secs = settings.peer_stale_secs;
+    args
 }
 
 /// Waits up to `d` for the next alert; panics if none arrives
