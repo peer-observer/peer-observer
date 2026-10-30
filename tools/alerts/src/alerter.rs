@@ -24,6 +24,12 @@ pub enum Alert {
         addr: String,
         active_secs: u64,
     },
+    /// Bitcoin Core reported the peer as misbehaving and gave a reason
+    MisbehavingPeer {
+        peer_id: u64,
+        addr: String,
+        reason: String,
+    },
 }
 
 impl std::fmt::Display for Alert {
@@ -55,6 +61,15 @@ impl std::fmt::Display for Alert {
                 f,
                 "PeerDisconnected | peer_id={} addr={} | active={}s",
                 peer_id, addr, active_secs
+            ),
+            Alert::MisbehavingPeer {
+                peer_id,
+                addr,
+                reason,
+            } => write!(
+                f,
+                "MisbehavingPeer | peer_id={} addr={} | {}",
+                peer_id, addr, reason
             ),
         }
     }

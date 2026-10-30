@@ -9,7 +9,9 @@ use shared::{
     prost::Message,
     protobuf::{
         ebpf_extractor::{
-            connection::{self, ClosedConnection, Connection, ConnectionEvent},
+            connection::{
+                self, ClosedConnection, Connection, ConnectionEvent, MisbehavingConnection,
+            },
             ebpf,
             message::{self, message_event::Msg, Addr, AddrV2, Metadata, Ping},
             Ebpf,
@@ -568,6 +570,91 @@ async fn test_undecodable_payload_does_not_kill_tool() {
     let (kind, peer_id, _, _) = unwrap_spammer(alert);
     assert_eq!(kind, SpammerKind::Ping);
     assert_eq!(peer_id, 77);
+
+    harness.shutdown().await;
+}
+
+/// Builds a MisbehavingConnection event for the given peer
+fn make_misbehaving_event(peer_id: u64, reason: &str) -> Event {
+    Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+        ebpf_event: Some(ebpf::EbpfEvent::Connection(ConnectionEvent {
+            event: Some(connection::connection_event::Event::Misbehaving(
+                MisbehavingConnection {
+                    id: peer_id,
+                    message: reason.to_string(),
+                },
+            )),
+        })),
+    }))
+    .unwrap()
+}
+
+/// Verifies that a misbehaving report from Bitcoin Core becomes an alert with
+/// the peer's address and reason, and that the usual disconnect afterwards
+/// stays silent because nothing else flagged the peer
+#[tokio::test]
+async fn test_misbehaving_peer() {
+    let mut harness =
+        TestHarness::new(|port| make_test_args(port, AlertSettingsInTest::default())).await;
+
+    // One message from the peer so the tool knows its address
+    harness
+        .publisher
+        .publish(
+            Subject::NetMsg.to_string(),
+            make_ping_event(31, "31.31.31.31:8333", true).encode_to_vec(),
+        )
+        .await;
+    // The two subjects are separate NATS subscriptions, so give the ping a
+    // moment to arrive before the report on the other subject
+    sleep(Duration::from_millis(50)).await;
+    harness
+        .publisher
+        .publish(
+            Subject::NetConn.to_string(),
+            make_misbehaving_event(31, "headers message size = 2001").encode_to_vec(),
+        )
+        .await;
+
+    let alert = recv_alert(&mut harness.rx, Duration::from_secs(2)).await;
+    assert_eq!(
+        alert,
+        Alert::MisbehavingPeer {
+            peer_id: 31,
+            addr: "31.31.31.31:8333".to_string(),
+            reason: "headers message size = 2001".to_string(),
+        }
+    );
+
+    harness
+        .publisher
+        .publish(
+            Subject::NetConn.to_string(),
+            make_closed_event(31, "31.31.31.31:8333").encode_to_vec(),
+        )
+        .await;
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "a misbehaving peer disconnecting must not produce a PeerDisconnected alert"
+    );
+
+    // A peer we never heard from is reported with an unknown address
+    harness
+        .publisher
+        .publish(
+            Subject::NetConn.to_string(),
+            make_misbehaving_event(32, "invalid header received").encode_to_vec(),
+        )
+        .await;
+    let alert = recv_alert(&mut harness.rx, Duration::from_secs(2)).await;
+    assert_eq!(
+        alert,
+        Alert::MisbehavingPeer {
+            peer_id: 32,
+            addr: "unknown".to_string(),
+            reason: "invalid header received".to_string(),
+        }
+    );
 
     harness.shutdown().await;
 }

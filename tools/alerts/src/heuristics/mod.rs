@@ -13,6 +13,7 @@ use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
 pub mod addr_spammer;
+pub mod misbehaving_peer;
 pub mod ping_spammer;
 
 /// What the tool knows about a peer, independent of any heuristic.
@@ -162,6 +163,7 @@ impl PerPeerWindowCounter {
 /// Builders for events used in the unit tests of the heuristics.
 #[cfg(test)]
 pub mod test_util {
+    use shared::protobuf::ebpf_extractor::connection::{connection_event, ConnectionEvent};
     use shared::protobuf::ebpf_extractor::ebpf::EbpfEvent;
     use shared::protobuf::ebpf_extractor::message::message_event::Msg;
     use shared::protobuf::ebpf_extractor::message::{MessageEvent, Metadata};
@@ -179,6 +181,13 @@ pub mod test_util {
                 ebpf_event: Some(ebpf_event),
             })),
         }
+    }
+
+    /// A connection event.
+    pub fn connection(event: connection_event::Event) -> Event {
+        ebpf(EbpfEvent::Connection(ConnectionEvent {
+            event: Some(event),
+        }))
     }
 
     /// A P2P message `msg` exchanged with `peer_id`.

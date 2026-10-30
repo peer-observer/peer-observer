@@ -28,6 +28,21 @@ AddrSpammer | peer_id=<id> addr=<addr> | <count> addr/addrv2 messages in last <s
 
 Each peer/kind combination fires at most one alert per session (one-shot).
 
+### MisbehavingPeer
+
+Reports a peer whenever Bitcoin Core flags it as misbehaving, for example for
+sending too many headers or an invalid block. Core logs a reason and usually
+disconnects the peer right away. The reason is passed on in the alert. The
+address is `unknown` if the tool never saw a connection event or message from
+the peer, for example because the peer connected before the tool started.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+MisbehavingPeer | peer_id=<id> addr=<addr> | <reason>
+```
+
+There are no settings for this heuristic. Every report fires an alert.
+
 ## Peer lifecycle
 
 When a peer that one of the per-peer heuristics flagged disconnects (either via a

@@ -19,6 +19,7 @@ pub mod heuristics;
 
 pub use crate::alerter::{Alert, Alerter, LoggingAlerter, SpammerKind};
 use crate::heuristics::addr_spammer::{AddrSpammer, AddrSpammerArgs};
+use crate::heuristics::misbehaving_peer::MisbehavingPeer;
 use crate::heuristics::ping_spammer::{PingSpammer, PingSpammerArgs};
 use crate::heuristics::{connection_event, inbound_message, Context, Heuristic, Peer, Peers};
 
@@ -69,6 +70,7 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
     vec![
         Box::new(PingSpammer::new(args.ping_spammer.clone())),
         Box::new(AddrSpammer::new(args.addr_spammer.clone())),
+        Box::new(MisbehavingPeer),
     ]
 }
 
@@ -87,14 +89,25 @@ impl State {
     }
 
     /// Remembers the peer an event came from and when we last heard from it.
+    /// Peers are picked up when their connection opens or when they send us
+    /// a message, so a peer is known by the time Bitcoin Core complains
+    /// about it.
     fn track_peer(&mut self, event: &Event, now: Instant) {
-        if let Some(msg) = inbound_message(event) {
-            let peer = self.peers.entry(msg.meta.peer_id).or_insert_with(|| Peer {
-                addr: msg.meta.addr.clone(),
-                last_seen: now,
-            });
-            peer.last_seen = now;
-        }
+        let conn = match connection_event(event) {
+            Some(connection_event::Event::Inbound(c)) => Some(&c.conn),
+            Some(connection_event::Event::Outbound(c)) => Some(&c.conn),
+            _ => None,
+        };
+        let (peer_id, addr) = match (inbound_message(event), conn) {
+            (Some(msg), _) => (msg.meta.peer_id, &msg.meta.addr),
+            (None, Some(conn)) => (conn.peer_id, &conn.addr),
+            (None, None) => return,
+        };
+        let peer = self.peers.entry(peer_id).or_insert_with(|| Peer {
+            addr: addr.clone(),
+            last_seen: now,
+        });
+        peer.last_seen = now;
     }
 
     /// Forgets `peer_id` everywhere. If a heuristic had flagged the peer, a
