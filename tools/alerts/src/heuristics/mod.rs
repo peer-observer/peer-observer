@@ -16,6 +16,7 @@ pub mod addr_spammer;
 pub mod handshake_after_verack;
 pub mod misbehaving_peer;
 pub mod ping_spammer;
+pub mod small_ping_nonce;
 
 /// What the tool knows about a peer, independent of any heuristic.
 pub struct Peer {

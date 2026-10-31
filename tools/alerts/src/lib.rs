@@ -22,6 +22,7 @@ use crate::heuristics::addr_spammer::{AddrSpammer, AddrSpammerArgs};
 use crate::heuristics::handshake_after_verack::HandshakeAfterVerack;
 use crate::heuristics::misbehaving_peer::MisbehavingPeer;
 use crate::heuristics::ping_spammer::{PingSpammer, PingSpammerArgs};
+use crate::heuristics::small_ping_nonce::{SmallPingNonce, SmallPingNonceArgs};
 use crate::heuristics::{connection_event, inbound_message, Context, Heuristic, Peer, Peers};
 
 #[derive(Parser, Debug, Clone)]
@@ -36,6 +37,9 @@ pub struct Args {
 
     #[command(flatten)]
     pub addr_spammer: AddrSpammerArgs,
+
+    #[command(flatten)]
+    pub small_ping_nonce: SmallPingNonceArgs,
 
     #[arg(short, long, default_value_t = shared::log::Level::Debug)]
     pub log_level: shared::log::Level,
@@ -60,6 +64,7 @@ impl Args {
             },
             ping_spammer: PingSpammerArgs::default(),
             addr_spammer: AddrSpammerArgs::default(),
+            small_ping_nonce: SmallPingNonceArgs::default(),
             log_level: shared::log::Level::Trace,
             peer_stale_secs: 300,
         }
@@ -73,6 +78,7 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
         Box::new(AddrSpammer::new(args.addr_spammer.clone())),
         Box::new(MisbehavingPeer),
         Box::new(HandshakeAfterVerack::default()),
+        Box::new(SmallPingNonce::new(args.small_ping_nonce.clone())),
     ]
 }
 

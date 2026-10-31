@@ -61,6 +61,19 @@ HandshakeAfterVerack | peer_id=<id> addr=<addr> | received <command> after verac
 
 There are no settings for this heuristic.
 
+### SmallPingNonce
+
+Flags a peer that sends more than `--small-ping-nonce-threshold` `ping` messages
+with a nonce below 2^32. Bitcoin Core draws eight random bytes for every ping
+nonce, so a nonce that small happens about once in four billion pings. A peer
+sending several of them uses a counter or a 32-bit random number and is not a
+Bitcoin Core node, whatever its user agent says. Each peer is reported once.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+SmallPingNonce | peer_id=<id> addr=<addr> | <count> pings with a nonce below 2^32 (threshold: <threshold>)
+```
+
 ## Peer lifecycle
 
 When a peer that one of the per-peer heuristics flagged disconnects (either via a
@@ -104,6 +117,8 @@ Options:
           Number of addr/addrv2 messages in the window before alerting [default: 6]
       --addr-window-secs <ADDR_WINDOW_SECS>
           Sliding window size for addr detection (seconds) [default: 60]
+      --small-ping-nonce-threshold <SMALL_PING_NONCE_THRESHOLD>
+          Number of pings with a nonce below 2^32 from one peer before alerting [default: 3]
   -l, --log-level <LOG_LEVEL>
           [default: DEBUG]
       --peer-stale-secs <PEER_STALE_SECS>

@@ -97,8 +97,15 @@ async fn publish_n(publisher: &NatsPublisherForTesting, subject: &str, event: &E
 }
 
 /// Constructs a protobuf `Event` wrapping a `Ping` message for the given peer
-/// `inbound` controls whether the message appears as received from the peer
+/// `inbound` controls whether the message appears as received from the peer.
+/// The nonce looks like one Bitcoin Core would draw, so only the ping count
+/// matters to the heuristics
 fn make_ping_event(peer_id: u64, addr: &str, inbound: bool) -> Event {
+    make_ping_event_with_nonce(peer_id, addr, inbound, 0x0123_4567_89ab_cdef)
+}
+
+/// Like `make_ping_event`, with a chosen ping nonce
+fn make_ping_event_with_nonce(peer_id: u64, addr: &str, inbound: bool, nonce: u64) -> Event {
     Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
         ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
             meta: Metadata {
@@ -109,7 +116,7 @@ fn make_ping_event(peer_id: u64, addr: &str, inbound: bool) -> Event {
                 inbound,
                 size: 8,
             },
-            msg: Some(Msg::Ping(Ping { value: 42 })),
+            msg: Some(Msg::Ping(Ping { value: nonce })),
         })),
     }))
     .unwrap()
@@ -742,6 +749,66 @@ async fn test_handshake_after_verack() {
         Alert::PeerDisconnected { peer_id, .. } => assert_eq!(peer_id, 41),
         other => panic!("expected Alert::PeerDisconnected, got {other:?}"),
     }
+
+    harness.shutdown().await;
+}
+
+/// Verifies that pings with a nonce below 2^32 are counted per peer and fire
+/// one SmallPingNonce alert above the threshold, while pings with full-size
+/// nonces do not count
+#[tokio::test]
+async fn test_small_ping_nonce() {
+    let threshold = 2;
+    let mut harness = TestHarness::new(|port| {
+        let mut args = make_test_args(port, AlertSettingsInTest::default());
+        // Keep the ping spammer quiet so only the nonce check speaks up
+        args.ping_spammer.ping_threshold = 100;
+        args.small_ping_nonce.small_ping_nonce_threshold = threshold;
+        args
+    })
+    .await;
+    let subject = Subject::NetMsg.to_string();
+    let addr = "51.51.51.51:8333";
+
+    // Full-size nonces, then exactly threshold small ones: silence
+    publish_n(
+        &harness.publisher,
+        &subject,
+        &make_ping_event(51, addr, true),
+        5,
+    )
+    .await;
+    for nonce in [0, 1] {
+        harness
+            .publisher
+            .publish(
+                subject.clone(),
+                make_ping_event_with_nonce(51, addr, true, nonce).encode_to_vec(),
+            )
+            .await;
+    }
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "exactly threshold small nonces must not alert"
+    );
+
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_ping_event_with_nonce(51, addr, true, u32::MAX as u64).encode_to_vec(),
+        )
+        .await;
+    let alert = recv_alert(&mut harness.rx, Duration::from_secs(2)).await;
+    assert_eq!(
+        alert,
+        Alert::SmallPingNonce {
+            peer_id: 51,
+            addr: addr.to_string(),
+            count: threshold + 1,
+            threshold,
+        }
+    );
 
     harness.shutdown().await;
 }

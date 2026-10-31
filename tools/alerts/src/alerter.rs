@@ -36,6 +36,13 @@ pub enum Alert {
         addr: String,
         command: String,
     },
+    /// The peer sent too many pings with a nonce that fits into 32 bits
+    SmallPingNonce {
+        peer_id: u64,
+        addr: String,
+        count: usize,
+        threshold: usize,
+    },
 }
 
 impl std::fmt::Display for Alert {
@@ -85,6 +92,16 @@ impl std::fmt::Display for Alert {
                 f,
                 "HandshakeAfterVerack | peer_id={} addr={} | received {} after verack",
                 peer_id, addr, command
+            ),
+            Alert::SmallPingNonce {
+                peer_id,
+                addr,
+                count,
+                threshold,
+            } => write!(
+                f,
+                "SmallPingNonce | peer_id={} addr={} | {} pings with a nonce below 2^32 (threshold: {})",
+                peer_id, addr, count, threshold
             ),
         }
     }
