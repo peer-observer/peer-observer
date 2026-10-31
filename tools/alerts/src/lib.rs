@@ -35,6 +35,7 @@ use crate::heuristics::inbound_connection_drops::{
 use crate::heuristics::low_outbound_peers::{LowOutboundPeers, LowOutboundPeersArgs};
 use crate::heuristics::misbehaving_burst::{MisbehavingBurst, MisbehavingBurstArgs};
 use crate::heuristics::misbehaving_peer::MisbehavingPeer;
+use crate::heuristics::netgroup_fleet::{NetgroupFleet, NetgroupFleetArgs};
 use crate::heuristics::old_connection_drops::{OldConnectionDrops, OldConnectionDropsArgs};
 use crate::heuristics::ping_spammer::{PingSpammer, PingSpammerArgs};
 use crate::heuristics::repeated_getaddr::{RepeatedGetaddr, RepeatedGetaddrArgs};
@@ -100,6 +101,9 @@ pub struct Args {
     pub low_outbound_peers: LowOutboundPeersArgs,
 
     #[command(flatten)]
+    pub netgroup_fleet: NetgroupFleetArgs,
+
+    #[command(flatten)]
     pub inbound_connection_drops: InboundConnectionDropsArgs,
 
     #[command(flatten)]
@@ -144,6 +148,7 @@ impl Args {
             misbehaving_burst: MisbehavingBurstArgs::default(),
             high_ping_wait: HighPingWaitArgs::default(),
             low_outbound_peers: LowOutboundPeersArgs::default(),
+            netgroup_fleet: NetgroupFleetArgs::default(),
             inbound_connection_drops: InboundConnectionDropsArgs::default(),
             old_connection_drops: OldConnectionDropsArgs::default(),
             // Port 0 lets the system pick a free port. `run` reports it.
@@ -174,6 +179,7 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
         Box::new(MisbehavingBurst::new(args.misbehaving_burst.clone())),
         Box::new(HighPingWait::new(args.high_ping_wait.clone())),
         Box::new(LowOutboundPeers::new(args.low_outbound_peers.clone())),
+        Box::new(NetgroupFleet::new(args.netgroup_fleet.clone())),
         Box::new(InboundConnectionDrops::new(
             args.inbound_connection_drops.clone(),
         )),

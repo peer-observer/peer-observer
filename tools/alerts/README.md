@@ -206,6 +206,26 @@ Alert format (as rendered by `LoggingAlerter`):
 LowOutboundPeers | <count> full-relay outbound peers connected, below <threshold> for <seconds>s| <count> full-relay outbound peers connected (threshold: <threshold>)
 ```
 
+### NetgroupFleet
+
+Reports a netgroup, a /16 for IPv4 or a /32 for IPv6, that holds more than
+`--fleet-threshold` of our inbound connections according to `getpeerinfo`.
+Bitcoin Core spreads its outbound peers over netgroups so no single network can
+surround it, but anyone can open many inbound connections. A netgroup with an
+outsized share of our inbound slots is one operator running many nodes, or one
+party trying to occupy our slots. Only IPv4 and IPv6 peers are grouped: onion,
+I2P and CJDNS peers have no address to group by, inbound Tor connections all show
+up as localhost, and peers on private or loopback addresses are the operator's
+own tools. The alert fires once per netgroup until the group shrinks back to the
+threshold.
+
+This heuristic needs the rpc-extractor with `getpeerinfo` enabled.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+NetgroupFleet | <count> of <total> inbound peers are from <netgroup> (threshold: <threshold>)
+```
+
 ### MisbehavingBurst
 
 Reports when Bitcoin Core flags more than `--misbehaving-burst-threshold` peers
@@ -426,6 +446,8 @@ Options:
           Alert when fewer than this many full-relay outbound peers are connected [default: 8]
       --low-outbound-secs <LOW_OUTBOUND_SECS>
           Only alert once the outbound peer count has been low for this many seconds [default: 120]
+      --fleet-threshold <FLEET_THRESHOLD>
+          Number of inbound peers from one netgroup before alerting [default: 8]
       --inbound-drop-threshold <INBOUND_DROP_THRESHOLD>
           Number of inbound connections closed in the window before alerting [default: 20]
       --inbound-drop-window-secs <INBOUND_DROP_WINDOW_SECS>

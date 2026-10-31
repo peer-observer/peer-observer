@@ -146,12 +146,19 @@ pub enum Alert {
         window_secs: u64,
         threshold: usize,
     },
+    /// One netgroup holds many of our inbound connections
+    NetgroupFleet {
+        netgroup: String,
+        connections: usize,
+        inbound_total: usize,
+        threshold: usize,
+    },
 }
 
 impl Alert {
     /// The names of all alert kinds, as `name()` returns them. Used to create
     /// a metric series for every kind up front.
-    pub const NAMES: [&'static str; 21] = [
+    pub const NAMES: [&'static str; 22] = [
         "ping_spammer",
         "addr_spammer",
         "peer_disconnected",
@@ -173,6 +180,7 @@ impl Alert {
         "repeated_getaddr",
         "address_harvester",
         "connection_cycling",
+        "netgroup_fleet",
     ];
 
     /// A short, stable name for the kind of alert, used as metric label.
@@ -205,6 +213,7 @@ impl Alert {
             Alert::RepeatedGetaddr { .. } => "repeated_getaddr",
             Alert::AddressHarvester { .. } => "address_harvester",
             Alert::ConnectionCycling { .. } => "connection_cycling",
+            Alert::NetgroupFleet { .. } => "netgroup_fleet",
         }
     }
 
@@ -231,7 +240,8 @@ impl Alert {
             | Alert::HighPingWait { .. }
             | Alert::LowOutboundPeers { .. }
             | Alert::AddressHarvester { .. }
-            | Alert::ConnectionCycling { .. } => None,
+            | Alert::ConnectionCycling { .. }
+            | Alert::NetgroupFleet { .. } => None,
         }
     }
 }
@@ -451,6 +461,16 @@ impl std::fmt::Display for Alert {
                 f,
                 "ConnectionCycling | {} opened {} connections in last {}s (threshold: {})",
                 host, count, window_secs, threshold
+            ),
+            Alert::NetgroupFleet {
+                netgroup,
+                connections,
+                inbound_total,
+                threshold,
+            } => write!(
+                f,
+                "NetgroupFleet | {} of {} inbound peers are from {} (threshold: {})",
+                connections, inbound_total, netgroup, threshold
             ),
         }
     }

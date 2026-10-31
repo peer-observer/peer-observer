@@ -1982,3 +1982,66 @@ async fn test_connection_cycling() {
 
     harness.shutdown().await;
 }
+
+/// Verifies that more than --fleet-threshold inbound peers from one netgroup in
+/// a getpeerinfo result fire one NetgroupFleet alert
+#[tokio::test]
+async fn test_netgroup_fleet() {
+    let mut harness = TestHarness::new(|port| {
+        let mut args = make_test_args(port, AlertSettingsInTest::default());
+        args.netgroup_fleet.fleet_threshold = 2;
+        args.low_outbound_peers.min_outbound_peers = 0;
+        args
+    })
+    .await;
+    let subject = Subject::Rpc.to_string();
+
+    // make_peer_info puts every peer into 10.0.0.0/16
+    let mut infos = vec![
+        make_peer_info(1, "inbound", 0.0),
+        make_peer_info(2, "inbound", 0.0),
+        make_peer_info(3, "outbound-full-relay", 0.0),
+    ];
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_peer_infos_event(infos.clone()).encode_to_vec(),
+        )
+        .await;
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "two inbound peers from one netgroup are fine"
+    );
+
+    infos.push(make_peer_info(4, "inbound", 0.0));
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_peer_infos_event(infos.clone()).encode_to_vec(),
+        )
+        .await;
+    assert_eq!(
+        recv_alert(&mut harness.rx, Duration::from_secs(2)).await,
+        Alert::NetgroupFleet {
+            netgroup: "10.0.0.0/16".to_string(),
+            connections: 3,
+            inbound_total: 3,
+            threshold: 2,
+        }
+    );
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_peer_infos_event(infos).encode_to_vec(),
+        )
+        .await;
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "the group is reported once while it stays crowded"
+    );
+
+    harness.shutdown().await;
+}

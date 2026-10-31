@@ -24,6 +24,7 @@ pub mod inbound_connection_drops;
 pub mod low_outbound_peers;
 pub mod misbehaving_burst;
 pub mod misbehaving_peer;
+pub mod netgroup_fleet;
 pub mod old_connection_drops;
 pub mod ping_spammer;
 pub mod repeated_getaddr;
