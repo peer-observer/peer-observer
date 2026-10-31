@@ -836,8 +836,19 @@ async fn test_small_ping_nonce() {
     harness.shutdown().await;
 }
 
-/// Builds an inbound `version` message event with the given relay flag
+/// Builds an inbound `version` message event with the given relay flag and a
+/// sender clock that agrees with ours
 fn make_version_event(peer_id: u64, addr: &str, relay: bool) -> Event {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    make_version_event_at(peer_id, addr, relay, now)
+}
+
+/// Builds an inbound `version` message event carrying `timestamp` as the
+/// sender's time
+fn make_version_event_at(peer_id: u64, addr: &str, relay: bool, timestamp: i64) -> Event {
     let address = || Address {
         timestamp: 0,
         services: 1,
@@ -859,7 +870,7 @@ fn make_version_event(peer_id: u64, addr: &str, relay: bool) -> Event {
             msg: Some(Msg::Version(Version {
                 version: 70016,
                 services: 1,
-                timestamp: 0,
+                timestamp,
                 receiver: address(),
                 sender: address(),
                 nonce: 1,
@@ -1431,6 +1442,61 @@ async fn test_unknown_messages() {
             last_command: "baz".to_string(),
         }
     );
+
+    harness.shutdown().await;
+}
+
+/// Verifies that a version message with a time more than
+/// --version-time-offset-secs off fires a VersionTimeOffset alert, and one
+/// with a close time does not
+#[tokio::test]
+async fn test_version_time_offset() {
+    let mut harness =
+        TestHarness::new(|port| make_test_args(port, AlertSettingsInTest::default())).await;
+    let subject = Subject::NetMsg.to_string();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_version_event_at(110, "110.0.0.1:8333", true, now - 60).encode_to_vec(),
+        )
+        .await;
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "a minute of clock difference is fine"
+    );
+
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_version_event_at(111, "110.0.0.2:8333", true, now - 3600).encode_to_vec(),
+        )
+        .await;
+    match recv_alert(&mut harness.rx, Duration::from_secs(2)).await {
+        Alert::VersionTimeOffset {
+            peer_id,
+            addr,
+            offset_secs,
+            threshold_secs,
+            user_agent,
+        } => {
+            assert_eq!(peer_id, 111);
+            assert_eq!(addr, "110.0.0.2:8333");
+            assert!(
+                (-3605..=-3595).contains(&offset_secs),
+                "offset was {offset_secs}"
+            );
+            assert_eq!(threshold_secs, 600);
+            assert_eq!(user_agent, "/test/");
+        }
+        other => panic!("expected Alert::VersionTimeOffset, got {other:?}"),
+    }
 
     harness.shutdown().await;
 }

@@ -36,6 +36,7 @@ use crate::heuristics::small_ping_nonce::{SmallPingNonce, SmallPingNonceArgs};
 use crate::heuristics::stale_tip::{StaleTip, StaleTipArgs};
 use crate::heuristics::tx_relay_mismatch::TxRelayMismatch;
 use crate::heuristics::unknown_messages::{UnknownMessages, UnknownMessagesArgs};
+use crate::heuristics::version_time_offset::{VersionTimeOffset, VersionTimeOffsetArgs};
 use crate::heuristics::{connection_event, inbound_message, Context, Heuristic, Peer, Peers};
 
 /// How often heuristics get to act on time passing without any event.
@@ -59,6 +60,9 @@ pub struct Args {
 
     #[command(flatten)]
     pub unknown_messages: UnknownMessagesArgs,
+
+    #[command(flatten)]
+    pub version_time_offset: VersionTimeOffsetArgs,
 
     #[command(flatten)]
     pub slow_block: SlowBlockArgs,
@@ -101,6 +105,7 @@ impl Args {
             addr_spammer: AddrSpammerArgs::default(),
             small_ping_nonce: SmallPingNonceArgs::default(),
             unknown_messages: UnknownMessagesArgs::default(),
+            version_time_offset: VersionTimeOffsetArgs::default(),
             slow_block: SlowBlockArgs::default(),
             stale_tip: StaleTipArgs::default(),
             inbound_connection_drops: InboundConnectionDropsArgs::default(),
@@ -123,6 +128,7 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
         Box::new(SmallPingNonce::new(args.small_ping_nonce.clone())),
         Box::new(TxRelayMismatch::default()),
         Box::new(UnknownMessages::new(args.unknown_messages.clone())),
+        Box::new(VersionTimeOffset::new(args.version_time_offset.clone())),
         Box::new(SlowBlock::new(args.slow_block.clone())),
         Box::new(StaleTip::new(args.stale_tip.clone(), Instant::now())),
         Box::new(InboundConnectionDrops::new(

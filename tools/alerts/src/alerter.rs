@@ -90,12 +90,20 @@ pub enum Alert {
         threshold: usize,
         last_command: String,
     },
+    /// The time in the peer's version message is far off ours
+    VersionTimeOffset {
+        peer_id: u64,
+        addr: String,
+        offset_secs: i64,
+        threshold_secs: u64,
+        user_agent: String,
+    },
 }
 
 impl Alert {
     /// The names of all alert kinds, as `name()` returns them. Used to create
     /// a metric series for every kind up front.
-    pub const NAMES: [&'static str; 13] = [
+    pub const NAMES: [&'static str; 14] = [
         "ping_spammer",
         "addr_spammer",
         "peer_disconnected",
@@ -109,6 +117,7 @@ impl Alert {
         "inbound_connection_drops",
         "old_connection_drops",
         "unknown_messages",
+        "version_time_offset",
     ];
 
     /// A short, stable name for the kind of alert, used as metric label.
@@ -133,6 +142,7 @@ impl Alert {
             Alert::InboundConnectionDrops { .. } => "inbound_connection_drops",
             Alert::OldConnectionDrops { .. } => "old_connection_drops",
             Alert::UnknownMessages { .. } => "unknown_messages",
+            Alert::VersionTimeOffset { .. } => "version_time_offset",
         }
     }
 
@@ -145,7 +155,8 @@ impl Alert {
             | Alert::HandshakeAfterVerack { peer_id, addr, .. }
             | Alert::SmallPingNonce { peer_id, addr, .. }
             | Alert::TxRelayMismatch { peer_id, addr, .. }
-            | Alert::UnknownMessages { peer_id, addr, .. } => Some((*peer_id, addr)),
+            | Alert::UnknownMessages { peer_id, addr, .. }
+            | Alert::VersionTimeOffset { peer_id, addr, .. } => Some((*peer_id, addr)),
             Alert::PeerDisconnected { .. }
             | Alert::SlowBlock { .. }
             | Alert::StaleTip { .. }
@@ -292,6 +303,17 @@ impl std::fmt::Display for Alert {
                 f,
                 "UnknownMessages | peer_id={} addr={} | {} unknown messages (threshold: {}), last: {}",
                 peer_id, addr, count, threshold, last_command
+            ),
+            Alert::VersionTimeOffset {
+                peer_id,
+                addr,
+                offset_secs,
+                threshold_secs,
+                user_agent: _,
+            } => write!(
+                f,
+                "VersionTimeOffset | peer_id={} addr={} | version time off by {}s (threshold: {}s)",
+                peer_id, addr, offset_secs, threshold_secs
             ),
         }
     }

@@ -24,6 +24,7 @@ pub mod small_ping_nonce;
 pub mod stale_tip;
 pub mod tx_relay_mismatch;
 pub mod unknown_messages;
+pub mod version_time_offset;
 
 /// What the tool knows about a peer, independent of any heuristic.
 pub struct Peer {
@@ -344,8 +345,15 @@ pub mod test_util {
         }))
     }
 
-    /// An inbound `version` message from `peer_id` with the given relay flag.
+    /// An inbound `version` message from `peer_id` with the given relay flag,
+    /// sent with a clock that agrees with ours.
     pub fn version(peer_id: u64, relay: bool) -> Event {
+        version_at(peer_id, relay, EVENT_TIMESTAMP_SECS as i64)
+    }
+
+    /// An inbound `version` message from `peer_id` carrying `timestamp` as
+    /// the sender's time.
+    pub fn version_at(peer_id: u64, relay: bool, timestamp: i64) -> Event {
         let address = || Address {
             timestamp: 0,
             services: 1,
@@ -359,7 +367,7 @@ pub mod test_util {
             Msg::Version(Version {
                 version: 70016,
                 services: 1,
-                timestamp: 0,
+                timestamp,
                 receiver: address(),
                 sender: address(),
                 nonce: 1,

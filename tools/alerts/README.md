@@ -108,6 +108,20 @@ Alert format (as rendered by `LoggingAlerter`):
 UnknownMessages | peer_id=<id> addr=<addr> | <count> unknown messages (threshold: <threshold>), last: <command>
 ```
 
+### VersionTimeOffset
+
+Flags a peer whose `version` message carries a time more than
+`--version-time-offset-secs` off the time we received it. Bitcoin Core compares
+these times with its own clock and warns the operator when many peers are more
+than ten minutes off, since a wrong clock breaks block validation. Seen from the
+other side, a peer that far off either runs a broken setup or sends made-up
+version messages. The alert carries the signed offset.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+VersionTimeOffset | peer_id=<id> addr=<addr> | version time off by <seconds>s (threshold: <threshold>s)
+```
+
 ## Node heuristics
 
 These look at the node itself rather than at a single peer.
@@ -254,6 +268,8 @@ Options:
           Number of pings with a nonce below 2^32 from one peer before alerting [default: 3]
       --unknown-message-threshold <UNKNOWN_MESSAGE_THRESHOLD>
           Number of unknown messages from one peer before alerting [default: 3]
+      --version-time-offset-secs <VERSION_TIME_OFFSET_SECS>
+          Alert when a peer's version message time is off by more than this many seconds [default: 600]
       --slow-block-secs <SLOW_BLOCK_SECS>
           Alert when connecting a block takes longer than this many seconds [default: 60]
       --stale-tip-secs <STALE_TIP_SECS>
