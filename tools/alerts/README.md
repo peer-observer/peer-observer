@@ -95,6 +95,23 @@ TxRelayMismatch | peer_id=<id> addr=<addr> | received <command> with transaction
 
 There are no settings for this heuristic.
 
+## Node heuristics
+
+These look at the node itself rather than at a single peer.
+
+### SlowBlock
+
+Reports a block that took Bitcoin Core longer than `--slow-block-secs` to
+connect. Connecting a block means checking all its transactions and updating
+the UTXO set, which takes well under a second for most blocks on a healthy
+node. A block that takes much longer points at an unusual block, a slow disk,
+or a node under load. Every slow block is reported.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+SlowBlock | height=<height> hash=<hash> | connected in <seconds>s (threshold: <threshold>s), <n> transactions, <n> inputs, <n> sigops
+```
+
 ## Peer lifecycle
 
 When a peer that one of the per-peer heuristics flagged disconnects (either via a
@@ -140,6 +157,8 @@ Options:
           Sliding window size for addr detection (seconds) [default: 60]
       --small-ping-nonce-threshold <SMALL_PING_NONCE_THRESHOLD>
           Number of pings with a nonce below 2^32 from one peer before alerting [default: 3]
+      --slow-block-secs <SLOW_BLOCK_SECS>
+          Alert when connecting a block takes longer than this many seconds [default: 60]
   -l, --log-level <LOG_LEVEL>
           [default: DEBUG]
       --peer-stale-secs <PEER_STALE_SECS>

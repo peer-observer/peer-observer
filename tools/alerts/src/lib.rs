@@ -22,6 +22,7 @@ use crate::heuristics::addr_spammer::{AddrSpammer, AddrSpammerArgs};
 use crate::heuristics::handshake_after_verack::HandshakeAfterVerack;
 use crate::heuristics::misbehaving_peer::MisbehavingPeer;
 use crate::heuristics::ping_spammer::{PingSpammer, PingSpammerArgs};
+use crate::heuristics::slow_block::{SlowBlock, SlowBlockArgs};
 use crate::heuristics::small_ping_nonce::{SmallPingNonce, SmallPingNonceArgs};
 use crate::heuristics::tx_relay_mismatch::TxRelayMismatch;
 use crate::heuristics::{connection_event, inbound_message, Context, Heuristic, Peer, Peers};
@@ -41,6 +42,9 @@ pub struct Args {
 
     #[command(flatten)]
     pub small_ping_nonce: SmallPingNonceArgs,
+
+    #[command(flatten)]
+    pub slow_block: SlowBlockArgs,
 
     #[arg(short, long, default_value_t = shared::log::Level::Debug)]
     pub log_level: shared::log::Level,
@@ -66,6 +70,7 @@ impl Args {
             ping_spammer: PingSpammerArgs::default(),
             addr_spammer: AddrSpammerArgs::default(),
             small_ping_nonce: SmallPingNonceArgs::default(),
+            slow_block: SlowBlockArgs::default(),
             log_level: shared::log::Level::Trace,
             peer_stale_secs: 300,
         }
@@ -81,6 +86,7 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
         Box::new(HandshakeAfterVerack::default()),
         Box::new(SmallPingNonce::new(args.small_ping_nonce.clone())),
         Box::new(TxRelayMismatch::default()),
+        Box::new(SlowBlock::new(args.slow_block.clone())),
     ]
 }
 
@@ -179,7 +185,11 @@ pub async fn run<A: Alerter>(
         .subscribe(Subject::NetConn.to_string())
         .await
         .context("subscribing to the NetConn subject")?;
-    let mut sub = shared::futures::stream::select(netmsg_sub, netconn_sub);
+    let validation_sub = nc
+        .subscribe(Subject::Validation.to_string())
+        .await
+        .context("subscribing to the Validation subject")?;
+    let mut sub = shared::futures::stream::select_all([netmsg_sub, netconn_sub, validation_sub]);
     log::info!("Connected to NATS-server at {}", args.nats.address);
 
     let mut state = State::new(&args);

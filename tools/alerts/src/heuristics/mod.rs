@@ -7,6 +7,7 @@ use crate::alerter::Alert;
 use shared::protobuf::ebpf_extractor::connection::connection_event;
 use shared::protobuf::ebpf_extractor::ebpf::EbpfEvent;
 use shared::protobuf::ebpf_extractor::message::MessageEvent;
+use shared::protobuf::ebpf_extractor::validation::{validation_event, BlockConnected};
 use shared::protobuf::event::event::PeerObserverEvent;
 use shared::protobuf::event::Event;
 use std::collections::{HashMap, VecDeque};
@@ -16,6 +17,7 @@ pub mod addr_spammer;
 pub mod handshake_after_verack;
 pub mod misbehaving_peer;
 pub mod ping_spammer;
+pub mod slow_block;
 pub mod small_ping_nonce;
 pub mod tx_relay_mismatch;
 
@@ -72,6 +74,17 @@ pub fn inbound_message(event: &Event) -> Option<&MessageEvent> {
 pub fn connection_event(event: &Event) -> Option<&connection_event::Event> {
     match ebpf_event(event) {
         Some(EbpfEvent::Connection(conn)) => conn.event.as_ref(),
+        _ => None,
+    }
+}
+
+/// Returns the block Bitcoin Core connected in `event`, if it is such an event.
+pub fn block_connected(event: &Event) -> Option<&BlockConnected> {
+    match ebpf_event(event) {
+        Some(EbpfEvent::Validation(validation)) => match &validation.event {
+            Some(validation_event::Event::BlockConnected(block)) => Some(block),
+            None => None,
+        },
         _ => None,
     }
 }
@@ -172,6 +185,9 @@ pub mod test_util {
     use shared::protobuf::ebpf_extractor::ebpf::EbpfEvent;
     use shared::protobuf::ebpf_extractor::message::message_event::Msg;
     use shared::protobuf::ebpf_extractor::message::{Inv, MessageEvent, Metadata, Version};
+    use shared::protobuf::ebpf_extractor::validation::{
+        validation_event, BlockConnected, ValidationEvent,
+    };
     use shared::protobuf::ebpf_extractor::Ebpf;
     use shared::protobuf::event::event::PeerObserverEvent;
     use shared::protobuf::event::Event;
@@ -186,6 +202,21 @@ pub mod test_util {
                 ebpf_event: Some(ebpf_event),
             })),
         }
+    }
+
+    /// Bitcoin Core connected a block at `height`. Its hash is the height
+    /// repeated, and connecting it took `connection_time_ns`.
+    pub fn block(height: i32, connection_time_ns: u64) -> Event {
+        ebpf(EbpfEvent::Validation(ValidationEvent {
+            event: Some(validation_event::Event::BlockConnected(BlockConnected {
+                hash: vec![height as u8; 32],
+                height,
+                transactions: 10,
+                inputs: 20,
+                sigops: 30,
+                connection_time: connection_time_ns,
+            })),
+        }))
     }
 
     /// A connection event.

@@ -15,6 +15,7 @@ use shared::{
             },
             ebpf,
             message::{self, message_event::Msg, Addr, AddrV2, Inv, Metadata, Ping, Version},
+            validation::{self, BlockConnected, ValidationEvent},
             Ebpf,
         },
         event::{event::PeerObserverEvent, Event},
@@ -925,6 +926,73 @@ async fn test_tx_relay_mismatch() {
     assert!(
         expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
         "the peer is only reported once"
+    );
+
+    harness.shutdown().await;
+}
+
+/// Builds a BlockConnected validation event
+fn make_block_connected_event(height: i32, connection_time_ns: u64) -> Event {
+    Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+        ebpf_event: Some(ebpf::EbpfEvent::Validation(ValidationEvent {
+            event: Some(validation::validation_event::Event::BlockConnected(
+                BlockConnected {
+                    hash: vec![0xab; 32],
+                    height,
+                    transactions: 2000,
+                    inputs: 5000,
+                    sigops: 8000,
+                    connection_time: connection_time_ns,
+                },
+            )),
+        })),
+    }))
+    .unwrap()
+}
+
+/// Verifies that only blocks taking longer than --slow-block-secs to connect
+/// are reported, with the block details
+#[tokio::test]
+async fn test_slow_block() {
+    let mut harness = TestHarness::new(|port| {
+        let mut args = make_test_args(port, AlertSettingsInTest::default());
+        args.slow_block.slow_block_secs = 1;
+        args
+    })
+    .await;
+    let subject = Subject::Validation.to_string();
+
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_block_connected_event(800_000, 500_000_000).encode_to_vec(),
+        )
+        .await;
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "a block connected in half a second is fine"
+    );
+
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_block_connected_event(800_001, 2_500_000_000).encode_to_vec(),
+        )
+        .await;
+    let alert = recv_alert(&mut harness.rx, Duration::from_secs(2)).await;
+    assert_eq!(
+        alert,
+        Alert::SlowBlock {
+            height: 800_001,
+            hash: "abababababababababababababababababababababababababababababababab".to_string(),
+            connection_time_ms: 2500,
+            threshold_secs: 1,
+            transactions: 2000,
+            inputs: 5000,
+            sigops: 8000,
+        }
     );
 
     harness.shutdown().await;

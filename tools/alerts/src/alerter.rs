@@ -49,6 +49,16 @@ pub enum Alert {
         addr: String,
         command: String,
     },
+    /// Bitcoin Core took longer than the threshold to connect a block
+    SlowBlock {
+        height: i32,
+        hash: String,
+        connection_time_ms: u64,
+        threshold_secs: u64,
+        transactions: i64,
+        inputs: i32,
+        sigops: i64,
+    },
 }
 
 impl std::fmt::Display for Alert {
@@ -117,6 +127,25 @@ impl std::fmt::Display for Alert {
                 f,
                 "TxRelayMismatch | peer_id={} addr={} | received {} with transactions after relay=false in its version message",
                 peer_id, addr, command
+            ),
+            Alert::SlowBlock {
+                height,
+                hash,
+                connection_time_ms,
+                threshold_secs,
+                transactions,
+                inputs,
+                sigops,
+            } => write!(
+                f,
+                "SlowBlock | height={} hash={} | connected in {:.1}s (threshold: {}s), {} transactions, {} inputs, {} sigops",
+                height,
+                hash,
+                *connection_time_ms as f64 / 1000.0,
+                threshold_secs,
+                transactions,
+                inputs,
+                sigops
             ),
         }
     }
