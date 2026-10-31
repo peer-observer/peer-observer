@@ -29,6 +29,7 @@ use crate::heuristics::high_ping_wait::{HighPingWait, HighPingWaitArgs};
 use crate::heuristics::inbound_connection_drops::{
     InboundConnectionDrops, InboundConnectionDropsArgs,
 };
+use crate::heuristics::low_outbound_peers::{LowOutboundPeers, LowOutboundPeersArgs};
 use crate::heuristics::misbehaving_burst::{MisbehavingBurst, MisbehavingBurstArgs};
 use crate::heuristics::misbehaving_peer::MisbehavingPeer;
 use crate::heuristics::old_connection_drops::{OldConnectionDrops, OldConnectionDropsArgs};
@@ -79,6 +80,9 @@ pub struct Args {
     pub high_ping_wait: HighPingWaitArgs,
 
     #[command(flatten)]
+    pub low_outbound_peers: LowOutboundPeersArgs,
+
+    #[command(flatten)]
     pub inbound_connection_drops: InboundConnectionDropsArgs,
 
     #[command(flatten)]
@@ -118,6 +122,7 @@ impl Args {
             stale_tip: StaleTipArgs::default(),
             misbehaving_burst: MisbehavingBurstArgs::default(),
             high_ping_wait: HighPingWaitArgs::default(),
+            low_outbound_peers: LowOutboundPeersArgs::default(),
             inbound_connection_drops: InboundConnectionDropsArgs::default(),
             old_connection_drops: OldConnectionDropsArgs::default(),
             // Port 0 lets the system pick a free port. `run` reports it.
@@ -143,6 +148,7 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
         Box::new(StaleTip::new(args.stale_tip.clone(), Instant::now())),
         Box::new(MisbehavingBurst::new(args.misbehaving_burst.clone())),
         Box::new(HighPingWait::new(args.high_ping_wait.clone())),
+        Box::new(LowOutboundPeers::new(args.low_outbound_peers.clone())),
         Box::new(InboundConnectionDrops::new(
             args.inbound_connection_drops.clone(),
         )),

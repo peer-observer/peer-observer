@@ -111,12 +111,18 @@ pub enum Alert {
         wait_secs: u64,
         threshold_peers: usize,
     },
+    /// The node has had fewer full-relay outbound peers than it should for a while
+    LowOutboundPeers {
+        outbound: usize,
+        threshold: usize,
+        below_for_secs: u64,
+    },
 }
 
 impl Alert {
     /// The names of all alert kinds, as `name()` returns them. Used to create
     /// a metric series for every kind up front.
-    pub const NAMES: [&'static str; 16] = [
+    pub const NAMES: [&'static str; 17] = [
         "ping_spammer",
         "addr_spammer",
         "peer_disconnected",
@@ -133,6 +139,7 @@ impl Alert {
         "version_time_offset",
         "misbehaving_burst",
         "high_ping_wait",
+        "low_outbound_peers",
     ];
 
     /// A short, stable name for the kind of alert, used as metric label.
@@ -160,6 +167,7 @@ impl Alert {
             Alert::VersionTimeOffset { .. } => "version_time_offset",
             Alert::MisbehavingBurst { .. } => "misbehaving_burst",
             Alert::HighPingWait { .. } => "high_ping_wait",
+            Alert::LowOutboundPeers { .. } => "low_outbound_peers",
         }
     }
 
@@ -181,7 +189,8 @@ impl Alert {
             | Alert::InboundConnectionDrops { .. }
             | Alert::OldConnectionDrops { .. }
             | Alert::MisbehavingBurst { .. }
-            | Alert::HighPingWait { .. } => None,
+            | Alert::HighPingWait { .. }
+            | Alert::LowOutboundPeers { .. } => None,
         }
     }
 }
@@ -352,6 +361,15 @@ impl std::fmt::Display for Alert {
                 f,
                 "HighPingWait | {} of {} peers waiting more than {}s for a pong (threshold: {} peers)",
                 peers, total_peers, wait_secs, threshold_peers
+            ),
+            Alert::LowOutboundPeers {
+                outbound,
+                threshold,
+                below_for_secs,
+            } => write!(
+                f,
+                "LowOutboundPeers | {} full-relay outbound peers connected, below {} for {}s",
+                outbound, threshold, below_for_secs
             ),
         }
     }

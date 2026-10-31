@@ -1615,6 +1615,8 @@ async fn test_high_ping_wait() {
     let mut harness = TestHarness::new(|port| {
         let mut args = make_test_args(port, AlertSettingsInTest::default());
         args.high_ping_wait.ping_wait_peers = 2;
+        // The polls below have one outbound peer, keep the outbound check quiet
+        args.low_outbound_peers.min_outbound_peers = 0;
         args
     })
     .await;
@@ -1662,6 +1664,69 @@ async fn test_high_ping_wait() {
             subject.clone(),
             make_peer_infos_event(infos).encode_to_vec(),
         )
+        .await;
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "an ongoing episode is reported once"
+    );
+
+    harness.shutdown().await;
+}
+
+/// Verifies that fewer than --min-outbound-peers full-relay outbound peers in
+/// two getpeerinfo results in a row fire one LowOutboundPeers alert
+#[tokio::test]
+async fn test_low_outbound_peers() {
+    let mut harness = TestHarness::new(|port| {
+        let mut args = make_test_args(port, AlertSettingsInTest::default());
+        args.low_outbound_peers.min_outbound_peers = 2;
+        args.low_outbound_peers.low_outbound_secs = 1;
+        args
+    })
+    .await;
+    let subject = Subject::Rpc.to_string();
+
+    let low = vec![
+        make_peer_info(1, "outbound-full-relay", 0.0),
+        make_peer_info(2, "block-relay-only", 0.0),
+        make_peer_info(3, "inbound", 0.0),
+    ];
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_peer_infos_event(low.clone()).encode_to_vec(),
+        )
+        .await;
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "a poll below the threshold must not alert right away"
+    );
+    sleep(Duration::from_millis(600)).await;
+
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_peer_infos_event(low.clone()).encode_to_vec(),
+        )
+        .await;
+    match recv_alert(&mut harness.rx, Duration::from_secs(2)).await {
+        Alert::LowOutboundPeers {
+            outbound,
+            threshold,
+            below_for_secs,
+        } => {
+            assert_eq!(outbound, 1);
+            assert_eq!(threshold, 2);
+            assert!(below_for_secs >= 1);
+        }
+        other => panic!("expected Alert::LowOutboundPeers, got {other:?}"),
+    }
+
+    harness
+        .publisher
+        .publish(subject.clone(), make_peer_infos_event(low).encode_to_vec())
         .await;
     assert!(
         expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,

@@ -156,6 +156,24 @@ Alert format (as rendered by `LoggingAlerter`):
 HighPingWait | <count> of <total> peers waiting more than <secs>s for a pong (threshold: <threshold> peers)
 ```
 
+### LowOutboundPeers
+
+Reports when `getpeerinfo` has shown fewer than `--min-outbound-peers` full-relay
+outbound peers for `--low-outbound-secs`. Bitcoin Core keeps eight of them and
+replaces a lost one on its own, but finding a new peer can take a while, so a
+dip to seven for half a minute is normal and ignored. Staying below for minutes
+means the node cannot find or reach peers: the network is down, the addrman is
+poisoned, or something blocks outbound connections. Outbound peers are the ones
+we chose ourselves, so losing them also makes the node easier to eclipse. The
+alert fires once per episode.
+
+This heuristic needs the rpc-extractor with `getpeerinfo` enabled.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+LowOutboundPeers | <count> full-relay outbound peers connected, below <threshold> for <seconds>s| <count> full-relay outbound peers connected (threshold: <threshold>)
+```
+
 ### MisbehavingBurst
 
 Reports when Bitcoin Core flags more than `--misbehaving-burst-threshold` peers
@@ -313,6 +331,10 @@ Options:
           A ping counts as waiting too long after this many seconds without a pong [default: 5]
       --ping-wait-peers <PING_WAIT_PEERS>
           Number of peers waiting too long for a pong before alerting [default: 10]
+      --min-outbound-peers <MIN_OUTBOUND_PEERS>
+          Alert when fewer than this many full-relay outbound peers are connected [default: 8]
+      --low-outbound-secs <LOW_OUTBOUND_SECS>
+          Only alert once the outbound peer count has been low for this many seconds [default: 120]
       --inbound-drop-threshold <INBOUND_DROP_THRESHOLD>
           Number of inbound connections closed in the window before alerting [default: 20]
       --inbound-drop-window-secs <INBOUND_DROP_WINDOW_SECS>
