@@ -65,10 +65,18 @@ fn read_message<M: Message + Default>(
         None => return Ok(None),
     };
 
+    // Read at most `len` bytes instead of allocating `len` up front, so the
+    // buffer only grows with the data that is actually there. A corrupt length
+    // prefix then fails as a truncated message instead of allocating whatever
+    // it claims.
     buf.clear();
-    buf.resize(len, 0);
-
-    reader.read_exact(buf)?;
+    let read = reader.by_ref().take(len as u64).read_to_end(buf)?;
+    if read < len {
+        return Err(io::Error::new(
+            ErrorKind::UnexpectedEof,
+            format!("message truncated: expected {len} bytes, got {read}"),
+        ));
+    }
 
     let msg = M::decode(&buf[..]).map_err(io::Error::other)?;
 
@@ -162,5 +170,33 @@ mod tests {
         let mut buf = Vec::new();
         let msg: Option<ArchiveHeader> = read_message(&mut reader, &mut buf).unwrap();
         assert!(msg.is_none());
+    }
+
+    #[test]
+    fn errors_on_truncated_message() {
+        // The prefix promises ten bytes but only four follow.
+        let mut bytes = vec![0x0A];
+        bytes.extend_from_slice(&[0; 4]);
+        let mut reader = BufReader::new(Cursor::new(bytes));
+        let mut buf = Vec::new();
+        let err = read_message::<ArchiveHeader>(&mut reader, &mut buf).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
+        assert_eq!(
+            err.to_string(),
+            "message truncated: expected 10 bytes, got 4"
+        );
+    }
+
+    #[test]
+    fn errors_on_length_prefix_beyond_data() {
+        // A corrupt prefix claiming far more bytes than the archive holds is a
+        // truncated message, not a reason to allocate the claimed length.
+        let mut bytes = Vec::new();
+        shared::prost::encode_length_delimiter(usize::MAX, &mut bytes).unwrap();
+        bytes.extend_from_slice(&[0; 4]);
+        let mut reader = BufReader::new(Cursor::new(bytes));
+        let mut buf = Vec::new();
+        let err = read_message::<ArchiveHeader>(&mut reader, &mut buf).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
     }
 }
