@@ -1797,3 +1797,66 @@ async fn test_tx_spy() {
 
     harness.shutdown().await;
 }
+
+/// Builds an inbound `getaddr` message event
+fn make_getaddr_event(peer_id: u64, addr: &str) -> Event {
+    Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+        ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
+            meta: Metadata {
+                peer_id,
+                addr: addr.to_string(),
+                conn_type: 1,
+                command: "getaddr".to_string(),
+                inbound: true,
+                size: 0,
+            },
+            msg: Some(Msg::Getaddr(true)),
+        })),
+    }))
+    .unwrap()
+}
+
+/// Verifies that a second getaddr from the same peer fires one RepeatedGetaddr
+/// alert and the first one does not
+#[tokio::test]
+async fn test_repeated_getaddr() {
+    let mut harness =
+        TestHarness::new(|port| make_test_args(port, AlertSettingsInTest::default())).await;
+    let subject = Subject::NetMsg.to_string();
+    let addr = "150.0.0.1:8333";
+
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_getaddr_event(150, addr).encode_to_vec(),
+        )
+        .await;
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "one getaddr is normal"
+    );
+
+    publish_n(
+        &harness.publisher,
+        &subject,
+        &make_getaddr_event(150, addr),
+        2,
+    )
+    .await;
+    assert_eq!(
+        recv_alert(&mut harness.rx, Duration::from_secs(2)).await,
+        Alert::RepeatedGetaddr {
+            peer_id: 150,
+            addr: addr.to_string(),
+            count: 2,
+            threshold: 1,
+        }
+    );
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "the peer is reported once"
+    );
+
+    harness.shutdown().await;
+}

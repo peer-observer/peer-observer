@@ -24,6 +24,7 @@ pub mod misbehaving_burst;
 pub mod misbehaving_peer;
 pub mod old_connection_drops;
 pub mod ping_spammer;
+pub mod repeated_getaddr;
 pub mod slow_block;
 pub mod small_ping_nonce;
 pub mod stale_tip;

@@ -140,6 +140,24 @@ Alert format (as rendered by `LoggingAlerter`):
 ```
 TxSpy | peer_id=<id> addr=<addr> | connected for <seconds>s with transaction relay on, never sent an inv or tx
 ```
+
+### RepeatedGetaddr
+
+Flags a peer that sends more than `--getaddr-threshold` `getaddr` messages. A
+node sends one `getaddr` after the handshake to learn about other nodes. Bitcoin
+Core answers only the first one per connection and ignores the rest, so a second
+one gains an honest node nothing. Peers that keep asking are address crawlers.
+Each peer is reported once.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+RepeatedGetaddr | peer_id=<id> addr=<addr> | <count> getaddr messages (threshold: <threshold>)
+```
+
+## Node heuristics
+
+These look at the node itself rather than at a single peer.
+
 ### SlowBlock
 
 Reports a block that took Bitcoin Core longer than `--slow-block-secs` to
@@ -340,6 +358,8 @@ Options:
           Alert when a peer's version message time is off by more than this many seconds [default: 600]
       --tx-spy-secs <TX_SPY_SECS>
           Alert when a peer with transaction relay on has sent no inv or tx after this many seconds [default: 600]
+      --getaddr-threshold <GETADDR_THRESHOLD>
+          Number of getaddr messages from one peer before alerting [default: 1]
       --slow-block-secs <SLOW_BLOCK_SECS>
           Alert when connecting a block takes longer than this many seconds [default: 60]
       --stale-tip-secs <STALE_TIP_SECS>

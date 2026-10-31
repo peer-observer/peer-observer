@@ -35,6 +35,7 @@ use crate::heuristics::misbehaving_burst::{MisbehavingBurst, MisbehavingBurstArg
 use crate::heuristics::misbehaving_peer::MisbehavingPeer;
 use crate::heuristics::old_connection_drops::{OldConnectionDrops, OldConnectionDropsArgs};
 use crate::heuristics::ping_spammer::{PingSpammer, PingSpammerArgs};
+use crate::heuristics::repeated_getaddr::{RepeatedGetaddr, RepeatedGetaddrArgs};
 use crate::heuristics::slow_block::{SlowBlock, SlowBlockArgs};
 use crate::heuristics::small_ping_nonce::{SmallPingNonce, SmallPingNonceArgs};
 use crate::heuristics::stale_tip::{StaleTip, StaleTipArgs};
@@ -71,6 +72,9 @@ pub struct Args {
 
     #[command(flatten)]
     pub tx_spy: TxSpyArgs,
+
+    #[command(flatten)]
+    pub repeated_getaddr: RepeatedGetaddrArgs,
 
     #[command(flatten)]
     pub slow_block: SlowBlockArgs,
@@ -124,6 +128,7 @@ impl Args {
             unknown_messages: UnknownMessagesArgs::default(),
             version_time_offset: VersionTimeOffsetArgs::default(),
             tx_spy: TxSpyArgs::default(),
+            repeated_getaddr: RepeatedGetaddrArgs::default(),
             slow_block: SlowBlockArgs::default(),
             stale_tip: StaleTipArgs::default(),
             misbehaving_burst: MisbehavingBurstArgs::default(),
@@ -151,6 +156,7 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
         Box::new(UnknownMessages::new(args.unknown_messages.clone())),
         Box::new(VersionTimeOffset::new(args.version_time_offset.clone())),
         Box::new(TxSpy::new(args.tx_spy.clone())),
+        Box::new(RepeatedGetaddr::new(args.repeated_getaddr.clone())),
         Box::new(SlowBlock::new(args.slow_block.clone())),
         Box::new(StaleTip::new(args.stale_tip.clone(), Instant::now())),
         Box::new(MisbehavingBurst::new(args.misbehaving_burst.clone())),

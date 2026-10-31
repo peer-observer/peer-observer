@@ -124,12 +124,19 @@ pub enum Alert {
         addr: String,
         connected_secs: u64,
     },
+    /// The peer asked for addresses more than once
+    RepeatedGetaddr {
+        peer_id: u64,
+        addr: String,
+        count: usize,
+        threshold: usize,
+    },
 }
 
 impl Alert {
     /// The names of all alert kinds, as `name()` returns them. Used to create
     /// a metric series for every kind up front.
-    pub const NAMES: [&'static str; 18] = [
+    pub const NAMES: [&'static str; 19] = [
         "ping_spammer",
         "addr_spammer",
         "peer_disconnected",
@@ -148,6 +155,7 @@ impl Alert {
         "high_ping_wait",
         "low_outbound_peers",
         "tx_spy",
+        "repeated_getaddr",
     ];
 
     /// A short, stable name for the kind of alert, used as metric label.
@@ -177,6 +185,7 @@ impl Alert {
             Alert::HighPingWait { .. } => "high_ping_wait",
             Alert::LowOutboundPeers { .. } => "low_outbound_peers",
             Alert::TxSpy { .. } => "tx_spy",
+            Alert::RepeatedGetaddr { .. } => "repeated_getaddr",
         }
     }
 
@@ -191,7 +200,8 @@ impl Alert {
             | Alert::TxRelayMismatch { peer_id, addr, .. }
             | Alert::UnknownMessages { peer_id, addr, .. }
             | Alert::VersionTimeOffset { peer_id, addr, .. }
-            | Alert::TxSpy { peer_id, addr, .. } => Some((*peer_id, addr)),
+            | Alert::TxSpy { peer_id, addr, .. }
+            | Alert::RepeatedGetaddr { peer_id, addr, .. } => Some((*peer_id, addr)),
             Alert::PeerDisconnected { .. }
             | Alert::SlowBlock { .. }
             | Alert::StaleTip { .. }
@@ -389,6 +399,16 @@ impl std::fmt::Display for Alert {
                 f,
                 "TxSpy | peer_id={} addr={} | connected for {}s with transaction relay on, never sent an inv or tx",
                 peer_id, addr, connected_secs
+            ),
+            Alert::RepeatedGetaddr {
+                peer_id,
+                addr,
+                count,
+                threshold,
+            } => write!(
+                f,
+                "RepeatedGetaddr | peer_id={} addr={} | {} getaddr messages (threshold: {})",
+                peer_id, addr, count, threshold
             ),
         }
     }
