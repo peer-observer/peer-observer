@@ -220,6 +220,25 @@ Alert format (as rendered by `LoggingAlerter`):
 MisbehavingBurst | <count> peers reported as misbehaving in last <secs>s (threshold: <threshold>)
 ```
 
+### AddressHarvester
+
+Reports a netgroup, a /16 for IPv4 or a /32 for IPv6, from which more than
+`--harvester-threshold` connections within `--harvester-window-secs` sent a
+`getaddr` and closed within `--harvester-max-age-secs`. That is what an address
+crawler looks like: connect, finish the handshake, collect addresses, leave. One
+such connection is nothing to report, and the demo node sees several per minute,
+so they are counted per netgroup. Inbound Tor connections all arrive from
+localhost and cannot be told apart, so they count as one group named
+`onion inbound`. The operator's own local tools are left out. A group that keeps
+harvesting is reported at most once per `--harvester-repeat-secs`, an hour by
+default; in a live run one Tor exit range would otherwise have been reported every
+ten minutes for seven hours.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+AddressHarvester | <count> connections from <netgroup> asked for addresses and left within <secs>s in last <window>s (threshold: <threshold>)
+```
+
 ### StaleTip
 
 Reports when the node has not connected a block for `--stale-tip-secs`. Blocks
@@ -364,6 +383,14 @@ Options:
           Alert when connecting a block takes longer than this many seconds [default: 60]
       --stale-tip-secs <STALE_TIP_SECS>
           Alert when no block has been connected for this many seconds [default: 7200]
+      --harvester-threshold <HARVESTER_THRESHOLD>
+          Number of short connections asking for addresses from one netgroup before alerting [default: 3]
+      --harvester-window-secs <HARVESTER_WINDOW_SECS>
+          Sliding window size for address harvester detection (seconds) [default: 600]
+      --harvester-max-age-secs <HARVESTER_MAX_AGE_SECS>
+          A connection that asked for addresses counts as harvesting if it closed within this many seconds [default: 30]
+      --harvester-repeat-secs <HARVESTER_REPEAT_SECS>
+          Report a netgroup that keeps harvesting at most once per this many seconds [default: 3600]
       --misbehaving-burst-threshold <MISBEHAVING_BURST_THRESHOLD>
           Number of misbehaving reports in the window before alerting [default: 5]
       --misbehaving-burst-window-secs <MISBEHAVING_BURST_WINDOW_SECS>

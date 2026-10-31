@@ -16,6 +16,7 @@ use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
 pub mod addr_spammer;
+pub mod address_harvester;
 pub mod handshake_after_verack;
 pub mod high_ping_wait;
 pub mod inbound_connection_drops;
@@ -54,6 +55,15 @@ pub const NETWORK_IPV6: u32 = 2;
 pub const NETWORK_ONION: u32 = 3;
 pub const NETWORK_I2P: u32 = 4;
 pub const NETWORK_CJDNS: u32 = 5;
+
+/// True for addresses on the local machine. Inbound Tor connections and the
+/// operator's own tools both show up here, so the address alone does not say
+/// which peer it is.
+pub fn is_loopback(addr: &str) -> bool {
+    host_of(addr)
+        .parse::<std::net::IpAddr>()
+        .is_ok_and(|ip| ip.is_loopback())
+}
 
 /// All peers the tool currently tracks, by Bitcoin Core peer id.
 pub type Peers = HashMap<u64, Peer>;
@@ -132,6 +142,42 @@ pub fn peer_infos(event: &Event) -> Option<&PeerInfos> {
     }
 }
 
+/// The host part of a peer address as the extractor reports it: the IP without
+/// the port, or the onion or I2P name.
+pub fn host_of(addr: &str) -> &str {
+    if let Ok(socket) = addr.parse::<std::net::SocketAddr>() {
+        // Reuse the original text so the host keeps its spelling.
+        let host_len = addr.len() - 1 - socket.port().to_string().len();
+        let host = &addr[..host_len];
+        return host
+            .strip_prefix('[')
+            .and_then(|h| h.strip_suffix(']'))
+            .unwrap_or(host);
+    }
+    match addr.rsplit_once(':') {
+        Some((host, port)) if port.parse::<u16>().is_ok() => host,
+        _ => addr,
+    }
+}
+
+/// The group of addresses a peer address belongs to, the way Bitcoin Core
+/// groups peers: the /16 for IPv4, the /32 for IPv6, and the host itself for
+/// onion and I2P addresses. Peers from one group are likely run together.
+pub fn netgroup_of(addr: &str) -> String {
+    let host = host_of(addr);
+    match host.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(ip)) => {
+            let o = ip.octets();
+            format!("{}.{}.0.0/16", o[0], o[1])
+        }
+        Ok(std::net::IpAddr::V6(ip)) => {
+            let s = ip.segments();
+            format!("{:x}:{:x}::/32", s[0], s[1])
+        }
+        Err(_) => host.to_string(),
+    }
+}
+
 /// Timestamps of hits inside a sliding time window, oldest first.
 #[derive(Default)]
 pub struct SlidingWindow {
@@ -177,18 +223,28 @@ pub struct ThresholdWindow {
     armed: bool,
     /// When the last episode was reported. A steady rate right around the
     /// threshold would otherwise be reported every time the count dips and
-    /// climbs again, so a new report also needs a full window to have passed.
+    /// climbs again, so a new report also needs `repeat` to have passed.
     reported_at: Option<Instant>,
+    /// The least time between two reports. At least the window; longer for
+    /// activity that goes on for hours and is worth one line, not one per
+    /// window.
+    repeat: Duration,
 }
 
 impl ThresholdWindow {
     pub fn new(window: Duration, threshold: usize) -> Self {
+        Self::with_repeat(window, threshold, window)
+    }
+
+    /// A window that reports a continuing episode at most once per `repeat`.
+    pub fn with_repeat(window: Duration, threshold: usize, repeat: Duration) -> Self {
         ThresholdWindow {
             window,
             threshold,
             hits: SlidingWindow::default(),
             armed: true,
             reported_at: None,
+            repeat: repeat.max(window),
         }
     }
 
@@ -201,7 +257,7 @@ impl ThresholdWindow {
         }
         if self
             .reported_at
-            .is_some_and(|at| now.duration_since(at) < self.window)
+            .is_some_and(|at| now.duration_since(at) < self.repeat)
         {
             return None;
         }
@@ -219,12 +275,12 @@ impl ThresholdWindow {
     }
 
     /// True when no hits are left in the window and the last report is older
-    /// than the window, so nothing is left to remember.
+    /// than the repeat time, so nothing is left to remember.
     pub fn is_idle(&self, now: Instant) -> bool {
         self.hits.is_empty()
             && self
                 .reported_at
-                .is_none_or(|at| now.duration_since(at) >= self.window)
+                .is_none_or(|at| now.duration_since(at) >= self.repeat)
     }
 }
 
@@ -529,6 +585,17 @@ mod tests {
     }
 
     #[test]
+    fn hosts_and_netgroups_are_derived_from_addresses() {
+        assert_eq!(host_of("1.2.3.4:8333"), "1.2.3.4");
+        assert_eq!(host_of("[2001:db8::1]:8333"), "2001:db8::1");
+        assert_eq!(host_of("abc.onion:8333"), "abc.onion");
+        assert_eq!(host_of("abc.b32.i2p:0"), "abc.b32.i2p");
+        assert_eq!(netgroup_of("1.2.3.4:8333"), "1.2.0.0/16");
+        assert_eq!(netgroup_of("[2001:db8:1234::1]:8333"), "2001:db8::/32");
+        assert_eq!(netgroup_of("abc.onion:8333"), "abc.onion");
+    }
+
+    #[test]
     fn threshold_window_reports_once_per_episode() {
         let mut window = ThresholdWindow::new(Duration::from_secs(60), 2);
         let t0 = Instant::now();
@@ -546,6 +613,15 @@ mod tests {
         assert_eq!(window.record(t0 + Duration::from_secs(100)), None);
         assert_eq!(window.record(t0 + Duration::from_secs(100)), None);
         assert_eq!(window.record(t0 + Duration::from_secs(100)), Some(3));
+    }
+
+    #[test]
+    fn loopback_addresses_are_recognised() {
+        assert!(is_loopback("127.0.0.1:8333"));
+        assert!(is_loopback("127.0.0.53:1234"));
+        assert!(is_loopback("[::1]:8333"));
+        assert!(!is_loopback("1.2.3.4:8333"));
+        assert!(!is_loopback("abc.onion:8333"));
     }
 
     #[test]
@@ -568,6 +644,24 @@ mod tests {
         window.tick(t0 + Duration::from_secs(130));
         assert_eq!(window.record(t0 + Duration::from_secs(130)), None);
         assert_eq!(window.record(t0 + Duration::from_secs(131)), Some(2));
+    }
+
+    #[test]
+    fn threshold_window_honours_a_longer_repeat_time() {
+        let mut window =
+            ThresholdWindow::with_repeat(Duration::from_secs(60), 1, Duration::from_secs(300));
+        let t0 = Instant::now();
+        assert_eq!(window.record(t0), None);
+        assert_eq!(window.record(t0), Some(2));
+        // A new episode two windows later is still inside the repeat time
+        window.tick(t0 + Duration::from_secs(130));
+        assert_eq!(window.record(t0 + Duration::from_secs(130)), None);
+        assert_eq!(window.record(t0 + Duration::from_secs(131)), None);
+        assert!(!window.is_idle(t0 + Duration::from_secs(250)));
+        // After the repeat time it is reported again
+        window.tick(t0 + Duration::from_secs(400));
+        assert_eq!(window.record(t0 + Duration::from_secs(400)), None);
+        assert_eq!(window.record(t0 + Duration::from_secs(401)), Some(2));
     }
 
     #[test]

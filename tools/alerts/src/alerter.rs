@@ -131,12 +131,20 @@ pub enum Alert {
         count: usize,
         threshold: usize,
     },
+    /// Many short connections from one netgroup collected addresses and left
+    AddressHarvester {
+        netgroup: String,
+        count: usize,
+        window_secs: u64,
+        threshold: usize,
+        max_age_secs: u64,
+    },
 }
 
 impl Alert {
     /// The names of all alert kinds, as `name()` returns them. Used to create
     /// a metric series for every kind up front.
-    pub const NAMES: [&'static str; 19] = [
+    pub const NAMES: [&'static str; 20] = [
         "ping_spammer",
         "addr_spammer",
         "peer_disconnected",
@@ -156,6 +164,7 @@ impl Alert {
         "low_outbound_peers",
         "tx_spy",
         "repeated_getaddr",
+        "address_harvester",
     ];
 
     /// A short, stable name for the kind of alert, used as metric label.
@@ -186,6 +195,7 @@ impl Alert {
             Alert::LowOutboundPeers { .. } => "low_outbound_peers",
             Alert::TxSpy { .. } => "tx_spy",
             Alert::RepeatedGetaddr { .. } => "repeated_getaddr",
+            Alert::AddressHarvester { .. } => "address_harvester",
         }
     }
 
@@ -210,7 +220,8 @@ impl Alert {
             | Alert::OldConnectionDrops { .. }
             | Alert::MisbehavingBurst { .. }
             | Alert::HighPingWait { .. }
-            | Alert::LowOutboundPeers { .. } => None,
+            | Alert::LowOutboundPeers { .. }
+            | Alert::AddressHarvester { .. } => None,
         }
     }
 }
@@ -409,6 +420,17 @@ impl std::fmt::Display for Alert {
                 f,
                 "RepeatedGetaddr | peer_id={} addr={} | {} getaddr messages (threshold: {})",
                 peer_id, addr, count, threshold
+            ),
+            Alert::AddressHarvester {
+                netgroup,
+                count,
+                window_secs,
+                threshold,
+                max_age_secs,
+            } => write!(
+                f,
+                "AddressHarvester | {} connections from {} asked for addresses and left within {}s in last {}s (threshold: {})",
+                count, netgroup, max_age_secs, window_secs, threshold
             ),
         }
     }

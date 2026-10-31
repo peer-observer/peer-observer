@@ -1860,3 +1860,57 @@ async fn test_repeated_getaddr() {
 
     harness.shutdown().await;
 }
+
+/// Verifies that more than --harvester-threshold short connections from one
+/// netgroup that asked for addresses fire one AddressHarvester alert
+#[tokio::test]
+async fn test_address_harvester() {
+    let threshold = 2;
+    let mut harness = TestHarness::new(|port| {
+        let mut args = make_test_args(port, AlertSettingsInTest::default());
+        args.address_harvester.harvester_threshold = threshold;
+        args
+    })
+    .await;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    for peer_id in 160..=162 {
+        let addr = format!("160.1.{}.1:8333", peer_id - 160);
+        harness
+            .publisher
+            .publish(
+                Subject::NetMsg.to_string(),
+                make_getaddr_event(peer_id, &addr).encode_to_vec(),
+            )
+            .await;
+        sleep(Duration::from_millis(50)).await;
+        harness
+            .publisher
+            .publish(
+                Subject::NetConn.to_string(),
+                make_closed_event_established_at(peer_id, &addr, now - 5).encode_to_vec(),
+            )
+            .await;
+        if peer_id < 162 {
+            assert!(
+                expect_no_alert(&mut harness.rx, Duration::from_millis(300)).await,
+                "up to threshold harvesting connections must not alert"
+            );
+        }
+    }
+    assert_eq!(
+        recv_alert(&mut harness.rx, Duration::from_secs(2)).await,
+        Alert::AddressHarvester {
+            netgroup: "160.1.0.0/16".to_string(),
+            count: threshold + 1,
+            window_secs: 600,
+            threshold,
+            max_age_secs: 30,
+        }
+    );
+
+    harness.shutdown().await;
+}
