@@ -24,6 +24,7 @@ use crate::heuristics::inbound_connection_drops::{
     InboundConnectionDrops, InboundConnectionDropsArgs,
 };
 use crate::heuristics::misbehaving_peer::MisbehavingPeer;
+use crate::heuristics::old_connection_drops::{OldConnectionDrops, OldConnectionDropsArgs};
 use crate::heuristics::ping_spammer::{PingSpammer, PingSpammerArgs};
 use crate::heuristics::slow_block::{SlowBlock, SlowBlockArgs};
 use crate::heuristics::small_ping_nonce::{SmallPingNonce, SmallPingNonceArgs};
@@ -59,6 +60,9 @@ pub struct Args {
     #[command(flatten)]
     pub inbound_connection_drops: InboundConnectionDropsArgs,
 
+    #[command(flatten)]
+    pub old_connection_drops: OldConnectionDropsArgs,
+
     #[arg(short, long, default_value_t = shared::log::Level::Debug)]
     pub log_level: shared::log::Level,
 
@@ -86,6 +90,7 @@ impl Args {
             slow_block: SlowBlockArgs::default(),
             stale_tip: StaleTipArgs::default(),
             inbound_connection_drops: InboundConnectionDropsArgs::default(),
+            old_connection_drops: OldConnectionDropsArgs::default(),
             log_level: shared::log::Level::Trace,
             peer_stale_secs: 300,
         }
@@ -106,6 +111,7 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
         Box::new(InboundConnectionDrops::new(
             args.inbound_connection_drops.clone(),
         )),
+        Box::new(OldConnectionDrops::new(args.old_connection_drops.clone())),
     ]
 }
 

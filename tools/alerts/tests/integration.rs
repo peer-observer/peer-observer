@@ -1160,3 +1160,77 @@ async fn test_inbound_connection_drops() {
 
     harness.shutdown().await;
 }
+
+/// Verifies that closing more than --old-connection-drop-threshold connections
+/// older than --old-connection-age-secs fires one OldConnectionDrops alert, and
+/// that young connections and connections of unknown age are not counted
+#[tokio::test]
+async fn test_old_connection_drops() {
+    let threshold = 2;
+    let mut harness = TestHarness::new(|port| {
+        let mut args = make_test_args(port, AlertSettingsInTest::default());
+        args.old_connection_drops.old_connection_drop_threshold = threshold;
+        args.old_connection_drops.old_connection_age_secs = 3600;
+        args
+    })
+    .await;
+    let subject = Subject::NetConn.to_string();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    // A young connection, one of unknown age, and exactly threshold old ones
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_closed_event_established_at(80, "80.0.0.80:8333", now - 60).encode_to_vec(),
+        )
+        .await;
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_closed_event(81, "80.0.0.81:8333").encode_to_vec(),
+        )
+        .await;
+    for peer_id in 82..=83 {
+        harness
+            .publisher
+            .publish(
+                subject.clone(),
+                make_closed_event_established_at(
+                    peer_id,
+                    &format!("80.0.0.{peer_id}:8333"),
+                    now - 7200,
+                )
+                .encode_to_vec(),
+            )
+            .await;
+    }
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "young, unknown-age, and exactly threshold old drops must not alert"
+    );
+
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_closed_event_established_at(84, "80.0.0.84:8333", now - 7200).encode_to_vec(),
+        )
+        .await;
+    let alert = recv_alert(&mut harness.rx, Duration::from_secs(2)).await;
+    assert_eq!(
+        alert,
+        Alert::OldConnectionDrops {
+            count: threshold + 1,
+            window_secs: 300,
+            threshold,
+            min_age_secs: 3600,
+        }
+    );
+
+    harness.shutdown().await;
+}

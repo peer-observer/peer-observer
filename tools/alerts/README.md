@@ -152,6 +152,25 @@ InboundConnectionDrops | <count> inbound connections older than <age>s closed in
 | <count> inbound connections closed in last <secs>s (threshold: <threshold>), evictions not counted
 ```
 
+### OldConnectionDrops
+
+Reports when more than `--old-connection-drop-threshold` connections that had
+been up for at least `--old-connection-age-secs` close within
+`--old-connection-drop-window-secs`. Long-lived connections are the stable part
+of a node's peer set: well-connected nodes and our own outbound peers. Losing
+several of them at once is unusual and points at network trouble, a peer
+operator restarting many nodes, or someone cycling connections to us.
+
+The connection age comes from the time Bitcoin Core established the connection,
+which it reports when the connection closes. Inbound and outbound connections
+count alike, evicted ones included. The alert fires once per episode, like
+`InboundConnectionDrops`.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+OldConnectionDrops | <count> connections older than <age>s closed in last <secs>s (threshold: <threshold>)
+```
+
 ## Peer lifecycle
 
 When a peer that one of the per-peer heuristics flagged disconnects (either via a
@@ -207,6 +226,12 @@ Options:
           Sliding window size for inbound connection drops (seconds) [default: 300]
       --inbound-drop-min-age-secs <INBOUND_DROP_MIN_AGE_SECS>
           Only count closed inbound connections that were up for at least this many seconds [default: 60]
+      --old-connection-drop-threshold <OLD_CONNECTION_DROP_THRESHOLD>
+          Number of old connections closed in the window before alerting [default: 5]
+      --old-connection-drop-window-secs <OLD_CONNECTION_DROP_WINDOW_SECS>
+          Sliding window size for old connection drops (seconds) [default: 300]
+      --old-connection-age-secs <OLD_CONNECTION_AGE_SECS>
+          A connection counts as old once it has been up for this many seconds [default: 86400]
   -l, --log-level <LOG_LEVEL>
           [default: DEBUG]
       --peer-stale-secs <PEER_STALE_SECS>

@@ -17,6 +17,7 @@ pub mod addr_spammer;
 pub mod handshake_after_verack;
 pub mod inbound_connection_drops;
 pub mod misbehaving_peer;
+pub mod old_connection_drops;
 pub mod ping_spammer;
 pub mod slow_block;
 pub mod small_ping_nonce;

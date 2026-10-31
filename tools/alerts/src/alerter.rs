@@ -75,6 +75,13 @@ pub enum Alert {
         threshold: usize,
         min_age_secs: u64,
     },
+    /// Several long-lived connections closed within the window
+    OldConnectionDrops {
+        count: usize,
+        window_secs: u64,
+        threshold: usize,
+        min_age_secs: u64,
+    },
 }
 
 impl std::fmt::Display for Alert {
@@ -191,6 +198,16 @@ impl std::fmt::Display for Alert {
             } => write!(
                 f,
                 "InboundConnectionDrops | {} inbound connections older than {}s closed in last {}s (threshold: {}), evictions not counted",
+                count, min_age_secs, window_secs, threshold
+            ),
+            Alert::OldConnectionDrops {
+                count,
+                window_secs,
+                threshold,
+                min_age_secs,
+            } => write!(
+                f,
+                "OldConnectionDrops | {} connections older than {}s closed in last {}s (threshold: {})",
                 count, min_age_secs, window_secs, threshold
             ),
         }
