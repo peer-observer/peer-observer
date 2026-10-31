@@ -28,6 +28,7 @@ use crate::heuristics::handshake_after_verack::HandshakeAfterVerack;
 use crate::heuristics::inbound_connection_drops::{
     InboundConnectionDrops, InboundConnectionDropsArgs,
 };
+use crate::heuristics::misbehaving_burst::{MisbehavingBurst, MisbehavingBurstArgs};
 use crate::heuristics::misbehaving_peer::MisbehavingPeer;
 use crate::heuristics::old_connection_drops::{OldConnectionDrops, OldConnectionDropsArgs};
 use crate::heuristics::ping_spammer::{PingSpammer, PingSpammerArgs};
@@ -71,6 +72,9 @@ pub struct Args {
     pub stale_tip: StaleTipArgs,
 
     #[command(flatten)]
+    pub misbehaving_burst: MisbehavingBurstArgs,
+
+    #[command(flatten)]
     pub inbound_connection_drops: InboundConnectionDropsArgs,
 
     #[command(flatten)]
@@ -108,6 +112,7 @@ impl Args {
             version_time_offset: VersionTimeOffsetArgs::default(),
             slow_block: SlowBlockArgs::default(),
             stale_tip: StaleTipArgs::default(),
+            misbehaving_burst: MisbehavingBurstArgs::default(),
             inbound_connection_drops: InboundConnectionDropsArgs::default(),
             old_connection_drops: OldConnectionDropsArgs::default(),
             // Port 0 lets the system pick a free port. `run` reports it.
@@ -131,6 +136,7 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
         Box::new(VersionTimeOffset::new(args.version_time_offset.clone())),
         Box::new(SlowBlock::new(args.slow_block.clone())),
         Box::new(StaleTip::new(args.stale_tip.clone(), Instant::now())),
+        Box::new(MisbehavingBurst::new(args.misbehaving_burst.clone())),
         Box::new(InboundConnectionDrops::new(
             args.inbound_connection_drops.clone(),
         )),

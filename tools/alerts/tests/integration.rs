@@ -1500,3 +1500,51 @@ async fn test_version_time_offset() {
 
     harness.shutdown().await;
 }
+
+/// Verifies that more than --misbehaving-burst-threshold misbehaving reports in
+/// the window fire one MisbehavingBurst alert on top of the per-peer alerts
+#[tokio::test]
+async fn test_misbehaving_burst() {
+    let threshold = 2;
+    let mut harness = TestHarness::new(|port| {
+        let mut args = make_test_args(port, AlertSettingsInTest::default());
+        args.misbehaving_burst.misbehaving_burst_threshold = threshold;
+        args
+    })
+    .await;
+    let subject = Subject::NetConn.to_string();
+
+    for peer_id in 120..=122 {
+        harness
+            .publisher
+            .publish(
+                subject.clone(),
+                make_misbehaving_event(peer_id, "bad").encode_to_vec(),
+            )
+            .await;
+    }
+
+    let mut per_peer = 0;
+    let mut bursts = Vec::new();
+    for _ in 0..4 {
+        match recv_alert(&mut harness.rx, Duration::from_secs(2)).await {
+            Alert::MisbehavingPeer { .. } => per_peer += 1,
+            Alert::MisbehavingBurst { .. } if !bursts.is_empty() => {
+                panic!("the burst must be reported once")
+            }
+            alert @ Alert::MisbehavingBurst { .. } => bursts.push(alert),
+            other => panic!("unexpected alert {other:?}"),
+        }
+    }
+    assert_eq!(per_peer, 3);
+    assert_eq!(
+        bursts,
+        vec![Alert::MisbehavingBurst {
+            count: threshold + 1,
+            window_secs: 600,
+            threshold,
+        }]
+    );
+
+    harness.shutdown().await;
+}

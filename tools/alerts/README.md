@@ -139,6 +139,20 @@ Alert format (as rendered by `LoggingAlerter`):
 SlowBlock | height=<height> hash=<hash> | connected in <seconds>s (threshold: <threshold>s), <n> transactions, <n> inputs, <n> sigops
 ```
 
+### MisbehavingBurst
+
+Reports when Bitcoin Core flags more than `--misbehaving-burst-threshold` peers
+as misbehaving within `--misbehaving-burst-window-secs`. A single misbehaving
+peer is one bad actor or a bug, and `MisbehavingPeer` reports each one. Many
+reports within minutes point at something bigger: a coordinated set of peers, a
+client release with a bug, or a change on our side that makes us reject peers.
+The alert fires once per episode.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+MisbehavingBurst | <count> peers reported as misbehaving in last <secs>s (threshold: <threshold>)
+```
+
 ### StaleTip
 
 Reports when the node has not connected a block for `--stale-tip-secs`. Blocks
@@ -274,6 +288,10 @@ Options:
           Alert when connecting a block takes longer than this many seconds [default: 60]
       --stale-tip-secs <STALE_TIP_SECS>
           Alert when no block has been connected for this many seconds [default: 7200]
+      --misbehaving-burst-threshold <MISBEHAVING_BURST_THRESHOLD>
+          Number of misbehaving reports in the window before alerting [default: 5]
+      --misbehaving-burst-window-secs <MISBEHAVING_BURST_WINDOW_SECS>
+          Sliding window size for misbehaving reports (seconds) [default: 600]
       --inbound-drop-threshold <INBOUND_DROP_THRESHOLD>
           Number of inbound connections closed in the window before alerting [default: 20]
       --inbound-drop-window-secs <INBOUND_DROP_WINDOW_SECS>

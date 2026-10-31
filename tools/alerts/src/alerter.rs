@@ -98,12 +98,18 @@ pub enum Alert {
         threshold_secs: u64,
         user_agent: String,
     },
+    /// Bitcoin Core reported many misbehaving peers within the window
+    MisbehavingBurst {
+        count: usize,
+        window_secs: u64,
+        threshold: usize,
+    },
 }
 
 impl Alert {
     /// The names of all alert kinds, as `name()` returns them. Used to create
     /// a metric series for every kind up front.
-    pub const NAMES: [&'static str; 14] = [
+    pub const NAMES: [&'static str; 15] = [
         "ping_spammer",
         "addr_spammer",
         "peer_disconnected",
@@ -118,6 +124,7 @@ impl Alert {
         "old_connection_drops",
         "unknown_messages",
         "version_time_offset",
+        "misbehaving_burst",
     ];
 
     /// A short, stable name for the kind of alert, used as metric label.
@@ -143,6 +150,7 @@ impl Alert {
             Alert::OldConnectionDrops { .. } => "old_connection_drops",
             Alert::UnknownMessages { .. } => "unknown_messages",
             Alert::VersionTimeOffset { .. } => "version_time_offset",
+            Alert::MisbehavingBurst { .. } => "misbehaving_burst",
         }
     }
 
@@ -162,7 +170,8 @@ impl Alert {
             | Alert::StaleTip { .. }
             | Alert::TipRecovered { .. }
             | Alert::InboundConnectionDrops { .. }
-            | Alert::OldConnectionDrops { .. } => None,
+            | Alert::OldConnectionDrops { .. }
+            | Alert::MisbehavingBurst { .. } => None,
         }
     }
 }
@@ -314,6 +323,15 @@ impl std::fmt::Display for Alert {
                 f,
                 "VersionTimeOffset | peer_id={} addr={} | version time off by {}s (threshold: {}s)",
                 peer_id, addr, offset_secs, threshold_secs
+            ),
+            Alert::MisbehavingBurst {
+                count,
+                window_secs,
+                threshold,
+            } => write!(
+                f,
+                "MisbehavingBurst | {} peers reported as misbehaving in last {}s (threshold: {})",
+                count, window_secs, threshold
             ),
         }
     }
