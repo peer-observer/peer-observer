@@ -84,6 +84,67 @@ pub enum Alert {
     },
 }
 
+impl Alert {
+    /// The names of all alert kinds, as `name()` returns them. Used to create
+    /// a metric series for every kind up front.
+    pub const NAMES: [&'static str; 12] = [
+        "ping_spammer",
+        "addr_spammer",
+        "peer_disconnected",
+        "misbehaving_peer",
+        "handshake_after_verack",
+        "small_ping_nonce",
+        "tx_relay_mismatch",
+        "slow_block",
+        "stale_tip",
+        "tip_recovered",
+        "inbound_connection_drops",
+        "old_connection_drops",
+    ];
+
+    /// A short, stable name for the kind of alert, used as metric label.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Alert::Spammer {
+                kind: SpammerKind::Ping,
+                ..
+            } => "ping_spammer",
+            Alert::Spammer {
+                kind: SpammerKind::Addr,
+                ..
+            } => "addr_spammer",
+            Alert::PeerDisconnected { .. } => "peer_disconnected",
+            Alert::MisbehavingPeer { .. } => "misbehaving_peer",
+            Alert::HandshakeAfterVerack { .. } => "handshake_after_verack",
+            Alert::SmallPingNonce { .. } => "small_ping_nonce",
+            Alert::TxRelayMismatch { .. } => "tx_relay_mismatch",
+            Alert::SlowBlock { .. } => "slow_block",
+            Alert::StaleTip { .. } => "stale_tip",
+            Alert::TipRecovered { .. } => "tip_recovered",
+            Alert::InboundConnectionDrops { .. } => "inbound_connection_drops",
+            Alert::OldConnectionDrops { .. } => "old_connection_drops",
+        }
+    }
+
+    /// The peer this alert flags, if it is about a single peer. The
+    /// `PeerDisconnected` alert reports a flagged peer leaving and flags none.
+    pub fn flagged_peer(&self) -> Option<(u64, &str)> {
+        match self {
+            Alert::Spammer { peer_id, addr, .. }
+            | Alert::MisbehavingPeer { peer_id, addr, .. }
+            | Alert::HandshakeAfterVerack { peer_id, addr, .. }
+            | Alert::SmallPingNonce { peer_id, addr, .. }
+            | Alert::TxRelayMismatch { peer_id, addr, .. } => Some((*peer_id, addr)),
+            Alert::PeerDisconnected { .. }
+            | Alert::SlowBlock { .. }
+            | Alert::StaleTip { .. }
+            | Alert::TipRecovered { .. }
+            | Alert::InboundConnectionDrops { .. }
+            | Alert::OldConnectionDrops { .. } => None,
+        }
+    }
+}
+
 impl std::fmt::Display for Alert {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

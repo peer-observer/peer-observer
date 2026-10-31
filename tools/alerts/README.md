@@ -184,6 +184,29 @@ PeerDisconnected | peer_id=<id> addr=<addr> | active=<duration>s
 
 Non-flagged peers disconnect silently (no alert is emitted).
 
+## Metrics
+
+The tool serves Prometheus metrics on `--metrics-address`. Besides the start
+timestamp, it exports:
+
+```
+peerobserver_alerts_total{alert="<kind>"}
+peerobserver_alerts_last_fired_timestamp{alert="<kind>"}
+peerobserver_alerts_flagged_peers{alert="<kind>"}
+peerobserver_alerts_flagged_peer_info{alert="<kind>",peer_id="<id>",addr="<addr>"}
+```
+
+`<kind>` is the alert name in snake case, for example `ping_spammer`,
+`misbehaving_peer`, or `stale_tip`. The counter and the two per-kind gauges are
+present for every kind from the start, with zero, so a dashboard can show which
+alerts fired and a Grafana alert can fire on an increase. The timestamp is the
+UNIX time the kind last fired, or zero.
+
+`alerts_flagged_peers` counts the connected peers each per-peer alert flagged,
+and `alerts_flagged_peer_info` has one series per flagged peer, always 1. Both
+drop the peer when it disconnects or goes stale. Kinds that are not about a
+single peer stay at zero.
+
 ## Usage
 
 ```
@@ -232,6 +255,8 @@ Options:
           Sliding window size for old connection drops (seconds) [default: 300]
       --old-connection-age-secs <OLD_CONNECTION_AGE_SECS>
           A connection counts as old once it has been up for this many seconds [default: 86400]
+  -m, --metrics-address <METRICS_ADDRESS>
+          The metrics server address the tool should listen on [default: 127.0.0.1:8283]
   -l, --log-level <LOG_LEVEL>
           [default: DEBUG]
       --peer-stale-secs <PEER_STALE_SECS>

@@ -5,17 +5,22 @@ use shared::clap;
 use shared::clap::Parser;
 use shared::futures::stream::StreamExt;
 use shared::log;
+use shared::metricserver;
 use shared::nats_subjects::Subject;
 use shared::nats_util;
 use shared::nats_util::NatsArgs;
 use shared::prost::Message;
 use shared::protobuf::ebpf_extractor::connection::connection_event;
 use shared::protobuf::event::Event;
-use shared::tokio::sync::watch;
+use shared::tokio::sync::{oneshot, watch};
+use shared::util;
+use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
 pub mod alerter;
 pub mod heuristics;
+pub mod metrics;
 
 pub use crate::alerter::{Alert, Alerter, LoggingAlerter, SpammerKind};
 use crate::heuristics::addr_spammer::{AddrSpammer, AddrSpammerArgs};
@@ -63,6 +68,10 @@ pub struct Args {
     #[command(flatten)]
     pub old_connection_drops: OldConnectionDropsArgs,
 
+    /// The metrics server address the tool should listen on
+    #[arg(short, long, default_value = "127.0.0.1:8283")]
+    pub metrics_address: String,
+
     #[arg(short, long, default_value_t = shared::log::Level::Debug)]
     pub log_level: shared::log::Level,
 
@@ -91,6 +100,8 @@ impl Args {
             stale_tip: StaleTipArgs::default(),
             inbound_connection_drops: InboundConnectionDropsArgs::default(),
             old_connection_drops: OldConnectionDropsArgs::default(),
+            // Port 0 lets the system pick a free port. `run` reports it.
+            metrics_address: "127.0.0.1:0".to_string(),
             log_level: shared::log::Level::Trace,
             peer_stale_secs: 300,
         }
@@ -119,13 +130,35 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
 struct State {
     peers: Peers,
     heuristics: Vec<Box<dyn Heuristic>>,
+    /// The alert kinds that flagged each connected peer, with the address
+    /// used in the metrics, so the series can be removed when it leaves.
+    flagged: HashMap<u64, Vec<(&'static str, String)>>,
+    metrics: metrics::Metrics,
 }
 
 impl State {
-    fn new(args: &Args) -> Self {
+    fn new(args: &Args, metrics: metrics::Metrics) -> Self {
         State {
             peers: Peers::new(),
             heuristics: build_heuristics(args),
+            flagged: HashMap::new(),
+            metrics,
+        }
+    }
+
+    /// Counts the alerts on the metrics endpoint, remembers which peers they
+    /// flag, and hands them to the alerter.
+    fn emit(&mut self, alerts: Vec<Alert>, alerter: &impl Alerter) {
+        for alert in alerts {
+            self.metrics.count(&alert);
+            if let Some((peer_id, addr)) = alert.flagged_peer() {
+                let kinds = self.flagged.entry(peer_id).or_default();
+                if !kinds.iter().any(|(name, _)| *name == alert.name()) {
+                    self.metrics.peer_flagged(alert.name(), peer_id, addr);
+                    kinds.push((alert.name(), addr.to_string()));
+                }
+            }
+            alerter.emit(alert);
         }
     }
 
@@ -159,6 +192,9 @@ impl State {
             Some(peer) => peer.addr,
             None => addr.to_string(),
         };
+        for (name, flagged_addr) in self.flagged.remove(&peer_id).unwrap_or_default() {
+            self.metrics.peer_unflagged(name, peer_id, &flagged_addr);
+        }
         let first_alerted = self
             .heuristics
             .iter_mut()
@@ -200,12 +236,17 @@ impl State {
 
 /// Connects to NATS, subscribes to all subjects, and dispatches each
 /// received event to `handle_event`. Alerts are emitted through `alerter`
+/// and counted on the metrics endpoint. The address the metrics server
+/// bound to is sent to `bound_addr_tx`, which tests use with port 0.
 pub async fn run<A: Alerter>(
     args: Args,
     alerter: A,
     mut shutdown_rx: watch::Receiver<bool>,
+    bound_addr_tx: Option<oneshot::Sender<SocketAddr>>,
 ) -> Result<()> {
     log::info!("starting alerts with {:?}", args);
+
+    let metrics = metrics::Metrics::new();
 
     let nc = nats_util::prepare_connection(&args.nats)
         .context("preparing NATS connection")?
@@ -228,7 +269,16 @@ pub async fn run<A: Alerter>(
     let mut sub = shared::futures::stream::select_all([netmsg_sub, netconn_sub, validation_sub]);
     log::info!("Connected to NATS-server at {}", args.nats.address);
 
-    let mut state = State::new(&args);
+    let metrics_addr = metricserver::start(&args.metrics_address, Some(metrics.registry.clone()))
+        .context("starting metrics server")?;
+    if let Some(tx) = bound_addr_tx {
+        let _ = tx.send(metrics_addr);
+    }
+    metrics
+        .runtime_start_timestamp
+        .set(util::current_timestamp() as i64);
+
+    let mut state = State::new(&args, metrics);
 
     let stale_after = Duration::from_secs(args.peer_stale_secs);
     let mut cleanup_interval = shared::tokio::time::interval(stale_after);
@@ -241,7 +291,7 @@ pub async fn run<A: Alerter>(
             _ = tick_interval.tick() => {
                 let mut alerts = Vec::new();
                 state.tick(Instant::now(), &mut alerts);
-                emit_all(alerts, &alerter);
+                state.emit(alerts, &alerter);
             }
             maybe_msg = sub.next() => {
                 match maybe_msg {
@@ -255,7 +305,7 @@ pub async fn run<A: Alerter>(
             _ = cleanup_interval.tick() => {
                 let mut alerts = Vec::new();
                 state.remove_stale_peers(stale_after, Instant::now(), &mut alerts);
-                emit_all(alerts, &alerter);
+                state.emit(alerts, &alerter);
             }
             res = shutdown_rx.changed() => {
                 match res {
@@ -295,11 +345,5 @@ fn handle_event(event: Event, state: &mut State, alerter: &impl Alerter) {
         state.remove_peer(closed.conn.peer_id, &closed.conn.addr, now, &mut alerts);
     }
 
-    emit_all(alerts, alerter);
-}
-
-fn emit_all(alerts: Vec<Alert>, alerter: &impl Alerter) {
-    for alert in alerts {
-        alerter.emit(alert);
-    }
+    state.emit(alerts, alerter);
 }

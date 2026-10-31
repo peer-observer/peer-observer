@@ -21,10 +21,14 @@ use shared::{
         },
         event::{event::PeerObserverEvent, Event},
     },
-    testing::{nats_publisher::NatsPublisherForTesting, nats_server::NatsServerForTesting},
+    testing::{
+        metrics_fetcher::{fetch_metrics_root, get_metric_value},
+        nats_publisher::NatsPublisherForTesting,
+        nats_server::NatsServerForTesting,
+    },
     tokio::{
         self,
-        sync::{mpsc::UnboundedReceiver, watch},
+        sync::{mpsc::UnboundedReceiver, oneshot, watch},
         time::{sleep, timeout},
     },
 };
@@ -193,6 +197,7 @@ fn make_closed_event_established_at(peer_id: u64, addr: &str, time_established: 
 /// `alerts::run` task. `shutdown` cleanly stops the task at the end of a test
 struct TestHarness {
     publisher: NatsPublisherForTesting,
+    metrics_port: u16,
     rx: UnboundedReceiver<Alert>,
     shutdown_tx: watch::Sender<bool>,
     handle: tokio::task::JoinHandle<anyhow::Result<()>>,
@@ -208,10 +213,16 @@ impl TestHarness {
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
         let (alerter, rx) = IntegrationTestAlerter::new();
         let args = mk_args(server.port);
-        let handle = tokio::spawn(alerts::run(args, alerter, shutdown_rx));
+        let (addr_tx, addr_rx) = oneshot::channel();
+        let handle = tokio::spawn(alerts::run(args, alerter, shutdown_rx, Some(addr_tx)));
+        let metrics_port = addr_rx
+            .await
+            .expect("alerts tool should send its metrics address")
+            .port();
         sleep(Duration::from_secs(1)).await;
         Self {
             publisher,
+            metrics_port,
             rx,
             shutdown_tx,
             handle,
@@ -372,7 +383,7 @@ async fn test_integration_alerts_fail_if_no_nats() {
     let (alerter, _rx) = IntegrationTestAlerter::new();
     let alerts_handle = tokio::spawn(async move {
         let args = make_test_args(65535, AlertSettingsInTest::default());
-        match alerts::run(args, alerter, shutdown_rx.clone()).await {
+        match alerts::run(args, alerter, shutdown_rx.clone(), None).await {
             Ok(_) => panic!("We should fail when no NATS server is reachable."),
             Err(e) => match e.downcast::<ConnectError>() {
                 Ok(_) => (),
@@ -1230,6 +1241,122 @@ async fn test_old_connection_drops() {
             threshold,
             min_age_secs: 3600,
         }
+    );
+
+    harness.shutdown().await;
+}
+
+/// Verifies that fired alerts are counted on the metrics endpoint by kind and
+/// that kinds that never fired are present with a count of zero
+#[tokio::test]
+async fn test_alert_metrics() {
+    let ping_threshold = 3;
+    let mut harness = TestHarness::new(|port| {
+        make_test_args(
+            port,
+            AlertSettingsInTest {
+                ping_threshold,
+                ..Default::default()
+            },
+        )
+    })
+    .await;
+
+    let event = make_ping_event(90, "90.90.90.90:8333", true);
+    publish_n(
+        &harness.publisher,
+        &Subject::NetMsg.to_string(),
+        &event,
+        ping_threshold + 1,
+    )
+    .await;
+    let alert = recv_alert(&mut harness.rx, Duration::from_secs(2)).await;
+    assert!(matches!(alert, Alert::Spammer { .. }));
+
+    let metrics_raw = fetch_metrics_root(harness.metrics_port).expect("Could not fetch metrics");
+    assert_eq!(
+        get_metric_value(
+            &metrics_raw,
+            "peerobserver_alerts_total",
+            "alert",
+            "ping_spammer"
+        ),
+        1
+    );
+    assert_eq!(
+        get_metric_value(
+            &metrics_raw,
+            "peerobserver_alerts_total",
+            "alert",
+            "addr_spammer"
+        ),
+        0
+    );
+    assert_eq!(
+        get_metric_value(
+            &metrics_raw,
+            "peerobserver_alerts_total",
+            "alert",
+            "stale_tip"
+        ),
+        0
+    );
+    assert_eq!(
+        get_metric_value(
+            &metrics_raw,
+            "peerobserver_alerts_flagged_peers",
+            "alert",
+            "ping_spammer"
+        ),
+        1
+    );
+    assert!(
+        metrics_raw.contains(
+            "peerobserver_alerts_flagged_peer_info{addr=\"90.90.90.90:8333\",alert=\"ping_spammer\",peer_id=\"90\"} 1"
+        ),
+        "the flagged peer has an info series"
+    );
+    assert!(
+        get_metric_value(
+            &metrics_raw,
+            "peerobserver_alerts_last_fired_timestamp",
+            "alert",
+            "ping_spammer"
+        ) > 0
+    );
+    assert_eq!(
+        get_metric_value(
+            &metrics_raw,
+            "peerobserver_alerts_last_fired_timestamp",
+            "alert",
+            "stale_tip"
+        ),
+        0
+    );
+
+    // Once the peer leaves, it is no longer flagged
+    harness
+        .publisher
+        .publish(
+            Subject::NetConn.to_string(),
+            make_closed_event(90, "90.90.90.90:8333").encode_to_vec(),
+        )
+        .await;
+    let alert = recv_alert(&mut harness.rx, Duration::from_secs(2)).await;
+    assert!(matches!(alert, Alert::PeerDisconnected { .. }));
+    let metrics_raw = fetch_metrics_root(harness.metrics_port).expect("Could not fetch metrics");
+    assert_eq!(
+        get_metric_value(
+            &metrics_raw,
+            "peerobserver_alerts_flagged_peers",
+            "alert",
+            "ping_spammer"
+        ),
+        0
+    );
+    assert!(
+        !metrics_raw.contains("peer_id=\"90\""),
+        "the info series is removed when the peer leaves"
     );
 
     harness.shutdown().await;
