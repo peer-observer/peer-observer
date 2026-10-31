@@ -11,7 +11,8 @@ use shared::{
         bitcoin_primitives::{self, Address, InventoryItem},
         ebpf_extractor::{
             connection::{
-                self, ClosedConnection, Connection, ConnectionEvent, MisbehavingConnection,
+                self, ClosedConnection, Connection, ConnectionEvent, EvictedInboundConnection,
+                MisbehavingConnection,
             },
             ebpf,
             message::{self, message_event::Msg, Addr, AddrV2, Inv, Metadata, Ping, Version},
@@ -160,8 +161,15 @@ fn make_addrv2_event(peer_id: u64, addr: &str) -> Event {
     .unwrap()
 }
 
-/// Builds a ClosedConnection event for the given peer/addr
+/// Builds a ClosedConnection event for the given peer/addr. The time the
+/// connection was established is left unknown
 fn make_closed_event(peer_id: u64, addr: &str) -> Event {
+    make_closed_event_established_at(peer_id, addr, 0)
+}
+
+/// Builds a ClosedConnection event for an inbound connection established at
+/// the UNIX timestamp `time_established`
+fn make_closed_event_established_at(peer_id: u64, addr: &str, time_established: u64) -> Event {
     Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
         ebpf_event: Some(ebpf::EbpfEvent::Connection(ConnectionEvent {
             event: Some(connection::connection_event::Event::Closed(
@@ -172,7 +180,7 @@ fn make_closed_event(peer_id: u64, addr: &str) -> Event {
                         conn_type: 1,
                         network: 1,
                     },
-                    time_established: 0,
+                    time_established,
                 },
             )),
         })),
@@ -1043,6 +1051,112 @@ async fn test_stale_tip() {
         }
         other => panic!("expected Alert::TipRecovered, got {other:?}"),
     }
+
+    harness.shutdown().await;
+}
+
+/// Builds an EvictedInboundConnection event for the given peer/addr
+fn make_evicted_event(peer_id: u64, addr: &str) -> Event {
+    Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+        ebpf_event: Some(ebpf::EbpfEvent::Connection(ConnectionEvent {
+            event: Some(connection::connection_event::Event::InboundEvicted(
+                EvictedInboundConnection {
+                    conn: Connection {
+                        peer_id,
+                        addr: addr.to_string(),
+                        conn_type: 1,
+                        network: 1,
+                    },
+                    time_established: 0,
+                },
+            )),
+        })),
+    }))
+    .unwrap()
+}
+
+/// Verifies that closing more than --inbound-drop-threshold inbound connections
+/// in the window fires one InboundConnectionDrops alert, and that evicted
+/// connections are not counted
+#[tokio::test]
+async fn test_inbound_connection_drops() {
+    let threshold = 2;
+    let mut harness = TestHarness::new(|port| {
+        let mut args = make_test_args(port, AlertSettingsInTest::default());
+        args.inbound_connection_drops.inbound_drop_threshold = threshold;
+        args
+    })
+    .await;
+    let subject = Subject::NetConn.to_string();
+    // All connections were up for two minutes
+    let established = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        - 120;
+
+    // An evicted connection closes afterwards, but must not count
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_evicted_event(70, "70.0.0.1:8333").encode_to_vec(),
+        )
+        .await;
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_closed_event_established_at(70, "70.0.0.1:8333", established).encode_to_vec(),
+        )
+        .await;
+    for peer_id in 71..=72 {
+        harness
+            .publisher
+            .publish(
+                subject.clone(),
+                make_closed_event_established_at(
+                    peer_id,
+                    &format!("70.0.0.{peer_id}:8333"),
+                    established,
+                )
+                .encode_to_vec(),
+            )
+            .await;
+    }
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "exactly threshold drops must not alert"
+    );
+
+    for peer_id in 73..=75 {
+        harness
+            .publisher
+            .publish(
+                subject.clone(),
+                make_closed_event_established_at(
+                    peer_id,
+                    &format!("70.0.0.{peer_id}:8333"),
+                    established,
+                )
+                .encode_to_vec(),
+            )
+            .await;
+    }
+    let alert = recv_alert(&mut harness.rx, Duration::from_secs(2)).await;
+    assert_eq!(
+        alert,
+        Alert::InboundConnectionDrops {
+            count: threshold + 1,
+            window_secs: 300,
+            threshold,
+            min_age_secs: 60,
+        }
+    );
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "further drops in the same episode must not alert again"
+    );
 
     harness.shutdown().await;
 }

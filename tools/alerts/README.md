@@ -130,6 +130,28 @@ StaleTip | no block connected for <seconds>s (threshold: <threshold>s), last hei
 TipRecovered | height=<height> | block connected after <seconds>s without a block
 ```
 
+### InboundConnectionDrops
+
+Reports when more than `--inbound-drop-threshold` inbound connections that had
+been up for at least `--inbound-drop-min-age-secs` close within
+`--inbound-drop-window-secs`. Inbound peers come and go. On a reachable node most
+inbound connections are crawlers that leave within seconds, so those are ignored.
+Many established inbound peers leaving at once points at a problem: the node
+became unreachable, a provider has network trouble, or a group of peers
+controlled by one party left together.
+
+Connections that Bitcoin Core evicted itself are not counted either. Core only
+evicts when its inbound slots are full, and those drops are routine. The alert
+fires once per episode: after an alert it stays quiet until the count in the
+window has fallen back to the threshold and a full window has passed, so a
+steady rate right around the threshold is reported once per window.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+InboundConnectionDrops | <count> inbound connections older than <age>s closed in last <secs>s (threshold: <threshold>), evictions not counted
+| <count> inbound connections closed in last <secs>s (threshold: <threshold>), evictions not counted
+```
+
 ## Peer lifecycle
 
 When a peer that one of the per-peer heuristics flagged disconnects (either via a
@@ -179,6 +201,12 @@ Options:
           Alert when connecting a block takes longer than this many seconds [default: 60]
       --stale-tip-secs <STALE_TIP_SECS>
           Alert when no block has been connected for this many seconds [default: 7200]
+      --inbound-drop-threshold <INBOUND_DROP_THRESHOLD>
+          Number of inbound connections closed in the window before alerting [default: 20]
+      --inbound-drop-window-secs <INBOUND_DROP_WINDOW_SECS>
+          Sliding window size for inbound connection drops (seconds) [default: 300]
+      --inbound-drop-min-age-secs <INBOUND_DROP_MIN_AGE_SECS>
+          Only count closed inbound connections that were up for at least this many seconds [default: 60]
   -l, --log-level <LOG_LEVEL>
           [default: DEBUG]
       --peer-stale-secs <PEER_STALE_SECS>

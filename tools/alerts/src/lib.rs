@@ -20,6 +20,9 @@ pub mod heuristics;
 pub use crate::alerter::{Alert, Alerter, LoggingAlerter, SpammerKind};
 use crate::heuristics::addr_spammer::{AddrSpammer, AddrSpammerArgs};
 use crate::heuristics::handshake_after_verack::HandshakeAfterVerack;
+use crate::heuristics::inbound_connection_drops::{
+    InboundConnectionDrops, InboundConnectionDropsArgs,
+};
 use crate::heuristics::misbehaving_peer::MisbehavingPeer;
 use crate::heuristics::ping_spammer::{PingSpammer, PingSpammerArgs};
 use crate::heuristics::slow_block::{SlowBlock, SlowBlockArgs};
@@ -53,6 +56,9 @@ pub struct Args {
     #[command(flatten)]
     pub stale_tip: StaleTipArgs,
 
+    #[command(flatten)]
+    pub inbound_connection_drops: InboundConnectionDropsArgs,
+
     #[arg(short, long, default_value_t = shared::log::Level::Debug)]
     pub log_level: shared::log::Level,
 
@@ -79,6 +85,7 @@ impl Args {
             small_ping_nonce: SmallPingNonceArgs::default(),
             slow_block: SlowBlockArgs::default(),
             stale_tip: StaleTipArgs::default(),
+            inbound_connection_drops: InboundConnectionDropsArgs::default(),
             log_level: shared::log::Level::Trace,
             peer_stale_secs: 300,
         }
@@ -96,6 +103,9 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
         Box::new(TxRelayMismatch::default()),
         Box::new(SlowBlock::new(args.slow_block.clone())),
         Box::new(StaleTip::new(args.stale_tip.clone(), Instant::now())),
+        Box::new(InboundConnectionDrops::new(
+            args.inbound_connection_drops.clone(),
+        )),
     ]
 }
 

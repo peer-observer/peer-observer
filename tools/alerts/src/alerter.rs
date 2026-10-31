@@ -67,6 +67,14 @@ pub enum Alert {
     },
     /// A block connected after the tip had been reported as stale
     TipRecovered { height: i32, stale_secs: u64 },
+    /// Many established inbound connections closed within the window,
+    /// evictions aside
+    InboundConnectionDrops {
+        count: usize,
+        window_secs: u64,
+        threshold: usize,
+        min_age_secs: u64,
+    },
 }
 
 impl std::fmt::Display for Alert {
@@ -174,6 +182,16 @@ impl std::fmt::Display for Alert {
                 f,
                 "TipRecovered | height={} | block connected after {}s without a block",
                 height, stale_secs
+            ),
+            Alert::InboundConnectionDrops {
+                count,
+                window_secs,
+                threshold,
+                min_age_secs,
+            } => write!(
+                f,
+                "InboundConnectionDrops | {} inbound connections older than {}s closed in last {}s (threshold: {}), evictions not counted",
+                count, min_age_secs, window_secs, threshold
             ),
         }
     }

@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 
 pub mod addr_spammer;
 pub mod handshake_after_verack;
+pub mod inbound_connection_drops;
 pub mod misbehaving_peer;
 pub mod ping_spammer;
 pub mod slow_block;
@@ -129,6 +130,67 @@ impl SlidingWindow {
     }
 }
 
+/// A sliding window over node-wide hits that reports once per episode: it
+/// reports the first time the hit count exceeds the threshold and stays quiet
+/// until the count has fallen back to the threshold or below.
+pub struct ThresholdWindow {
+    window: Duration,
+    threshold: usize,
+    hits: SlidingWindow,
+    armed: bool,
+    /// When the last episode was reported. A steady rate right around the
+    /// threshold would otherwise be reported every time the count dips and
+    /// climbs again, so a new report also needs a full window to have passed.
+    reported_at: Option<Instant>,
+}
+
+impl ThresholdWindow {
+    pub fn new(window: Duration, threshold: usize) -> Self {
+        ThresholdWindow {
+            window,
+            threshold,
+            hits: SlidingWindow::default(),
+            armed: true,
+            reported_at: None,
+        }
+    }
+
+    /// Records a hit at `now`. Returns the hit count if this hit starts a new
+    /// episode above the threshold, and `None` otherwise.
+    pub fn record(&mut self, now: Instant) -> Option<usize> {
+        let count = self.hits.record(now, self.window);
+        if !self.armed || count <= self.threshold {
+            return None;
+        }
+        if self
+            .reported_at
+            .is_some_and(|at| now.duration_since(at) < self.window)
+        {
+            return None;
+        }
+        self.armed = false;
+        self.reported_at = Some(now);
+        Some(count)
+    }
+
+    /// Forgets old hits and re-arms once the count is back at or below the
+    /// threshold. Call this regularly so an episode ends even without hits.
+    pub fn tick(&mut self, now: Instant) {
+        if self.hits.prune(now, self.window) <= self.threshold {
+            self.armed = true;
+        }
+    }
+
+    /// True when no hits are left in the window and the last report is older
+    /// than the window, so nothing is left to remember.
+    pub fn is_idle(&self, now: Instant) -> bool {
+        self.hits.is_empty()
+            && self
+                .reported_at
+                .is_none_or(|at| now.duration_since(at) >= self.window)
+    }
+}
+
 struct PeerWindow {
     hits: SlidingWindow,
     alerted_at: Option<Instant>,
@@ -185,8 +247,11 @@ impl PerPeerWindowCounter {
 #[cfg(test)]
 pub mod test_util {
     use shared::protobuf::bitcoin_primitives::inventory_item::Item;
+    use shared::protobuf::bitcoin_primitives::ConnType;
     use shared::protobuf::bitcoin_primitives::{address, Address, InventoryItem};
-    use shared::protobuf::ebpf_extractor::connection::{connection_event, ConnectionEvent};
+    use shared::protobuf::ebpf_extractor::connection::{
+        connection_event, ClosedConnection, Connection, ConnectionEvent, EvictedInboundConnection,
+    };
     use shared::protobuf::ebpf_extractor::ebpf::EbpfEvent;
     use shared::protobuf::ebpf_extractor::message::message_event::Msg;
     use shared::protobuf::ebpf_extractor::message::{Inv, MessageEvent, Metadata, Version};
@@ -198,11 +263,13 @@ pub mod test_util {
     use shared::protobuf::event::Event;
 
     pub const PEER_ADDR: &str = "1.2.3.4:8333";
+    /// The UNIX timestamp, in seconds, every test event carries.
+    pub const EVENT_TIMESTAMP_SECS: u64 = 1_700_000_000;
 
     /// Wraps an ebpf-extractor event into an `Event` with a fixed timestamp.
     pub fn ebpf(ebpf_event: EbpfEvent) -> Event {
         Event {
-            timestamp: 1_700_000_000_000,
+            timestamp: EVENT_TIMESTAMP_SECS * 1000,
             peer_observer_event: Some(PeerObserverEvent::EbpfExtractor(Ebpf {
                 ebpf_event: Some(ebpf_event),
             })),
@@ -222,6 +289,35 @@ pub mod test_util {
                 connection_time: connection_time_ns,
             })),
         }))
+    }
+
+    /// Bitcoin Core closed the connection to `peer_id`, which it opened at
+    /// the UNIX timestamp `time_established`.
+    pub fn closed(peer_id: u64, conn_type: ConnType, time_established: u64) -> Event {
+        connection(connection_event::Event::Closed(ClosedConnection {
+            conn: Connection {
+                peer_id,
+                addr: PEER_ADDR.to_string(),
+                conn_type: conn_type as i32,
+                network: 1,
+            },
+            time_established,
+        }))
+    }
+
+    /// Bitcoin Core evicted the inbound connection to `peer_id`.
+    pub fn evicted(peer_id: u64) -> Event {
+        connection(connection_event::Event::InboundEvicted(
+            EvictedInboundConnection {
+                conn: Connection {
+                    peer_id,
+                    addr: PEER_ADDR.to_string(),
+                    conn_type: ConnType::Inbound as i32,
+                    network: 1,
+                },
+                time_established: 0,
+            },
+        ))
     }
 
     /// A connection event.
@@ -328,6 +424,48 @@ mod tests {
             assert_eq!(counter.hit(1, later + Duration::from_millis(i)), None);
         }
         assert_eq!(counter.hits(1), 3, "only the three recent hits remain");
+    }
+
+    #[test]
+    fn threshold_window_reports_once_per_episode() {
+        let mut window = ThresholdWindow::new(Duration::from_secs(60), 2);
+        let t0 = Instant::now();
+        assert_eq!(window.record(t0), None);
+        assert_eq!(window.record(t0), None);
+        assert_eq!(window.record(t0), Some(3));
+        assert_eq!(window.record(t0), None, "the episode is still running");
+
+        // Still above the threshold after pruning: stays quiet
+        window.tick(t0 + Duration::from_secs(10));
+        assert_eq!(window.record(t0 + Duration::from_secs(10)), None);
+
+        // All hits fell out of the window: a new episode can start
+        window.tick(t0 + Duration::from_secs(100));
+        assert_eq!(window.record(t0 + Duration::from_secs(100)), None);
+        assert_eq!(window.record(t0 + Duration::from_secs(100)), None);
+        assert_eq!(window.record(t0 + Duration::from_secs(100)), Some(3));
+    }
+
+    #[test]
+    fn threshold_window_reports_a_steady_rate_once_per_window() {
+        let mut window = ThresholdWindow::new(Duration::from_secs(60), 1);
+        let t0 = Instant::now();
+        // Two hits report, then one ages out and one new arrives, over and
+        // over: the count flaps around the threshold but is reported once
+        assert_eq!(window.record(t0), None);
+        assert_eq!(window.record(t0 + Duration::from_secs(1)), Some(2));
+        for s in [40, 50, 55, 59] {
+            window.tick(t0 + Duration::from_secs(s));
+            assert_eq!(window.record(t0 + Duration::from_secs(s)), None);
+        }
+        assert!(
+            !window.is_idle(t0 + Duration::from_secs(59)),
+            "a recent report is worth remembering"
+        );
+        // A full window after the report it may be reported again
+        window.tick(t0 + Duration::from_secs(130));
+        assert_eq!(window.record(t0 + Duration::from_secs(130)), None);
+        assert_eq!(window.record(t0 + Duration::from_secs(131)), Some(2));
     }
 
     #[test]
