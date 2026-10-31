@@ -13,6 +13,7 @@ use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
 pub mod addr_spammer;
+pub mod handshake_after_verack;
 pub mod misbehaving_peer;
 pub mod ping_spammer;
 

@@ -19,6 +19,7 @@ pub mod heuristics;
 
 pub use crate::alerter::{Alert, Alerter, LoggingAlerter, SpammerKind};
 use crate::heuristics::addr_spammer::{AddrSpammer, AddrSpammerArgs};
+use crate::heuristics::handshake_after_verack::HandshakeAfterVerack;
 use crate::heuristics::misbehaving_peer::MisbehavingPeer;
 use crate::heuristics::ping_spammer::{PingSpammer, PingSpammerArgs};
 use crate::heuristics::{connection_event, inbound_message, Context, Heuristic, Peer, Peers};
@@ -71,6 +72,7 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
         Box::new(PingSpammer::new(args.ping_spammer.clone())),
         Box::new(AddrSpammer::new(args.addr_spammer.clone())),
         Box::new(MisbehavingPeer),
+        Box::new(HandshakeAfterVerack::default()),
     ]
 }
 

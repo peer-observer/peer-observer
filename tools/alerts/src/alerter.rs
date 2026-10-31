@@ -30,6 +30,12 @@ pub enum Alert {
         addr: String,
         reason: String,
     },
+    /// The peer sent a handshake message after its handshake was complete
+    HandshakeAfterVerack {
+        peer_id: u64,
+        addr: String,
+        command: String,
+    },
 }
 
 impl std::fmt::Display for Alert {
@@ -70,6 +76,15 @@ impl std::fmt::Display for Alert {
                 f,
                 "MisbehavingPeer | peer_id={} addr={} | {}",
                 peer_id, addr, reason
+            ),
+            Alert::HandshakeAfterVerack {
+                peer_id,
+                addr,
+                command,
+            } => write!(
+                f,
+                "HandshakeAfterVerack | peer_id={} addr={} | received {} after verack",
+                peer_id, addr, command
             ),
         }
     }

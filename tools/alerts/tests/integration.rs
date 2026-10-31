@@ -658,3 +658,90 @@ async fn test_misbehaving_peer() {
 
     harness.shutdown().await;
 }
+
+/// Builds an inbound handshake message event. `command` is one of the
+/// messages with no payload: verack, wtxidrelay, or sendaddrv2
+fn make_handshake_event(peer_id: u64, addr: &str, command: &str) -> Event {
+    let msg = match command {
+        "verack" => Msg::Verack(true),
+        "wtxidrelay" => Msg::Wtxidrelay(true),
+        "sendaddrv2" => Msg::Sendaddrv2(true),
+        other => panic!("no builder for handshake message {other}"),
+    };
+    Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+        ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
+            meta: Metadata {
+                peer_id,
+                addr: addr.to_string(),
+                conn_type: 1,
+                command: command.to_string(),
+                inbound: true,
+                size: 0,
+            },
+            msg: Some(msg),
+        })),
+    }))
+    .unwrap()
+}
+
+/// Verifies that a handshake message after the peer's verack fires one
+/// HandshakeAfterVerack alert, that the same messages before verack are fine,
+/// and that the flagged peer's disconnect is reported
+#[tokio::test]
+async fn test_handshake_after_verack() {
+    let mut harness =
+        TestHarness::new(|port| make_test_args(port, AlertSettingsInTest::default())).await;
+    let subject = Subject::NetMsg.to_string();
+    let addr = "41.41.41.41:8333";
+
+    for command in ["wtxidrelay", "sendaddrv2", "verack"] {
+        harness
+            .publisher
+            .publish(
+                subject.clone(),
+                make_handshake_event(41, addr, command).encode_to_vec(),
+            )
+            .await;
+    }
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "a normal handshake must not alert"
+    );
+
+    for command in ["sendaddrv2", "verack"] {
+        harness
+            .publisher
+            .publish(
+                subject.clone(),
+                make_handshake_event(41, addr, command).encode_to_vec(),
+            )
+            .await;
+    }
+    let alert = recv_alert(&mut harness.rx, Duration::from_secs(2)).await;
+    assert_eq!(
+        alert,
+        Alert::HandshakeAfterVerack {
+            peer_id: 41,
+            addr: addr.to_string(),
+            command: "sendaddrv2".to_string(),
+        }
+    );
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "the peer is only reported once"
+    );
+
+    harness
+        .publisher
+        .publish(
+            Subject::NetConn.to_string(),
+            make_closed_event(41, addr).encode_to_vec(),
+        )
+        .await;
+    match recv_alert(&mut harness.rx, Duration::from_secs(2)).await {
+        Alert::PeerDisconnected { peer_id, .. } => assert_eq!(peer_id, 41),
+        other => panic!("expected Alert::PeerDisconnected, got {other:?}"),
+    }
+
+    harness.shutdown().await;
+}

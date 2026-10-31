@@ -43,6 +43,24 @@ MisbehavingPeer | peer_id=<id> addr=<addr> | <reason>
 
 There are no settings for this heuristic. Every report fires an alert.
 
+### HandshakeAfterVerack
+
+Flags a peer that sends a handshake message after its own `verack`. The P2P
+handshake is `version`, optional feature messages like `wtxidrelay` and
+`sendaddrv2`, and then `verack`. Bitcoin Core ignores `version`, `verack`,
+`wtxidrelay`, and `sendaddrv2` messages after the handshake and disconnects
+peers sending `sendtxrcncl` after it. Peers doing this are buggy or probing.
+
+The check only starts once the tool has seen the peer's `verack`, so peers that
+connected before the tool started are not checked. Each peer is reported once.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+HandshakeAfterVerack | peer_id=<id> addr=<addr> | received <command> after verack
+```
+
+There are no settings for this heuristic.
+
 ## Peer lifecycle
 
 When a peer that one of the per-peer heuristics flagged disconnects (either via a
