@@ -139,12 +139,19 @@ pub enum Alert {
         threshold: usize,
         max_age_secs: u64,
     },
+    /// One address keeps opening new connections to us
+    ConnectionCycling {
+        host: String,
+        count: usize,
+        window_secs: u64,
+        threshold: usize,
+    },
 }
 
 impl Alert {
     /// The names of all alert kinds, as `name()` returns them. Used to create
     /// a metric series for every kind up front.
-    pub const NAMES: [&'static str; 20] = [
+    pub const NAMES: [&'static str; 21] = [
         "ping_spammer",
         "addr_spammer",
         "peer_disconnected",
@@ -165,6 +172,7 @@ impl Alert {
         "tx_spy",
         "repeated_getaddr",
         "address_harvester",
+        "connection_cycling",
     ];
 
     /// A short, stable name for the kind of alert, used as metric label.
@@ -196,6 +204,7 @@ impl Alert {
             Alert::TxSpy { .. } => "tx_spy",
             Alert::RepeatedGetaddr { .. } => "repeated_getaddr",
             Alert::AddressHarvester { .. } => "address_harvester",
+            Alert::ConnectionCycling { .. } => "connection_cycling",
         }
     }
 
@@ -221,7 +230,8 @@ impl Alert {
             | Alert::MisbehavingBurst { .. }
             | Alert::HighPingWait { .. }
             | Alert::LowOutboundPeers { .. }
-            | Alert::AddressHarvester { .. } => None,
+            | Alert::AddressHarvester { .. }
+            | Alert::ConnectionCycling { .. } => None,
         }
     }
 }
@@ -431,6 +441,16 @@ impl std::fmt::Display for Alert {
                 f,
                 "AddressHarvester | {} connections from {} asked for addresses and left within {}s in last {}s (threshold: {})",
                 count, netgroup, max_age_secs, window_secs, threshold
+            ),
+            Alert::ConnectionCycling {
+                host,
+                count,
+                window_secs,
+                threshold,
+            } => write!(
+                f,
+                "ConnectionCycling | {} opened {} connections in last {}s (threshold: {})",
+                host, count, window_secs, threshold
             ),
         }
     }

@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 
 pub mod addr_spammer;
 pub mod address_harvester;
+pub mod connection_cycling;
 pub mod handshake_after_verack;
 pub mod high_ping_wait;
 pub mod inbound_connection_drops;
@@ -344,6 +345,7 @@ pub mod test_util {
     use shared::protobuf::bitcoin_primitives::{address, Address, InventoryItem};
     use shared::protobuf::ebpf_extractor::connection::{
         connection_event, ClosedConnection, Connection, ConnectionEvent, EvictedInboundConnection,
+        InboundConnection,
     };
     use shared::protobuf::ebpf_extractor::ebpf::EbpfEvent;
     use shared::protobuf::ebpf_extractor::message::message_event::Msg;
@@ -398,6 +400,19 @@ pub mod test_util {
                 network: 1,
             },
             time_established,
+        }))
+    }
+
+    /// A peer connected to us as `peer_id`.
+    pub fn inbound_connection(peer_id: u64) -> Event {
+        connection(connection_event::Event::Inbound(InboundConnection {
+            conn: Connection {
+                peer_id,
+                addr: PEER_ADDR.to_string(),
+                conn_type: ConnType::Inbound as i32,
+                network: 1,
+            },
+            existing_connections: 1,
         }))
     }
 

@@ -26,6 +26,7 @@ pub mod metrics;
 pub use crate::alerter::{Alert, Alerter, LoggingAlerter, SpammerKind};
 use crate::heuristics::addr_spammer::{AddrSpammer, AddrSpammerArgs};
 use crate::heuristics::address_harvester::{AddressHarvester, AddressHarvesterArgs};
+use crate::heuristics::connection_cycling::{ConnectionCycling, ConnectionCyclingArgs};
 use crate::heuristics::handshake_after_verack::HandshakeAfterVerack;
 use crate::heuristics::high_ping_wait::{HighPingWait, HighPingWaitArgs};
 use crate::heuristics::inbound_connection_drops::{
@@ -84,6 +85,9 @@ pub struct Args {
     pub stale_tip: StaleTipArgs,
 
     #[command(flatten)]
+    pub connection_cycling: ConnectionCyclingArgs,
+
+    #[command(flatten)]
     pub address_harvester: AddressHarvesterArgs,
 
     #[command(flatten)]
@@ -135,6 +139,7 @@ impl Args {
             repeated_getaddr: RepeatedGetaddrArgs::default(),
             slow_block: SlowBlockArgs::default(),
             stale_tip: StaleTipArgs::default(),
+            connection_cycling: ConnectionCyclingArgs::default(),
             address_harvester: AddressHarvesterArgs::default(),
             misbehaving_burst: MisbehavingBurstArgs::default(),
             high_ping_wait: HighPingWaitArgs::default(),
@@ -164,6 +169,7 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
         Box::new(RepeatedGetaddr::new(args.repeated_getaddr.clone())),
         Box::new(SlowBlock::new(args.slow_block.clone())),
         Box::new(StaleTip::new(args.stale_tip.clone(), Instant::now())),
+        Box::new(ConnectionCycling::new(args.connection_cycling.clone())),
         Box::new(AddressHarvester::new(args.address_harvester.clone())),
         Box::new(MisbehavingBurst::new(args.misbehaving_burst.clone())),
         Box::new(HighPingWait::new(args.high_ping_wait.clone())),

@@ -220,6 +220,23 @@ Alert format (as rendered by `LoggingAlerter`):
 MisbehavingBurst | <count> peers reported as misbehaving in last <secs>s (threshold: <threshold>)
 ```
 
+### ConnectionCycling
+
+Reports an address that opened more than `--cycling-threshold` inbound
+connections within `--cycling-window-secs`. A node connects once and stays. An
+address that comes back every few minutes is cycling connections: a crawler
+returning for more addresses, a monitor trying to be the first to hear our
+transactions, or software stuck in a reconnect loop. Each connection gets a fresh
+peer id, so the per-peer alerts repeat for it, while this one fires once per
+episode per address and, for an address that keeps cycling, at most once per
+`--cycling-repeat-secs`, a day by default. Connections from localhost are not counted: inbound Tor
+connections all arrive there and cannot be told apart by address.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+ConnectionCycling | <host> opened <count> connections in last <secs>s (threshold: <threshold>)
+```
+
 ### AddressHarvester
 
 Reports a netgroup, a /16 for IPv4 or a /32 for IPv6, from which more than
@@ -383,6 +400,12 @@ Options:
           Alert when connecting a block takes longer than this many seconds [default: 60]
       --stale-tip-secs <STALE_TIP_SECS>
           Alert when no block has been connected for this many seconds [default: 7200]
+      --cycling-threshold <CYCLING_THRESHOLD>
+          Number of inbound connections from one address in the window before alerting [default: 10]
+      --cycling-window-secs <CYCLING_WINDOW_SECS>
+          Sliding window size for connection cycling detection (seconds) [default: 3600]
+      --cycling-repeat-secs <CYCLING_REPEAT_SECS>
+          Report an address that keeps cycling at most once per this many seconds [default: 86400]
       --harvester-threshold <HARVESTER_THRESHOLD>
           Number of short connections asking for addresses from one netgroup before alerting [default: 3]
       --harvester-window-secs <HARVESTER_WINDOW_SECS>

@@ -12,7 +12,7 @@ use shared::{
         ebpf_extractor::{
             connection::{
                 self, ClosedConnection, Connection, ConnectionEvent, EvictedInboundConnection,
-                MisbehavingConnection,
+                InboundConnection, MisbehavingConnection,
             },
             ebpf,
             message::{
@@ -1909,6 +1909,74 @@ async fn test_address_harvester() {
             window_secs: 600,
             threshold,
             max_age_secs: 30,
+        }
+    );
+
+    harness.shutdown().await;
+}
+
+/// Builds an InboundConnection event for the given peer/addr
+fn make_inbound_connection_event(peer_id: u64, addr: &str) -> Event {
+    Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+        ebpf_event: Some(ebpf::EbpfEvent::Connection(ConnectionEvent {
+            event: Some(connection::connection_event::Event::Inbound(
+                InboundConnection {
+                    conn: Connection {
+                        peer_id,
+                        addr: addr.to_string(),
+                        conn_type: 1,
+                        network: 1,
+                    },
+                    existing_connections: 1,
+                },
+            )),
+        })),
+    }))
+    .unwrap()
+}
+
+/// Verifies that more than --cycling-threshold inbound connections from one
+/// address in the window fire one ConnectionCycling alert
+#[tokio::test]
+async fn test_connection_cycling() {
+    let threshold = 2;
+    let mut harness = TestHarness::new(|port| {
+        let mut args = make_test_args(port, AlertSettingsInTest::default());
+        args.connection_cycling.cycling_threshold = threshold;
+        args
+    })
+    .await;
+    let subject = Subject::NetConn.to_string();
+
+    for (peer_id, port) in [(170, 1000), (171, 1001)] {
+        harness
+            .publisher
+            .publish(
+                subject.clone(),
+                make_inbound_connection_event(peer_id, &format!("170.0.0.1:{port}"))
+                    .encode_to_vec(),
+            )
+            .await;
+    }
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "up to threshold connections are fine"
+    );
+
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_inbound_connection_event(172, "170.0.0.1:1002").encode_to_vec(),
+        )
+        .await;
+    assert_eq!(
+        recv_alert(&mut harness.rx, Duration::from_secs(2)).await,
+        Alert::ConnectionCycling {
+            host: "170.0.0.1".to_string(),
+            count: threshold + 1,
+            window_secs: 3600,
+            threshold,
         }
     );
 
