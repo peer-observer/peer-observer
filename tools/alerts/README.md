@@ -335,6 +335,26 @@ Alert format (as rendered by `LoggingAlerter`):
 OldConnectionDrops | <count> connections older than <age>s closed in last <secs>s (threshold: <threshold>)
 ```
 
+## Combined verdict
+
+### SuspiciousPeer
+
+Reports an address once `--suspicious-flags` different per-peer alert kinds have
+fired against it within `--suspicious-window-secs`. A single alert about a peer
+says that it is odd, and any one of them has an innocent explanation. Two or more
+independent ones on the same address within an hour rarely do. The verdict works
+per address rather than per connection, so a peer that reconnects with a fresh
+peer id keeps its flags, and `ConnectionCycling` counts as a flag for its
+address. `PeerDisconnected` does not count. Inbound Tor
+connections all arrive from localhost, so they are judged per connection instead
+of per address, and the operator's own local tools are left out. An address is
+reported once per window.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+SuspiciousPeer | host=<host> | <count> alert kinds in last <secs>s: <kind>, <kind>
+```
+
 ## Peer lifecycle
 
 When a peer that one of the per-peer heuristics flagged disconnects (either via a
@@ -460,6 +480,10 @@ Options:
           Sliding window size for old connection drops (seconds) [default: 300]
       --old-connection-age-secs <OLD_CONNECTION_AGE_SECS>
           A connection counts as old once it has been up for this many seconds [default: 86400]
+      --suspicious-flags <SUSPICIOUS_FLAGS>
+          Number of different alert kinds on one address before calling it suspicious [default: 2]
+      --suspicious-window-secs <SUSPICIOUS_WINDOW_SECS>
+          How long an alert counts towards an address being suspicious (seconds) [default: 3600]
   -m, --metrics-address <METRICS_ADDRESS>
           The metrics server address the tool should listen on [default: 127.0.0.1:8283]
   -l, --log-level <LOG_LEVEL>

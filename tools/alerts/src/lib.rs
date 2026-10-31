@@ -42,6 +42,7 @@ use crate::heuristics::repeated_getaddr::{RepeatedGetaddr, RepeatedGetaddrArgs};
 use crate::heuristics::slow_block::{SlowBlock, SlowBlockArgs};
 use crate::heuristics::small_ping_nonce::{SmallPingNonce, SmallPingNonceArgs};
 use crate::heuristics::stale_tip::{StaleTip, StaleTipArgs};
+use crate::heuristics::suspicious_peer::{SuspiciousPeer, SuspiciousPeerArgs};
 use crate::heuristics::tx_relay_mismatch::TxRelayMismatch;
 use crate::heuristics::tx_spy::{TxSpy, TxSpyArgs};
 use crate::heuristics::unknown_messages::{UnknownMessages, UnknownMessagesArgs};
@@ -109,6 +110,9 @@ pub struct Args {
     #[command(flatten)]
     pub old_connection_drops: OldConnectionDropsArgs,
 
+    #[command(flatten)]
+    pub suspicious_peer: SuspiciousPeerArgs,
+
     /// The metrics server address the tool should listen on
     #[arg(short, long, default_value = "127.0.0.1:8283")]
     pub metrics_address: String,
@@ -151,6 +155,7 @@ impl Args {
             netgroup_fleet: NetgroupFleetArgs::default(),
             inbound_connection_drops: InboundConnectionDropsArgs::default(),
             old_connection_drops: OldConnectionDropsArgs::default(),
+            suspicious_peer: SuspiciousPeerArgs::default(),
             // Port 0 lets the system pick a free port. `run` reports it.
             metrics_address: "127.0.0.1:0".to_string(),
             log_level: shared::log::Level::Trace,
@@ -194,6 +199,8 @@ struct State {
     /// The alert kinds that flagged each connected peer, with the address
     /// used in the metrics, so the series can be removed when it leaves.
     flagged: HashMap<u64, Vec<(&'static str, String)>>,
+    /// Combines the per-peer alerts into one verdict per address.
+    suspicious: SuspiciousPeer,
     metrics: metrics::Metrics,
 }
 
@@ -203,13 +210,20 @@ impl State {
             peers: Peers::new(),
             heuristics: build_heuristics(args),
             flagged: HashMap::new(),
+            suspicious: SuspiciousPeer::new(args.suspicious_peer.clone()),
             metrics,
         }
     }
 
     /// Counts the alerts on the metrics endpoint, remembers which peers they
-    /// flag, and hands them to the alerter.
-    fn emit(&mut self, alerts: Vec<Alert>, alerter: &impl Alerter) {
+    /// flag, adds a `SuspiciousPeer` verdict when an address has collected
+    /// enough of them, and hands everything to the alerter.
+    fn emit(&mut self, mut alerts: Vec<Alert>, alerter: &impl Alerter, now: Instant) {
+        let verdicts: Vec<Alert> = alerts
+            .iter()
+            .filter_map(|alert| self.suspicious.on_alert(alert, &self.peers, now))
+            .collect();
+        alerts.extend(verdicts);
         for alert in alerts {
             self.metrics.count(&alert);
             let mut peer = None;
@@ -291,6 +305,7 @@ impl State {
         for heuristic in self.heuristics.iter_mut() {
             heuristic.on_tick(&ctx, out);
         }
+        self.suspicious.prune(now);
     }
 
     /// Forgets peers we haven't heard from in `stale_after`.
@@ -367,9 +382,10 @@ pub async fn run<A: Alerter>(
     loop {
         shared::tokio::select! {
             _ = tick_interval.tick() => {
+                let now = Instant::now();
                 let mut alerts = Vec::new();
-                state.tick(Instant::now(), &mut alerts);
-                state.emit(alerts, &alerter);
+                state.tick(now, &mut alerts);
+                state.emit(alerts, &alerter, now);
             }
             maybe_msg = sub.next() => {
                 match maybe_msg {
@@ -381,9 +397,10 @@ pub async fn run<A: Alerter>(
                 }
             }
             _ = cleanup_interval.tick() => {
+                let now = Instant::now();
                 let mut alerts = Vec::new();
-                state.remove_stale_peers(stale_after, Instant::now(), &mut alerts);
-                state.emit(alerts, &alerter);
+                state.remove_stale_peers(stale_after, now, &mut alerts);
+                state.emit(alerts, &alerter, now);
             }
             res = shutdown_rx.changed() => {
                 match res {
@@ -423,7 +440,7 @@ fn handle_event(event: Event, state: &mut State, alerter: &impl Alerter) {
         state.remove_peer(closed.conn.peer_id, &closed.conn.addr, now, &mut alerts);
     }
 
-    state.emit(alerts, alerter);
+    state.emit(alerts, alerter, now);
 }
 
 #[cfg(test)]

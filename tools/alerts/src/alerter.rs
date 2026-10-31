@@ -153,12 +153,18 @@ pub enum Alert {
         inbound_total: usize,
         threshold: usize,
     },
+    /// Several different alert kinds fired against one address
+    SuspiciousPeer {
+        host: String,
+        flags: Vec<&'static str>,
+        window_secs: u64,
+    },
 }
 
 impl Alert {
     /// The names of all alert kinds, as `name()` returns them. Used to create
     /// a metric series for every kind up front.
-    pub const NAMES: [&'static str; 22] = [
+    pub const NAMES: [&'static str; 23] = [
         "ping_spammer",
         "addr_spammer",
         "peer_disconnected",
@@ -181,6 +187,7 @@ impl Alert {
         "address_harvester",
         "connection_cycling",
         "netgroup_fleet",
+        "suspicious_peer",
     ];
 
     /// A short, stable name for the kind of alert, used as metric label.
@@ -214,6 +221,7 @@ impl Alert {
             Alert::AddressHarvester { .. } => "address_harvester",
             Alert::ConnectionCycling { .. } => "connection_cycling",
             Alert::NetgroupFleet { .. } => "netgroup_fleet",
+            Alert::SuspiciousPeer { .. } => "suspicious_peer",
         }
     }
 
@@ -241,7 +249,8 @@ impl Alert {
             | Alert::LowOutboundPeers { .. }
             | Alert::AddressHarvester { .. }
             | Alert::ConnectionCycling { .. }
-            | Alert::NetgroupFleet { .. } => None,
+            | Alert::NetgroupFleet { .. }
+            | Alert::SuspiciousPeer { .. } => None,
         }
     }
 }
@@ -471,6 +480,18 @@ impl std::fmt::Display for Alert {
                 f,
                 "NetgroupFleet | {} of {} inbound peers are from {} (threshold: {})",
                 connections, inbound_total, netgroup, threshold
+            ),
+            Alert::SuspiciousPeer {
+                host,
+                flags,
+                window_secs,
+            } => write!(
+                f,
+                "SuspiciousPeer | host={} | {} alert kinds in last {}s: {}",
+                host,
+                flags.len(),
+                window_secs,
+                flags.join(", ")
             ),
         }
     }

@@ -31,6 +31,7 @@ pub mod repeated_getaddr;
 pub mod slow_block;
 pub mod small_ping_nonce;
 pub mod stale_tip;
+pub mod suspicious_peer;
 pub mod tx_relay_mismatch;
 pub mod tx_spy;
 pub mod unknown_messages;
@@ -110,6 +111,14 @@ pub fn ebpf_event(event: &Event) -> Option<&EbpfEvent> {
 pub fn inbound_message(event: &Event) -> Option<&MessageEvent> {
     match ebpf_event(event) {
         Some(EbpfEvent::Message(msg)) if msg.meta.inbound => Some(msg),
+        _ => None,
+    }
+}
+
+/// Returns the P2P message in `event` if it is one we sent to a peer.
+pub fn outbound_message(event: &Event) -> Option<&MessageEvent> {
+    match ebpf_event(event) {
+        Some(EbpfEvent::Message(msg)) if !msg.meta.inbound => Some(msg),
         _ => None,
     }
 }

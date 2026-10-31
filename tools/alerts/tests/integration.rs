@@ -2045,3 +2045,53 @@ async fn test_netgroup_fleet() {
 
     harness.shutdown().await;
 }
+
+/// Verifies that two different alert kinds on one address are followed by a
+/// SuspiciousPeer alert naming both kinds
+#[tokio::test]
+async fn test_suspicious_peer() {
+    let mut harness = TestHarness::new(|port| {
+        make_test_args(
+            port,
+            AlertSettingsInTest {
+                ping_threshold: 3,
+                ..Default::default()
+            },
+        )
+    })
+    .await;
+    let addr = "200.0.0.1:8333";
+
+    // Four pings with a counter as nonce trip the ping spammer and the
+    // small nonce check at once
+    for nonce in 1..=4 {
+        harness
+            .publisher
+            .publish(
+                Subject::NetMsg.to_string(),
+                make_ping_event_with_nonce(200, addr, true, nonce).encode_to_vec(),
+            )
+            .await;
+    }
+    let mut kinds = Vec::new();
+    for _ in 0..3 {
+        let alert = recv_alert(&mut harness.rx, Duration::from_secs(2)).await;
+        if let Alert::SuspiciousPeer {
+            host,
+            flags,
+            window_secs,
+        } = &alert
+        {
+            assert_eq!(host, "200.0.0.1");
+            assert_eq!(flags, &vec!["ping_spammer", "small_ping_nonce"]);
+            assert_eq!(*window_secs, 3600);
+        }
+        kinds.push(alert.name());
+    }
+    assert_eq!(
+        kinds,
+        vec!["ping_spammer", "small_ping_nonce", "suspicious_peer"]
+    );
+
+    harness.shutdown().await;
+}
