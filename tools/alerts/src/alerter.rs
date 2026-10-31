@@ -82,12 +82,20 @@ pub enum Alert {
         threshold: usize,
         min_age_secs: u64,
     },
+    /// The peer sent too many messages we do not know
+    UnknownMessages {
+        peer_id: u64,
+        addr: String,
+        count: usize,
+        threshold: usize,
+        last_command: String,
+    },
 }
 
 impl Alert {
     /// The names of all alert kinds, as `name()` returns them. Used to create
     /// a metric series for every kind up front.
-    pub const NAMES: [&'static str; 12] = [
+    pub const NAMES: [&'static str; 13] = [
         "ping_spammer",
         "addr_spammer",
         "peer_disconnected",
@@ -100,6 +108,7 @@ impl Alert {
         "tip_recovered",
         "inbound_connection_drops",
         "old_connection_drops",
+        "unknown_messages",
     ];
 
     /// A short, stable name for the kind of alert, used as metric label.
@@ -123,6 +132,7 @@ impl Alert {
             Alert::TipRecovered { .. } => "tip_recovered",
             Alert::InboundConnectionDrops { .. } => "inbound_connection_drops",
             Alert::OldConnectionDrops { .. } => "old_connection_drops",
+            Alert::UnknownMessages { .. } => "unknown_messages",
         }
     }
 
@@ -134,7 +144,8 @@ impl Alert {
             | Alert::MisbehavingPeer { peer_id, addr, .. }
             | Alert::HandshakeAfterVerack { peer_id, addr, .. }
             | Alert::SmallPingNonce { peer_id, addr, .. }
-            | Alert::TxRelayMismatch { peer_id, addr, .. } => Some((*peer_id, addr)),
+            | Alert::TxRelayMismatch { peer_id, addr, .. }
+            | Alert::UnknownMessages { peer_id, addr, .. } => Some((*peer_id, addr)),
             Alert::PeerDisconnected { .. }
             | Alert::SlowBlock { .. }
             | Alert::StaleTip { .. }
@@ -270,6 +281,17 @@ impl std::fmt::Display for Alert {
                 f,
                 "OldConnectionDrops | {} connections older than {}s closed in last {}s (threshold: {})",
                 count, min_age_secs, window_secs, threshold
+            ),
+            Alert::UnknownMessages {
+                peer_id,
+                addr,
+                count,
+                threshold,
+                last_command,
+            } => write!(
+                f,
+                "UnknownMessages | peer_id={} addr={} | {} unknown messages (threshold: {}), last: {}",
+                peer_id, addr, count, threshold, last_command
             ),
         }
     }

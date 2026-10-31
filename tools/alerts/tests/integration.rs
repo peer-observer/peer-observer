@@ -15,7 +15,9 @@ use shared::{
                 MisbehavingConnection,
             },
             ebpf,
-            message::{self, message_event::Msg, Addr, AddrV2, Inv, Metadata, Ping, Version},
+            message::{
+                self, message_event::Msg, Addr, AddrV2, Inv, Metadata, Ping, Unknown, Version,
+            },
             validation::{self, BlockConnected, ValidationEvent},
             Ebpf,
         },
@@ -1357,6 +1359,77 @@ async fn test_alert_metrics() {
     assert!(
         !metrics_raw.contains("peer_id=\"90\""),
         "the info series is removed when the peer leaves"
+    );
+
+    harness.shutdown().await;
+}
+
+/// Builds an inbound message event with a command rust-bitcoin does not know
+fn make_unknown_event(peer_id: u64, addr: &str, command: &str) -> Event {
+    Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+        ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
+            meta: Metadata {
+                peer_id,
+                addr: addr.to_string(),
+                conn_type: 1,
+                command: command.to_string(),
+                inbound: true,
+                size: 0,
+            },
+            msg: Some(Msg::Unknown(Unknown {
+                command: command.to_string(),
+                payload: vec![1, 2, 3],
+            })),
+        })),
+    }))
+    .unwrap()
+}
+
+/// Verifies that more than --unknown-message-threshold unknown messages from
+/// one peer fire one UnknownMessages alert naming the last command
+#[tokio::test]
+async fn test_unknown_messages() {
+    let threshold = 2;
+    let mut harness = TestHarness::new(|port| {
+        let mut args = make_test_args(port, AlertSettingsInTest::default());
+        args.unknown_messages.unknown_message_threshold = threshold;
+        args
+    })
+    .await;
+    let subject = Subject::NetMsg.to_string();
+    let addr = "100.0.0.1:8333";
+
+    for command in ["foo", "bar"] {
+        harness
+            .publisher
+            .publish(
+                subject.clone(),
+                make_unknown_event(100, addr, command).encode_to_vec(),
+            )
+            .await;
+    }
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "exactly threshold unknown messages must not alert"
+    );
+
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_unknown_event(100, addr, "baz").encode_to_vec(),
+        )
+        .await;
+    let alert = recv_alert(&mut harness.rx, Duration::from_secs(2)).await;
+    assert_eq!(
+        alert,
+        Alert::UnknownMessages {
+            peer_id: 100,
+            addr: addr.to_string(),
+            count: threshold + 1,
+            threshold,
+            last_command: "baz".to_string(),
+        }
     );
 
     harness.shutdown().await;

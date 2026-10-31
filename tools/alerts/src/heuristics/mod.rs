@@ -23,6 +23,7 @@ pub mod slow_block;
 pub mod small_ping_nonce;
 pub mod stale_tip;
 pub mod tx_relay_mismatch;
+pub mod unknown_messages;
 
 /// What the tool knows about a peer, independent of any heuristic.
 pub struct Peer {

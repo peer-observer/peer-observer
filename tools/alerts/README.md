@@ -95,6 +95,19 @@ TxRelayMismatch | peer_id=<id> addr=<addr> | received <command> with transaction
 
 There are no settings for this heuristic.
 
+### UnknownMessages
+
+Flags a peer that sends more than `--unknown-message-threshold` messages whose
+command the extractor does not know. Bitcoin Core ignores such messages. One or
+two can be a newer client with a feature we do not parse yet. A peer sending many
+of them is fuzzing, probing how we react, or badly broken. The alert names the
+last unknown command. Each peer is reported once.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+UnknownMessages | peer_id=<id> addr=<addr> | <count> unknown messages (threshold: <threshold>), last: <command>
+```
+
 ## Node heuristics
 
 These look at the node itself rather than at a single peer.
@@ -239,6 +252,8 @@ Options:
           Sliding window size for addr detection (seconds) [default: 60]
       --small-ping-nonce-threshold <SMALL_PING_NONCE_THRESHOLD>
           Number of pings with a nonce below 2^32 from one peer before alerting [default: 3]
+      --unknown-message-threshold <UNKNOWN_MESSAGE_THRESHOLD>
+          Number of unknown messages from one peer before alerting [default: 3]
       --slow-block-secs <SLOW_BLOCK_SECS>
           Alert when connecting a block takes longer than this many seconds [default: 60]
       --stale-tip-secs <STALE_TIP_SECS>
