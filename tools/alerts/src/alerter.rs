@@ -118,12 +118,18 @@ pub enum Alert {
         threshold: usize,
         below_for_secs: u64,
     },
+    /// The peer takes our transaction announcements but never sends any
+    TxSpy {
+        peer_id: u64,
+        addr: String,
+        connected_secs: u64,
+    },
 }
 
 impl Alert {
     /// The names of all alert kinds, as `name()` returns them. Used to create
     /// a metric series for every kind up front.
-    pub const NAMES: [&'static str; 17] = [
+    pub const NAMES: [&'static str; 18] = [
         "ping_spammer",
         "addr_spammer",
         "peer_disconnected",
@@ -141,6 +147,7 @@ impl Alert {
         "misbehaving_burst",
         "high_ping_wait",
         "low_outbound_peers",
+        "tx_spy",
     ];
 
     /// A short, stable name for the kind of alert, used as metric label.
@@ -169,6 +176,7 @@ impl Alert {
             Alert::MisbehavingBurst { .. } => "misbehaving_burst",
             Alert::HighPingWait { .. } => "high_ping_wait",
             Alert::LowOutboundPeers { .. } => "low_outbound_peers",
+            Alert::TxSpy { .. } => "tx_spy",
         }
     }
 
@@ -182,7 +190,8 @@ impl Alert {
             | Alert::SmallPingNonce { peer_id, addr, .. }
             | Alert::TxRelayMismatch { peer_id, addr, .. }
             | Alert::UnknownMessages { peer_id, addr, .. }
-            | Alert::VersionTimeOffset { peer_id, addr, .. } => Some((*peer_id, addr)),
+            | Alert::VersionTimeOffset { peer_id, addr, .. }
+            | Alert::TxSpy { peer_id, addr, .. } => Some((*peer_id, addr)),
             Alert::PeerDisconnected { .. }
             | Alert::SlowBlock { .. }
             | Alert::StaleTip { .. }
@@ -371,6 +380,15 @@ impl std::fmt::Display for Alert {
                 f,
                 "LowOutboundPeers | {} full-relay outbound peers connected, below {} for {}s",
                 outbound, threshold, below_for_secs
+            ),
+            Alert::TxSpy {
+                peer_id,
+                addr,
+                connected_secs,
+            } => write!(
+                f,
+                "TxSpy | peer_id={} addr={} | connected for {}s with transaction relay on, never sent an inv or tx",
+                peer_id, addr, connected_secs
             ),
         }
     }

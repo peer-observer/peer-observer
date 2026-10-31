@@ -1735,3 +1735,65 @@ async fn test_low_outbound_peers() {
 
     harness.shutdown().await;
 }
+
+/// Verifies that a getpeerinfo peer with transaction relay on that has sent no
+/// inv or tx after --tx-spy-secs is reported once, while peers that announced,
+/// asked for no relay, or connected recently are not
+#[tokio::test]
+async fn test_tx_spy() {
+    let mut harness = TestHarness::new(|port| {
+        let mut args = make_test_args(port, AlertSettingsInTest::default());
+        args.low_outbound_peers.min_outbound_peers = 0;
+        args
+    })
+    .await;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    let mut silent = make_peer_info(140, "inbound", 0.0);
+    silent.connection_time = now - 1200;
+    let mut talker = make_peer_info(141, "inbound", 0.0);
+    talker.connection_time = now - 1200;
+    talker
+        .bytes_received_per_message
+        .insert("inv".to_string(), 500);
+    let mut no_relay = make_peer_info(142, "inbound", 0.0);
+    no_relay.connection_time = now - 1200;
+    no_relay.relay_transactions = false;
+    let mut young = make_peer_info(143, "inbound", 0.0);
+    young.connection_time = now - 60;
+    let infos = vec![silent, talker, no_relay, young];
+
+    for _ in 0..2 {
+        harness
+            .publisher
+            .publish(
+                Subject::Rpc.to_string(),
+                make_peer_infos_event(infos.clone()).encode_to_vec(),
+            )
+            .await;
+    }
+    match recv_alert(&mut harness.rx, Duration::from_secs(2)).await {
+        Alert::TxSpy {
+            peer_id,
+            addr,
+            connected_secs,
+        } => {
+            assert_eq!(peer_id, 140);
+            assert_eq!(addr, "10.0.0.140:8333");
+            assert!(
+                (1190..=1210).contains(&connected_secs),
+                "got {connected_secs}"
+            );
+        }
+        other => panic!("expected Alert::TxSpy, got {other:?}"),
+    }
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "the other peers are fine and the silent one is reported once"
+    );
+
+    harness.shutdown().await;
+}

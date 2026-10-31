@@ -123,10 +123,23 @@ Alert format (as rendered by `LoggingAlerter`):
 VersionTimeOffset | peer_id=<id> addr=<addr> | version time off by <seconds>s (threshold: <threshold>s)
 ```
 
-## Node heuristics
+### TxSpy
 
-These look at the node itself rather than at a single peer.
+Flags a peer that asked for transaction relay, has been connected for
+`--tx-spy-secs`, and has not sent a single `inv` or `tx` message. Such a peer takes
+our transaction announcements and gives nothing back. Normal nodes announce what
+they hear elsewhere and send the transactions we request. Monitoring nodes and spy
+peers only listen. The check uses `getpeerinfo`, which says per peer whether we
+relay transactions to it, when it connected, and how many bytes of each message
+type it sent, so it covers peers that connected before the tool started. Each peer
+is reported once per connection.
 
+This heuristic needs the rpc-extractor with `getpeerinfo` enabled.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+TxSpy | peer_id=<id> addr=<addr> | connected for <seconds>s with transaction relay on, never sent an inv or tx
+```
 ### SlowBlock
 
 Reports a block that took Bitcoin Core longer than `--slow-block-secs` to
@@ -325,6 +338,8 @@ Options:
           Number of unknown messages from one peer before alerting [default: 3]
       --version-time-offset-secs <VERSION_TIME_OFFSET_SECS>
           Alert when a peer's version message time is off by more than this many seconds [default: 600]
+      --tx-spy-secs <TX_SPY_SECS>
+          Alert when a peer with transaction relay on has sent no inv or tx after this many seconds [default: 600]
       --slow-block-secs <SLOW_BLOCK_SECS>
           Alert when connecting a block takes longer than this many seconds [default: 60]
       --stale-tip-secs <STALE_TIP_SECS>

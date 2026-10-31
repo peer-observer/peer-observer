@@ -28,6 +28,7 @@ pub mod slow_block;
 pub mod small_ping_nonce;
 pub mod stale_tip;
 pub mod tx_relay_mismatch;
+pub mod tx_spy;
 pub mod unknown_messages;
 pub mod version_time_offset;
 

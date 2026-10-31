@@ -39,6 +39,7 @@ use crate::heuristics::slow_block::{SlowBlock, SlowBlockArgs};
 use crate::heuristics::small_ping_nonce::{SmallPingNonce, SmallPingNonceArgs};
 use crate::heuristics::stale_tip::{StaleTip, StaleTipArgs};
 use crate::heuristics::tx_relay_mismatch::TxRelayMismatch;
+use crate::heuristics::tx_spy::{TxSpy, TxSpyArgs};
 use crate::heuristics::unknown_messages::{UnknownMessages, UnknownMessagesArgs};
 use crate::heuristics::version_time_offset::{VersionTimeOffset, VersionTimeOffsetArgs};
 use crate::heuristics::{connection_event, inbound_message, Context, Heuristic, Peer, Peers};
@@ -67,6 +68,9 @@ pub struct Args {
 
     #[command(flatten)]
     pub version_time_offset: VersionTimeOffsetArgs,
+
+    #[command(flatten)]
+    pub tx_spy: TxSpyArgs,
 
     #[command(flatten)]
     pub slow_block: SlowBlockArgs,
@@ -119,6 +123,7 @@ impl Args {
             small_ping_nonce: SmallPingNonceArgs::default(),
             unknown_messages: UnknownMessagesArgs::default(),
             version_time_offset: VersionTimeOffsetArgs::default(),
+            tx_spy: TxSpyArgs::default(),
             slow_block: SlowBlockArgs::default(),
             stale_tip: StaleTipArgs::default(),
             misbehaving_burst: MisbehavingBurstArgs::default(),
@@ -145,6 +150,7 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
         Box::new(TxRelayMismatch::default()),
         Box::new(UnknownMessages::new(args.unknown_messages.clone())),
         Box::new(VersionTimeOffset::new(args.version_time_offset.clone())),
+        Box::new(TxSpy::new(args.tx_spy.clone())),
         Box::new(SlowBlock::new(args.slow_block.clone())),
         Box::new(StaleTip::new(args.stale_tip.clone(), Instant::now())),
         Box::new(MisbehavingBurst::new(args.misbehaving_burst.clone())),
