@@ -74,6 +74,27 @@ Alert format (as rendered by `LoggingAlerter`):
 SmallPingNonce | peer_id=<id> addr=<addr> | <count> pings with a nonce below 2^32 (threshold: <threshold>)
 ```
 
+### TxRelayMismatch
+
+Flags a peer that announces or sends transactions after asking us not to relay
+transactions to it. A peer sets `relay=false` in its `version` message when it
+is not interested in unconfirmed transactions, as block-relay-only connections
+and nodes running with `-blocksonly` do. Such a node has no transactions to
+share either. One that still sends `inv` messages with transactions or `tx`
+messages is behaving inconsistently. A peer that loads a bloom filter
+(`filterload` or `filterclear`, BIP 37) has turned relay back on and is no longer
+checked.
+
+Only peers whose `version` message the tool saw are checked. Each peer is
+reported once.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+TxRelayMismatch | peer_id=<id> addr=<addr> | received <command> with transactions after relay=false in its version message
+```
+
+There are no settings for this heuristic.
+
 ## Peer lifecycle
 
 When a peer that one of the per-peer heuristics flagged disconnects (either via a

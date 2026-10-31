@@ -43,6 +43,12 @@ pub enum Alert {
         count: usize,
         threshold: usize,
     },
+    /// The peer asked for no transaction relay but sent us transactions
+    TxRelayMismatch {
+        peer_id: u64,
+        addr: String,
+        command: String,
+    },
 }
 
 impl std::fmt::Display for Alert {
@@ -102,6 +108,15 @@ impl std::fmt::Display for Alert {
                 f,
                 "SmallPingNonce | peer_id={} addr={} | {} pings with a nonce below 2^32 (threshold: {})",
                 peer_id, addr, count, threshold
+            ),
+            Alert::TxRelayMismatch {
+                peer_id,
+                addr,
+                command,
+            } => write!(
+                f,
+                "TxRelayMismatch | peer_id={} addr={} | received {} with transactions after relay=false in its version message",
+                peer_id, addr, command
             ),
         }
     }

@@ -17,6 +17,7 @@ pub mod handshake_after_verack;
 pub mod misbehaving_peer;
 pub mod ping_spammer;
 pub mod small_ping_nonce;
+pub mod tx_relay_mismatch;
 
 /// What the tool knows about a peer, independent of any heuristic.
 pub struct Peer {
@@ -165,10 +166,12 @@ impl PerPeerWindowCounter {
 /// Builders for events used in the unit tests of the heuristics.
 #[cfg(test)]
 pub mod test_util {
+    use shared::protobuf::bitcoin_primitives::inventory_item::Item;
+    use shared::protobuf::bitcoin_primitives::{address, Address, InventoryItem};
     use shared::protobuf::ebpf_extractor::connection::{connection_event, ConnectionEvent};
     use shared::protobuf::ebpf_extractor::ebpf::EbpfEvent;
     use shared::protobuf::ebpf_extractor::message::message_event::Msg;
-    use shared::protobuf::ebpf_extractor::message::{MessageEvent, Metadata};
+    use shared::protobuf::ebpf_extractor::message::{Inv, MessageEvent, Metadata, Version};
     use shared::protobuf::ebpf_extractor::Ebpf;
     use shared::protobuf::event::event::PeerObserverEvent;
     use shared::protobuf::event::Event;
@@ -205,6 +208,41 @@ pub mod test_util {
             },
             msg: Some(msg),
         }))
+    }
+
+    /// An inbound `version` message from `peer_id` with the given relay flag.
+    pub fn version(peer_id: u64, relay: bool) -> Event {
+        let address = || Address {
+            timestamp: 0,
+            services: 1,
+            port: 8333,
+            address: Some(address::Address::Ipv4("127.0.0.1".to_string())),
+        };
+        message(
+            peer_id,
+            true,
+            "version",
+            Msg::Version(Version {
+                version: 70016,
+                services: 1,
+                timestamp: 0,
+                receiver: address(),
+                sender: address(),
+                nonce: 1,
+                user_agent: "/test/".to_string(),
+                start_height: 0,
+                relay,
+            }),
+        )
+    }
+
+    /// An inbound `inv` message from `peer_id` announcing `items`.
+    pub fn inv(peer_id: u64, items: Vec<Item>) -> Event {
+        let items = items
+            .into_iter()
+            .map(|item| InventoryItem { item: Some(item) })
+            .collect();
+        message(peer_id, true, "inv", Msg::Inv(Inv { items }))
     }
 }
 

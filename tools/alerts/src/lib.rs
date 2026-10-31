@@ -23,6 +23,7 @@ use crate::heuristics::handshake_after_verack::HandshakeAfterVerack;
 use crate::heuristics::misbehaving_peer::MisbehavingPeer;
 use crate::heuristics::ping_spammer::{PingSpammer, PingSpammerArgs};
 use crate::heuristics::small_ping_nonce::{SmallPingNonce, SmallPingNonceArgs};
+use crate::heuristics::tx_relay_mismatch::TxRelayMismatch;
 use crate::heuristics::{connection_event, inbound_message, Context, Heuristic, Peer, Peers};
 
 #[derive(Parser, Debug, Clone)]
@@ -79,6 +80,7 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
         Box::new(MisbehavingPeer),
         Box::new(HandshakeAfterVerack::default()),
         Box::new(SmallPingNonce::new(args.small_ping_nonce.clone())),
+        Box::new(TxRelayMismatch::default()),
     ]
 }
 

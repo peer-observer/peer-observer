@@ -8,12 +8,13 @@ use shared::{
     nats_subjects::Subject,
     prost::Message,
     protobuf::{
+        bitcoin_primitives::{self, Address, InventoryItem},
         ebpf_extractor::{
             connection::{
                 self, ClosedConnection, Connection, ConnectionEvent, MisbehavingConnection,
             },
             ebpf,
-            message::{self, message_event::Msg, Addr, AddrV2, Metadata, Ping},
+            message::{self, message_event::Msg, Addr, AddrV2, Inv, Metadata, Ping, Version},
             Ebpf,
         },
         event::{event::PeerObserverEvent, Event},
@@ -808,6 +809,122 @@ async fn test_small_ping_nonce() {
             count: threshold + 1,
             threshold,
         }
+    );
+
+    harness.shutdown().await;
+}
+
+/// Builds an inbound `version` message event with the given relay flag
+fn make_version_event(peer_id: u64, addr: &str, relay: bool) -> Event {
+    let address = || Address {
+        timestamp: 0,
+        services: 1,
+        port: 8333,
+        address: Some(bitcoin_primitives::address::Address::Ipv4(
+            "127.0.0.1".to_string(),
+        )),
+    };
+    Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+        ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
+            meta: Metadata {
+                peer_id,
+                addr: addr.to_string(),
+                conn_type: 1,
+                command: "version".to_string(),
+                inbound: true,
+                size: 100,
+            },
+            msg: Some(Msg::Version(Version {
+                version: 70016,
+                services: 1,
+                timestamp: 0,
+                receiver: address(),
+                sender: address(),
+                nonce: 1,
+                user_agent: "/test/".to_string(),
+                start_height: 0,
+                relay,
+            })),
+        })),
+    }))
+    .unwrap()
+}
+
+/// Builds an inbound `inv` message event announcing one transaction
+fn make_tx_inv_event(peer_id: u64, addr: &str) -> Event {
+    Event::new(PeerObserverEvent::EbpfExtractor(Ebpf {
+        ebpf_event: Some(ebpf::EbpfEvent::Message(message::MessageEvent {
+            meta: Metadata {
+                peer_id,
+                addr: addr.to_string(),
+                conn_type: 1,
+                command: "inv".to_string(),
+                inbound: true,
+                size: 37,
+            },
+            msg: Some(Msg::Inv(Inv {
+                items: vec![InventoryItem {
+                    item: Some(bitcoin_primitives::inventory_item::Item::Wtx(vec![7; 32])),
+                }],
+            })),
+        })),
+    }))
+    .unwrap()
+}
+
+/// Verifies that a peer announcing a transaction after setting relay=false in
+/// its version message is reported once, and a peer with relay=true is not
+#[tokio::test]
+async fn test_tx_relay_mismatch() {
+    let mut harness =
+        TestHarness::new(|port| make_test_args(port, AlertSettingsInTest::default())).await;
+    let subject = Subject::NetMsg.to_string();
+
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_version_event(61, "61.61.61.61:8333", true).encode_to_vec(),
+        )
+        .await;
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_tx_inv_event(61, "61.61.61.61:8333").encode_to_vec(),
+        )
+        .await;
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "a peer with relay=true may announce transactions"
+    );
+
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_version_event(62, "62.62.62.62:8333", false).encode_to_vec(),
+        )
+        .await;
+    publish_n(
+        &harness.publisher,
+        &subject,
+        &make_tx_inv_event(62, "62.62.62.62:8333"),
+        3,
+    )
+    .await;
+    let alert = recv_alert(&mut harness.rx, Duration::from_secs(2)).await;
+    assert_eq!(
+        alert,
+        Alert::TxRelayMismatch {
+            peer_id: 62,
+            addr: "62.62.62.62:8333".to_string(),
+            command: "inv".to_string(),
+        }
+    );
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "the peer is only reported once"
     );
 
     harness.shutdown().await;
