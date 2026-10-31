@@ -997,3 +997,52 @@ async fn test_slow_block() {
 
     harness.shutdown().await;
 }
+
+/// Verifies that a tip without blocks for --stale-tip-secs is reported once,
+/// and that the next block is reported as recovery
+#[tokio::test]
+async fn test_stale_tip() {
+    let mut harness = TestHarness::new(|port| {
+        let mut args = make_test_args(port, AlertSettingsInTest::default());
+        args.stale_tip.stale_tip_secs = 1;
+        args
+    })
+    .await;
+
+    // No block since the tool started
+    let alert = recv_alert(&mut harness.rx, Duration::from_secs(5)).await;
+    match alert {
+        Alert::StaleTip {
+            since_secs,
+            threshold_secs,
+            last_height,
+        } => {
+            assert!(since_secs >= 1);
+            assert_eq!(threshold_secs, 1);
+            assert_eq!(last_height, None);
+        }
+        other => panic!("expected Alert::StaleTip, got {other:?}"),
+    }
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(1500)).await,
+        "a stale tip is reported once"
+    );
+
+    harness
+        .publisher
+        .publish(
+            Subject::Validation.to_string(),
+            make_block_connected_event(800_002, 1_000_000).encode_to_vec(),
+        )
+        .await;
+    let alert = recv_alert(&mut harness.rx, Duration::from_secs(2)).await;
+    match alert {
+        Alert::TipRecovered { height, stale_secs } => {
+            assert_eq!(height, 800_002);
+            assert!(stale_secs >= 2);
+        }
+        other => panic!("expected Alert::TipRecovered, got {other:?}"),
+    }
+
+    harness.shutdown().await;
+}

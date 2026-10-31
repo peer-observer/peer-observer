@@ -112,6 +112,24 @@ Alert format (as rendered by `LoggingAlerter`):
 SlowBlock | height=<height> hash=<hash> | connected in <seconds>s (threshold: <threshold>s), <n> transactions, <n> inputs, <n> sigops
 ```
 
+### StaleTip
+
+Reports when the node has not connected a block for `--stale-tip-secs`. Blocks
+arrive about every ten minutes on average, and two hours without one happen
+only a handful of times per year on mainnet. Going longer means the node lost
+its peers, the network split, or the data pipeline feeding this tool broke. The
+clock starts when the tool starts, so a node that never delivers a block is
+reported too.
+
+The alert fires once per stale period. When the next block connects, a
+`TipRecovered` alert reports how long the tip was stale.
+
+Alert formats (as rendered by `LoggingAlerter`):
+```
+StaleTip | no block connected for <seconds>s (threshold: <threshold>s), last height: <height or unknown>
+TipRecovered | height=<height> | block connected after <seconds>s without a block
+```
+
 ## Peer lifecycle
 
 When a peer that one of the per-peer heuristics flagged disconnects (either via a
@@ -159,6 +177,8 @@ Options:
           Number of pings with a nonce below 2^32 from one peer before alerting [default: 3]
       --slow-block-secs <SLOW_BLOCK_SECS>
           Alert when connecting a block takes longer than this many seconds [default: 60]
+      --stale-tip-secs <STALE_TIP_SECS>
+          Alert when no block has been connected for this many seconds [default: 7200]
   -l, --log-level <LOG_LEVEL>
           [default: DEBUG]
       --peer-stale-secs <PEER_STALE_SECS>

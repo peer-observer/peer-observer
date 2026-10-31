@@ -59,6 +59,14 @@ pub enum Alert {
         inputs: i32,
         sigops: i64,
     },
+    /// No block has been connected for longer than the threshold
+    StaleTip {
+        since_secs: u64,
+        threshold_secs: u64,
+        last_height: Option<i32>,
+    },
+    /// A block connected after the tip had been reported as stale
+    TipRecovered { height: i32, stale_secs: u64 },
 }
 
 impl std::fmt::Display for Alert {
@@ -146,6 +154,26 @@ impl std::fmt::Display for Alert {
                 transactions,
                 inputs,
                 sigops
+            ),
+            Alert::StaleTip {
+                since_secs,
+                threshold_secs,
+                last_height,
+            } => {
+                let last_height = match last_height {
+                    Some(height) => height.to_string(),
+                    None => "unknown".to_string(),
+                };
+                write!(
+                    f,
+                    "StaleTip | no block connected for {}s (threshold: {}s), last height: {}",
+                    since_secs, threshold_secs, last_height
+                )
+            }
+            Alert::TipRecovered { height, stale_secs } => write!(
+                f,
+                "TipRecovered | height={} | block connected after {}s without a block",
+                height, stale_secs
             ),
         }
     }

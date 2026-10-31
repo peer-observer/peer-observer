@@ -24,8 +24,12 @@ use crate::heuristics::misbehaving_peer::MisbehavingPeer;
 use crate::heuristics::ping_spammer::{PingSpammer, PingSpammerArgs};
 use crate::heuristics::slow_block::{SlowBlock, SlowBlockArgs};
 use crate::heuristics::small_ping_nonce::{SmallPingNonce, SmallPingNonceArgs};
+use crate::heuristics::stale_tip::{StaleTip, StaleTipArgs};
 use crate::heuristics::tx_relay_mismatch::TxRelayMismatch;
 use crate::heuristics::{connection_event, inbound_message, Context, Heuristic, Peer, Peers};
+
+/// How often heuristics get to act on time passing without any event.
+const TICK_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
@@ -45,6 +49,9 @@ pub struct Args {
 
     #[command(flatten)]
     pub slow_block: SlowBlockArgs,
+
+    #[command(flatten)]
+    pub stale_tip: StaleTipArgs,
 
     #[arg(short, long, default_value_t = shared::log::Level::Debug)]
     pub log_level: shared::log::Level,
@@ -71,6 +78,7 @@ impl Args {
             addr_spammer: AddrSpammerArgs::default(),
             small_ping_nonce: SmallPingNonceArgs::default(),
             slow_block: SlowBlockArgs::default(),
+            stale_tip: StaleTipArgs::default(),
             log_level: shared::log::Level::Trace,
             peer_stale_secs: 300,
         }
@@ -87,6 +95,7 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
         Box::new(SmallPingNonce::new(args.small_ping_nonce.clone())),
         Box::new(TxRelayMismatch::default()),
         Box::new(SlowBlock::new(args.slow_block.clone())),
+        Box::new(StaleTip::new(args.stale_tip.clone(), Instant::now())),
     ]
 }
 
@@ -148,6 +157,17 @@ impl State {
         }
     }
 
+    /// Lets every heuristic act on time passing.
+    fn tick(&mut self, now: Instant, out: &mut Vec<Alert>) {
+        let ctx = Context {
+            now,
+            peers: &self.peers,
+        };
+        for heuristic in self.heuristics.iter_mut() {
+            heuristic.on_tick(&ctx, out);
+        }
+    }
+
     /// Forgets peers we haven't heard from in `stale_after`.
     fn remove_stale_peers(&mut self, stale_after: Duration, now: Instant, out: &mut Vec<Alert>) {
         let stale: Vec<(u64, String)> = self
@@ -197,9 +217,16 @@ pub async fn run<A: Alerter>(
     let stale_after = Duration::from_secs(args.peer_stale_secs);
     let mut cleanup_interval = shared::tokio::time::interval(stale_after);
     cleanup_interval.tick().await;
+    let mut tick_interval = shared::tokio::time::interval(TICK_INTERVAL);
+    tick_interval.tick().await;
 
     loop {
         shared::tokio::select! {
+            _ = tick_interval.tick() => {
+                let mut alerts = Vec::new();
+                state.tick(Instant::now(), &mut alerts);
+                emit_all(alerts, &alerter);
+            }
             maybe_msg = sub.next() => {
                 match maybe_msg {
                     Some(msg) => match Event::decode(msg.payload) {

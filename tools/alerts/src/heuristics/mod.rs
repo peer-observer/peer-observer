@@ -19,6 +19,7 @@ pub mod misbehaving_peer;
 pub mod ping_spammer;
 pub mod slow_block;
 pub mod small_ping_nonce;
+pub mod stale_tip;
 pub mod tx_relay_mismatch;
 
 /// What the tool knows about a peer, independent of any heuristic.
@@ -44,6 +45,10 @@ pub struct Context<'a> {
 pub trait Heuristic: Send {
     /// Looks at one event and appends any alerts it triggers to `out`.
     fn on_event(&mut self, event: &Event, ctx: &Context, out: &mut Vec<Alert>);
+
+    /// Called about once a second, so heuristics can act on time passing
+    /// without any event, for example when nothing has happened for too long.
+    fn on_tick(&mut self, _ctx: &Context, _out: &mut Vec<Alert>) {}
 
     /// Tells the heuristic that `peer_id` disconnected or went stale so it
     /// can drop the state it keeps for the peer. Returns when this heuristic
