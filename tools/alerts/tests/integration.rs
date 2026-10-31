@@ -22,6 +22,7 @@ use shared::{
             Ebpf,
         },
         event::{event::PeerObserverEvent, Event},
+        rpc_extractor::{rpc::RpcEvent, PeerInfo, PeerInfos, Rpc},
     },
     testing::{
         metrics_fetcher::{fetch_metrics_root, get_metric_value},
@@ -35,6 +36,7 @@ use shared::{
     },
 };
 
+use std::collections::HashMap;
 use std::time::Duration;
 
 struct AlertSettingsInTest {
@@ -1544,6 +1546,126 @@ async fn test_misbehaving_burst() {
             window_secs: 600,
             threshold,
         }]
+    );
+
+    harness.shutdown().await;
+}
+
+/// Builds one getpeerinfo entry with the given connection type and ping wait.
+/// The connection is a few seconds old, so it is too young for TxSpy
+fn make_peer_info(id: u32, connection_type: &str, ping_wait_ms: f64) -> PeerInfo {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    PeerInfo {
+        id,
+        address: format!("10.0.0.{}:8333", id % 256),
+        address_bind: "1.2.3.4:8333".to_string(),
+        address_local: "1.2.3.4:8333".to_string(),
+        network: "ipv4".to_string(),
+        mapped_as: 0,
+        services: "0000000000000409".to_string(),
+        relay_transactions: true,
+        last_send: 0,
+        last_received: 0,
+        last_transaction: 0,
+        last_block: 0,
+        bytes_sent: 0,
+        bytes_received: 0,
+        connection_time: now - 5,
+        time_offset: 0,
+        ping_time: 50.0,
+        minimum_ping: 40.0,
+        ping_wait: ping_wait_ms,
+        version: 70016,
+        subversion: "/test/".to_string(),
+        inbound: connection_type == "inbound",
+        bip152_hb_to: false,
+        bip152_hb_from: false,
+        starting_height: 0,
+        synced_headers: 0,
+        synced_blocks: 0,
+        inflight: vec![],
+        addr_relay_enabled: true,
+        addr_processed: 0,
+        addr_rate_limited: 0,
+        permissions: vec![],
+        minfeefilter: 0.0,
+        bytes_sent_per_message: HashMap::new(),
+        bytes_received_per_message: HashMap::new(),
+        connection_type: connection_type.to_string(),
+        transport_protocol_type: "v2".to_string(),
+        inv_to_send: 0,
+    }
+}
+
+/// Builds a getpeerinfo RPC event listing `infos`
+fn make_peer_infos_event(infos: Vec<PeerInfo>) -> Event {
+    Event::new(PeerObserverEvent::RpcExtractor(Rpc {
+        rpc_event: Some(RpcEvent::PeerInfos(PeerInfos { infos })),
+    }))
+    .unwrap()
+}
+
+/// Verifies that a getpeerinfo result with more than --ping-wait-peers peers
+/// waiting longer than --ping-wait-secs fires one HighPingWait alert
+#[tokio::test]
+async fn test_high_ping_wait() {
+    let mut harness = TestHarness::new(|port| {
+        let mut args = make_test_args(port, AlertSettingsInTest::default());
+        args.high_ping_wait.ping_wait_peers = 2;
+        args
+    })
+    .await;
+    let subject = Subject::Rpc.to_string();
+
+    let mut infos = vec![
+        make_peer_info(1, "inbound", 6000.0),
+        make_peer_info(2, "outbound-full-relay", 7000.0),
+        make_peer_info(3, "inbound", 0.0),
+    ];
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_peer_infos_event(infos.clone()).encode_to_vec(),
+        )
+        .await;
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "exactly threshold waiting peers must not alert"
+    );
+
+    infos.push(make_peer_info(4, "inbound", 5001.0));
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_peer_infos_event(infos.clone()).encode_to_vec(),
+        )
+        .await;
+    assert_eq!(
+        recv_alert(&mut harness.rx, Duration::from_secs(2)).await,
+        Alert::HighPingWait {
+            peers: 3,
+            total_peers: 4,
+            wait_secs: 5,
+            threshold_peers: 2,
+        }
+    );
+
+    // Still waiting on the next poll: same episode, no second alert
+    harness
+        .publisher
+        .publish(
+            subject.clone(),
+            make_peer_infos_event(infos).encode_to_vec(),
+        )
+        .await;
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "an ongoing episode is reported once"
     );
 
     harness.shutdown().await;

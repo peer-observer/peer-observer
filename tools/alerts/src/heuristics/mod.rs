@@ -10,11 +10,14 @@ use shared::protobuf::ebpf_extractor::message::MessageEvent;
 use shared::protobuf::ebpf_extractor::validation::{validation_event, BlockConnected};
 use shared::protobuf::event::event::PeerObserverEvent;
 use shared::protobuf::event::Event;
+use shared::protobuf::rpc_extractor::rpc::RpcEvent;
+use shared::protobuf::rpc_extractor::PeerInfos;
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
 pub mod addr_spammer;
 pub mod handshake_after_verack;
+pub mod high_ping_wait;
 pub mod inbound_connection_drops;
 pub mod misbehaving_burst;
 pub mod misbehaving_peer;
@@ -94,6 +97,17 @@ pub fn block_connected(event: &Event) -> Option<&BlockConnected> {
         Some(EbpfEvent::Validation(validation)) => match &validation.event {
             Some(validation_event::Event::BlockConnected(block)) => Some(block),
             None => None,
+        },
+        _ => None,
+    }
+}
+
+/// Returns the getpeerinfo result in `event`, if it is one.
+pub fn peer_infos(event: &Event) -> Option<&PeerInfos> {
+    match &event.peer_observer_event {
+        Some(PeerObserverEvent::RpcExtractor(rpc)) => match &rpc.rpc_event {
+            Some(RpcEvent::PeerInfos(infos)) => Some(infos),
+            _ => None,
         },
         _ => None,
     }
@@ -265,6 +279,9 @@ pub mod test_util {
     use shared::protobuf::ebpf_extractor::Ebpf;
     use shared::protobuf::event::event::PeerObserverEvent;
     use shared::protobuf::event::Event;
+    use shared::protobuf::rpc_extractor::rpc::RpcEvent;
+    use shared::protobuf::rpc_extractor::{PeerInfo, PeerInfos, Rpc};
+    use std::collections::HashMap;
 
     pub const PEER_ADDR: &str = "1.2.3.4:8333";
     /// The UNIX timestamp, in seconds, every test event carries.
@@ -329,6 +346,61 @@ pub mod test_util {
         ebpf(EbpfEvent::Connection(ConnectionEvent {
             event: Some(event),
         }))
+    }
+
+    /// A getpeerinfo result listing `infos`.
+    pub fn peer_infos_event(infos: Vec<PeerInfo>) -> Event {
+        Event {
+            timestamp: EVENT_TIMESTAMP_SECS * 1000,
+            peer_observer_event: Some(PeerObserverEvent::RpcExtractor(Rpc {
+                rpc_event: Some(RpcEvent::PeerInfos(PeerInfos { infos })),
+            })),
+        }
+    }
+
+    /// One getpeerinfo entry. Only the fields the heuristics look at are
+    /// meaningful, the rest hold placeholder values.
+    pub fn peer_info(id: u32, connection_type: &str, ping_wait_ms: f64) -> PeerInfo {
+        PeerInfo {
+            id,
+            address: format!("10.0.0.{}:8333", id % 256),
+            address_bind: "1.2.3.4:8333".to_string(),
+            address_local: "1.2.3.4:8333".to_string(),
+            network: "ipv4".to_string(),
+            mapped_as: 0,
+            services: "0000000000000409".to_string(),
+            relay_transactions: true,
+            last_send: 0,
+            last_received: 0,
+            last_transaction: 0,
+            last_block: 0,
+            bytes_sent: 0,
+            bytes_received: 0,
+            connection_time: 0,
+            time_offset: 0,
+            ping_time: 50.0,
+            minimum_ping: 40.0,
+            ping_wait: ping_wait_ms,
+            version: 70016,
+            subversion: "/test/".to_string(),
+            inbound: connection_type == "inbound",
+            bip152_hb_to: false,
+            bip152_hb_from: false,
+            starting_height: 0,
+            synced_headers: 0,
+            synced_blocks: 0,
+            inflight: vec![],
+            addr_relay_enabled: true,
+            addr_processed: 0,
+            addr_rate_limited: 0,
+            permissions: vec![],
+            minfeefilter: 0.0,
+            bytes_sent_per_message: HashMap::new(),
+            bytes_received_per_message: HashMap::new(),
+            connection_type: connection_type.to_string(),
+            transport_protocol_type: "v2".to_string(),
+            inv_to_send: 0,
+        }
     }
 
     /// A P2P message `msg` exchanged with `peer_id`.

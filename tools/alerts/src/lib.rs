@@ -25,6 +25,7 @@ pub mod metrics;
 pub use crate::alerter::{Alert, Alerter, LoggingAlerter, SpammerKind};
 use crate::heuristics::addr_spammer::{AddrSpammer, AddrSpammerArgs};
 use crate::heuristics::handshake_after_verack::HandshakeAfterVerack;
+use crate::heuristics::high_ping_wait::{HighPingWait, HighPingWaitArgs};
 use crate::heuristics::inbound_connection_drops::{
     InboundConnectionDrops, InboundConnectionDropsArgs,
 };
@@ -75,6 +76,9 @@ pub struct Args {
     pub misbehaving_burst: MisbehavingBurstArgs,
 
     #[command(flatten)]
+    pub high_ping_wait: HighPingWaitArgs,
+
+    #[command(flatten)]
     pub inbound_connection_drops: InboundConnectionDropsArgs,
 
     #[command(flatten)]
@@ -113,6 +117,7 @@ impl Args {
             slow_block: SlowBlockArgs::default(),
             stale_tip: StaleTipArgs::default(),
             misbehaving_burst: MisbehavingBurstArgs::default(),
+            high_ping_wait: HighPingWaitArgs::default(),
             inbound_connection_drops: InboundConnectionDropsArgs::default(),
             old_connection_drops: OldConnectionDropsArgs::default(),
             // Port 0 lets the system pick a free port. `run` reports it.
@@ -137,6 +142,7 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
         Box::new(SlowBlock::new(args.slow_block.clone())),
         Box::new(StaleTip::new(args.stale_tip.clone(), Instant::now())),
         Box::new(MisbehavingBurst::new(args.misbehaving_burst.clone())),
+        Box::new(HighPingWait::new(args.high_ping_wait.clone())),
         Box::new(InboundConnectionDrops::new(
             args.inbound_connection_drops.clone(),
         )),
@@ -284,7 +290,12 @@ pub async fn run<A: Alerter>(
         .subscribe(Subject::Validation.to_string())
         .await
         .context("subscribing to the Validation subject")?;
-    let mut sub = shared::futures::stream::select_all([netmsg_sub, netconn_sub, validation_sub]);
+    let rpc_sub = nc
+        .subscribe(Subject::Rpc.to_string())
+        .await
+        .context("subscribing to the Rpc subject")?;
+    let mut sub =
+        shared::futures::stream::select_all([netmsg_sub, netconn_sub, validation_sub, rpc_sub]);
     log::info!("Connected to NATS-server at {}", args.nats.address);
 
     let metrics_addr = metricserver::start(&args.metrics_address, Some(metrics.registry.clone()))

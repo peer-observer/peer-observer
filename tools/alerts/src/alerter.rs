@@ -104,12 +104,19 @@ pub enum Alert {
         window_secs: u64,
         threshold: usize,
     },
+    /// Many peers have been waiting for a reply to our ping
+    HighPingWait {
+        peers: usize,
+        total_peers: usize,
+        wait_secs: u64,
+        threshold_peers: usize,
+    },
 }
 
 impl Alert {
     /// The names of all alert kinds, as `name()` returns them. Used to create
     /// a metric series for every kind up front.
-    pub const NAMES: [&'static str; 15] = [
+    pub const NAMES: [&'static str; 16] = [
         "ping_spammer",
         "addr_spammer",
         "peer_disconnected",
@@ -125,6 +132,7 @@ impl Alert {
         "unknown_messages",
         "version_time_offset",
         "misbehaving_burst",
+        "high_ping_wait",
     ];
 
     /// A short, stable name for the kind of alert, used as metric label.
@@ -151,6 +159,7 @@ impl Alert {
             Alert::UnknownMessages { .. } => "unknown_messages",
             Alert::VersionTimeOffset { .. } => "version_time_offset",
             Alert::MisbehavingBurst { .. } => "misbehaving_burst",
+            Alert::HighPingWait { .. } => "high_ping_wait",
         }
     }
 
@@ -171,7 +180,8 @@ impl Alert {
             | Alert::TipRecovered { .. }
             | Alert::InboundConnectionDrops { .. }
             | Alert::OldConnectionDrops { .. }
-            | Alert::MisbehavingBurst { .. } => None,
+            | Alert::MisbehavingBurst { .. }
+            | Alert::HighPingWait { .. } => None,
         }
     }
 }
@@ -332,6 +342,16 @@ impl std::fmt::Display for Alert {
                 f,
                 "MisbehavingBurst | {} peers reported as misbehaving in last {}s (threshold: {})",
                 count, window_secs, threshold
+            ),
+            Alert::HighPingWait {
+                peers,
+                total_peers,
+                wait_secs,
+                threshold_peers,
+            } => write!(
+                f,
+                "HighPingWait | {} of {} peers waiting more than {}s for a pong (threshold: {} peers)",
+                peers, total_peers, wait_secs, threshold_peers
             ),
         }
     }

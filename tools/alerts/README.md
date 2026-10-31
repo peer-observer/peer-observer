@@ -139,6 +139,23 @@ Alert format (as rendered by `LoggingAlerter`):
 SlowBlock | height=<height> hash=<hash> | connected in <seconds>s (threshold: <threshold>s), <n> transactions, <n> inputs, <n> sigops
 ```
 
+### HighPingWait
+
+Reports when more than `--ping-wait-peers` peers have been waiting longer than
+`--ping-wait-secs` for a reply to our ping, according to `getpeerinfo`. Bitcoin
+Core pings every peer regularly. One slow peer is normal. Many peers waiting at
+once means the problem is on our side: the node is overloaded, its network is
+stalling, or the message handling thread is stuck. This was the first visible
+sign in peer-observer issue 198. The alert fires once per episode and re-arms
+once the count is back at or below the threshold.
+
+This heuristic needs the rpc-extractor with `getpeerinfo` enabled.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+HighPingWait | <count> of <total> peers waiting more than <secs>s for a pong (threshold: <threshold> peers)
+```
+
 ### MisbehavingBurst
 
 Reports when Bitcoin Core flags more than `--misbehaving-burst-threshold` peers
@@ -292,6 +309,10 @@ Options:
           Number of misbehaving reports in the window before alerting [default: 5]
       --misbehaving-burst-window-secs <MISBEHAVING_BURST_WINDOW_SECS>
           Sliding window size for misbehaving reports (seconds) [default: 600]
+      --ping-wait-secs <PING_WAIT_SECS>
+          A ping counts as waiting too long after this many seconds without a pong [default: 5]
+      --ping-wait-peers <PING_WAIT_PEERS>
+          Number of peers waiting too long for a pong before alerting [default: 10]
       --inbound-drop-threshold <INBOUND_DROP_THRESHOLD>
           Number of inbound connections closed in the window before alerting [default: 20]
       --inbound-drop-window-secs <INBOUND_DROP_WINDOW_SECS>
