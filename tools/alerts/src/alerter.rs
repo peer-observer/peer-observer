@@ -1,3 +1,4 @@
+use crate::heuristics::Peer;
 use shared::log;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -380,16 +381,23 @@ impl std::fmt::Display for Alert {
 /// `emit` is called from the event loop and must not block. Sinks that do I/O
 /// (HTTP, NATS publish, Prometheus push, etc.) must own a background task and
 /// hand off the alert through a channel — do the network work there, not here
+///
+/// `peer` is what the tool knows about the peer an alert is about, if the
+/// alert is about a single peer and the peer is still known.
 pub trait Alerter: Send + Sync {
-    fn emit(&self, alert: Alert);
+    fn emit(&self, alert: Alert, peer: Option<&Peer>);
 }
 
-/// Default alerter: writes each alert to the logger at `info!` level
+/// Default alerter: writes each alert to the logger at `info!` level, with
+/// the peer's user agent when known
 pub struct LoggingAlerter;
 
 impl Alerter for LoggingAlerter {
-    fn emit(&self, alert: Alert) {
-        log::info!("{}", alert);
+    fn emit(&self, alert: Alert, peer: Option<&Peer>) {
+        match peer.and_then(|p| p.user_agent.as_deref()) {
+            Some(user_agent) => log::info!("{} | user agent: {}", alert, user_agent),
+            None => log::info!("{}", alert),
+        }
     }
 }
 
@@ -410,7 +418,7 @@ impl IntegrationTestAlerter {
 
 #[cfg(any(test, feature = "nats_integration_tests"))]
 impl Alerter for IntegrationTestAlerter {
-    fn emit(&self, alert: Alert) {
+    fn emit(&self, alert: Alert, _peer: Option<&Peer>) {
         let _ = self.tx.send(alert);
     }
 }

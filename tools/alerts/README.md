@@ -115,7 +115,8 @@ Flags a peer whose `version` message carries a time more than
 these times with its own clock and warns the operator when many peers are more
 than ten minutes off, since a wrong clock breaks block validation. Seen from the
 other side, a peer that far off either runs a broken setup or sends made-up
-version messages. The alert carries the signed offset.
+version messages. The alert carries the signed offset, and the log line the
+user agent.
 
 Alert format (as rendered by `LoggingAlerter`):
 ```
@@ -259,6 +260,11 @@ PeerDisconnected | peer_id=<id> addr=<addr> | active=<duration>s
 ```
 
 Non-flagged peers disconnect silently (no alert is emitted).
+
+Alerts about a single peer are logged with the user agent from the peer's
+`version` message when the tool saw it, for example
+`PingSpammer | peer_id=63 addr=1.2.3.4:8333 | 4 pings in last 120s (threshold: 3) | user agent: /Satoshi:28.0.0/`.
+This is where crawlers and monitoring nodes usually give themselves away.
 
 ## Metrics
 

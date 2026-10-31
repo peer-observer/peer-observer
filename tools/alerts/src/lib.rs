@@ -11,6 +11,7 @@ use shared::nats_util;
 use shared::nats_util::NatsArgs;
 use shared::prost::Message;
 use shared::protobuf::ebpf_extractor::connection::connection_event;
+use shared::protobuf::ebpf_extractor::message::message_event::Msg;
 use shared::protobuf::event::Event;
 use shared::tokio::sync::{oneshot, watch};
 use shared::util;
@@ -181,14 +182,16 @@ impl State {
     fn emit(&mut self, alerts: Vec<Alert>, alerter: &impl Alerter) {
         for alert in alerts {
             self.metrics.count(&alert);
+            let mut peer = None;
             if let Some((peer_id, addr)) = alert.flagged_peer() {
                 let kinds = self.flagged.entry(peer_id).or_default();
                 if !kinds.iter().any(|(name, _)| *name == alert.name()) {
                     self.metrics.peer_flagged(alert.name(), peer_id, addr);
                     kinds.push((alert.name(), addr.to_string()));
                 }
+                peer = self.peers.get(&peer_id);
             }
-            alerter.emit(alert);
+            alerter.emit(alert, peer);
         }
     }
 
@@ -210,8 +213,18 @@ impl State {
         let peer = self.peers.entry(peer_id).or_insert_with(|| Peer {
             addr: addr.clone(),
             last_seen: now,
+            user_agent: None,
+            network: None,
         });
         peer.last_seen = now;
+        if let Some(conn) = conn {
+            peer.network = Some(conn.network);
+        }
+        if let Some(msg) = inbound_message(event) {
+            if let Some(Msg::Version(version)) = &msg.msg {
+                peer.user_agent = Some(version.user_agent.clone());
+            }
+        }
     }
 
     /// Forgets `peer_id` everywhere. If a heuristic had flagged the peer, a
@@ -381,4 +394,29 @@ fn handle_event(event: Event, state: &mut State, alerter: &impl Alerter) {
     }
 
     state.emit(alerts, alerter);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::heuristics::test_util::{message, version, PEER_ADDR};
+    use shared::protobuf::ebpf_extractor::message::Ping;
+
+    #[test]
+    fn the_peer_registry_remembers_the_user_agent() {
+        let args = Args::for_tests("127.0.0.1:4222");
+        let mut state = State::new(&args, metrics::Metrics::new());
+        let now = Instant::now();
+
+        state.track_peer(&message(1, true, "ping", Msg::Ping(Ping { value: 1 })), now);
+        let peer = state.peers.get(&1).expect("peer is tracked");
+        assert_eq!(peer.addr, PEER_ADDR);
+        assert_eq!(peer.user_agent, None);
+
+        state.track_peer(&version(1, true), now);
+        assert_eq!(
+            state.peers.get(&1).unwrap().user_agent.as_deref(),
+            Some("/test/")
+        );
+    }
 }

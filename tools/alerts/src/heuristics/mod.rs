@@ -35,7 +35,23 @@ pub mod version_time_offset;
 pub struct Peer {
     pub addr: String,
     pub last_seen: Instant,
+    /// The user agent from the peer's version message, once we saw it.
+    pub user_agent: Option<String>,
+    /// The network Bitcoin Core reported when the connection opened, as one
+    /// of the `NETWORK_` constants. Unknown for peers connected before the
+    /// tool started.
+    pub network: Option<u32>,
 }
+
+/// Bitcoin Core's network ids as the ebpf-extractor passes them on with
+/// connection events. Inbound Tor connections arrive from localhost but are
+/// reported as onion, which is how they are told apart from local tools.
+pub const NETWORK_UNROUTABLE: u32 = 0;
+pub const NETWORK_IPV4: u32 = 1;
+pub const NETWORK_IPV6: u32 = 2;
+pub const NETWORK_ONION: u32 = 3;
+pub const NETWORK_I2P: u32 = 4;
+pub const NETWORK_CJDNS: u32 = 5;
 
 /// All peers the tool currently tracks, by Bitcoin Core peer id.
 pub type Peers = HashMap<u64, Peer>;

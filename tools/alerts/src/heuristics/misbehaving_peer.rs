@@ -54,6 +54,8 @@ mod tests {
             Peer {
                 addr: PEER_ADDR.to_string(),
                 last_seen: now,
+                user_agent: None,
+                network: None,
             },
         );
         let ctx = Context { now, peers: &peers };
