@@ -639,9 +639,17 @@ async fn test_integration_rpc_estimatesmartfee() {
                 if let Some(ref e) = r.rpc_event {
                     match e {
                         EstimateSmartFee(result) => {
-                            // Fee rate most of the time is 0.0001_0000 on this scenario, but sometimes is greater
-                            assert!(result.fee_rate >= Some(10.0));
-                            assert!(result.fee_rate < Some(10.1));
+                            // The test node runs with -fallbackfee=0.0001, so the wallet pays
+                            // 10 sat/vB and the block policy estimator learns that rate. Since
+                            // Bitcoin Core v32.0, estimatesmartfee also asks the mempool
+                            // estimator and returns the lower of the two. On this empty regtest
+                            // mempool the mempool estimator falls back to the minimum relay fee
+                            // rate of 0.1 sat/vB, which wins.
+                            let fee_rate = result.fee_rate.expect("estimation should succeed");
+                            assert!(
+                                (0.1 - fee_rate).abs() < 1e-9 || (10.0..10.1).contains(&fee_rate),
+                                "unexpected fee rate {fee_rate} sat/vB"
+                            );
 
                             let expected_combinations = [
                                 (1, FeeEstimateMode::Economical as i32),
