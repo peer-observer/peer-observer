@@ -123,6 +123,10 @@ pub struct Args {
     /// Remove peers not seen for this many seconds (prevents OOM on missed Close events)
     #[arg(long, default_value_t = 300)]
     pub peer_stale_secs: u64,
+
+    /// Only report the disconnect of a flagged peer if it stayed at least this many seconds after being flagged
+    #[arg(long, default_value_t = 1)]
+    pub disconnect_min_active_secs: u64,
 }
 
 #[cfg(any(test, feature = "nats_integration_tests"))]
@@ -160,6 +164,7 @@ impl Args {
             metrics_address: "127.0.0.1:0".to_string(),
             log_level: shared::log::Level::Trace,
             peer_stale_secs: 300,
+            disconnect_min_active_secs: 1,
         }
     }
 }
@@ -201,6 +206,9 @@ struct State {
     flagged: HashMap<u64, Vec<(&'static str, String)>>,
     /// Combines the per-peer alerts into one verdict per address.
     suspicious: SuspiciousPeer,
+    /// How long a flagged peer must have stayed for its disconnect to be
+    /// worth a notice. Crawlers leave in the same second they are flagged.
+    disconnect_min_active: Duration,
     metrics: metrics::Metrics,
 }
 
@@ -211,6 +219,7 @@ impl State {
             heuristics: build_heuristics(args),
             flagged: HashMap::new(),
             suspicious: SuspiciousPeer::new(args.suspicious_peer.clone()),
+            disconnect_min_active: Duration::from_secs(args.disconnect_min_active_secs),
             metrics,
         }
     }
@@ -288,11 +297,14 @@ impl State {
             .filter_map(|h| h.on_peer_removed(peer_id))
             .min();
         if let Some(first_alerted) = first_alerted {
-            out.push(Alert::PeerDisconnected {
-                peer_id,
-                addr,
-                active_secs: now.duration_since(first_alerted).as_secs(),
-            });
+            let active = now.duration_since(first_alerted);
+            if active >= self.disconnect_min_active {
+                out.push(Alert::PeerDisconnected {
+                    peer_id,
+                    addr,
+                    active_secs: active.as_secs(),
+                });
+            }
         }
     }
 

@@ -483,13 +483,16 @@ async fn test_ping_spammer_fires_only_once() {
 async fn test_flagged_peer_disconnect_emits_disconnect_alert() {
     let ping_threshold = 3;
     let mut harness = TestHarness::new(|port| {
-        make_test_args(
+        let mut args = make_test_args(
             port,
             AlertSettingsInTest {
                 ping_threshold,
                 ..Default::default()
             },
-        )
+        );
+        // The peer leaves right after being flagged, which is reported here
+        args.disconnect_min_active_secs = 0;
+        args
     })
     .await;
 
@@ -533,14 +536,16 @@ async fn test_stale_peer_cleanup_emits_disconnect_alert() {
     let ping_threshold = 3;
     // peer_stale_secs=1 so the cleanup tick evicts peer 60 quickly
     let mut harness = TestHarness::new(|port| {
-        make_test_args(
+        let mut args = make_test_args(
             port,
             AlertSettingsInTest {
                 ping_threshold,
                 peer_stale_secs: 1,
                 ..Default::default()
             },
-        )
+        );
+        args.disconnect_min_active_secs = 0;
+        args
     })
     .await;
 
@@ -718,7 +723,7 @@ fn make_handshake_event(peer_id: u64, addr: &str, command: &str) -> Event {
 
 /// Verifies that a handshake message after the peer's verack fires one
 /// HandshakeAfterVerack alert, that the same messages before verack are fine,
-/// and that the flagged peer's disconnect is reported
+/// and that the flagged peer leaving right away is not reported again
 #[tokio::test]
 async fn test_handshake_after_verack() {
     let mut harness =
@@ -770,10 +775,11 @@ async fn test_handshake_after_verack() {
             make_closed_event(41, addr).encode_to_vec(),
         )
         .await;
-    match recv_alert(&mut harness.rx, Duration::from_secs(2)).await {
-        Alert::PeerDisconnected { peer_id, .. } => assert_eq!(peer_id, 41),
-        other => panic!("expected Alert::PeerDisconnected, got {other:?}"),
-    }
+    // It left in the same second it was flagged, which is not worth a notice
+    assert!(
+        expect_no_alert(&mut harness.rx, Duration::from_millis(500)).await,
+        "a peer leaving right after being flagged is not reported again"
+    );
 
     harness.shutdown().await;
 }
@@ -1267,13 +1273,16 @@ async fn test_old_connection_drops() {
 async fn test_alert_metrics() {
     let ping_threshold = 3;
     let mut harness = TestHarness::new(|port| {
-        make_test_args(
+        let mut args = make_test_args(
             port,
             AlertSettingsInTest {
                 ping_threshold,
                 ..Default::default()
             },
-        )
+        );
+        // The flagged peer leaves right away and its disconnect is checked here
+        args.disconnect_min_active_secs = 0;
+        args
     })
     .await;
 

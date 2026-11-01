@@ -366,7 +366,10 @@ the peer stayed around after it was first flagged:
 PeerDisconnected | peer_id=<id> addr=<addr> | active=<duration>s
 ```
 
-Non-flagged peers disconnect silently (no alert is emitted).
+Non-flagged peers disconnect silently (no alert is emitted). Peers that leave
+within `--disconnect-min-active-secs` of being flagged are not reported either:
+crawlers that trip a handshake or `getaddr` check typically close the connection in
+the same second, and the alert that flagged them already says everything.
 
 Alerts about a single peer are logged with the user agent from the peer's
 `version` message when the tool saw it, for example
@@ -490,6 +493,8 @@ Options:
           [default: DEBUG]
       --peer-stale-secs <PEER_STALE_SECS>
           Remove peers not seen for this many seconds (prevents OOM on missed Close events) [default: 300]
+      --disconnect-min-active-secs <DISCONNECT_MIN_ACTIVE_SECS>
+          Only report the disconnect of a flagged peer if it stayed at least this many seconds after being flagged [default: 1]
   -h, --help
           Print help
   -V, --version
