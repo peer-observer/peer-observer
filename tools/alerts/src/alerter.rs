@@ -105,6 +105,13 @@ pub enum Alert {
         window_secs: u64,
         threshold: usize,
     },
+    /// Several different peers misbehaved in the same way over a long window
+    MisbehavingPattern {
+        reason: String,
+        peers: usize,
+        window_secs: u64,
+        threshold: usize,
+    },
     /// Many peers have been waiting for a reply to our ping
     HighPingWait {
         peers: usize,
@@ -164,7 +171,7 @@ pub enum Alert {
 impl Alert {
     /// The names of all alert kinds, as `name()` returns them. Used to create
     /// a metric series for every kind up front.
-    pub const NAMES: [&'static str; 23] = [
+    pub const NAMES: [&'static str; 24] = [
         "ping_spammer",
         "addr_spammer",
         "peer_disconnected",
@@ -180,6 +187,7 @@ impl Alert {
         "unknown_messages",
         "version_time_offset",
         "misbehaving_burst",
+        "misbehaving_pattern",
         "high_ping_wait",
         "low_outbound_peers",
         "tx_spy",
@@ -214,6 +222,7 @@ impl Alert {
             Alert::UnknownMessages { .. } => "unknown_messages",
             Alert::VersionTimeOffset { .. } => "version_time_offset",
             Alert::MisbehavingBurst { .. } => "misbehaving_burst",
+            Alert::MisbehavingPattern { .. } => "misbehaving_pattern",
             Alert::HighPingWait { .. } => "high_ping_wait",
             Alert::LowOutboundPeers { .. } => "low_outbound_peers",
             Alert::TxSpy { .. } => "tx_spy",
@@ -245,6 +254,7 @@ impl Alert {
             | Alert::InboundConnectionDrops { .. }
             | Alert::OldConnectionDrops { .. }
             | Alert::MisbehavingBurst { .. }
+            | Alert::MisbehavingPattern { .. }
             | Alert::HighPingWait { .. }
             | Alert::LowOutboundPeers { .. }
             | Alert::AddressHarvester { .. }
@@ -411,6 +421,16 @@ impl std::fmt::Display for Alert {
                 f,
                 "MisbehavingBurst | {} peers reported as misbehaving in last {}s (threshold: {})",
                 count, window_secs, threshold
+            ),
+            Alert::MisbehavingPattern {
+                reason,
+                peers,
+                window_secs,
+                threshold,
+            } => write!(
+                f,
+                "MisbehavingPattern | \"{}\" from {} different peers in last {}s (threshold: {})",
+                reason, peers, window_secs, threshold
             ),
             Alert::HighPingWait {
                 peers,

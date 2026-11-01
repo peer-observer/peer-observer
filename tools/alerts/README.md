@@ -240,6 +240,23 @@ Alert format (as rendered by `LoggingAlerter`):
 MisbehavingBurst | <count> peers reported as misbehaving in last <secs>s (threshold: <threshold>)
 ```
 
+### MisbehavingPattern
+
+Reports a misbehaving reason that more than `--misbehaving-pattern-peers` different
+peers were flagged for within `--misbehaving-pattern-window-secs`. `MisbehavingBurst`
+catches many reports within minutes; this one catches the slow version. In a
+seven-hour live run seven peers claiming three different user agents each sent a
+header with invalid proof of work, 20 to 60 minutes apart, which never reached the
+burst threshold. One peer doing that is a broken node; several peers with the same
+reason over hours share software, a bad upstream, or an operator. Peers are counted
+by address, so a reconnecting peer counts once. Each reason is reported once per
+window.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+MisbehavingPattern | "<reason>" from <count> different peers in last <secs>s (threshold: <threshold>)
+```
+
 ### ConnectionCycling
 
 Reports an address that opened more than `--cycling-threshold` inbound
@@ -461,6 +478,10 @@ Options:
           Number of misbehaving reports in the window before alerting [default: 5]
       --misbehaving-burst-window-secs <MISBEHAVING_BURST_WINDOW_SECS>
           Sliding window size for misbehaving reports (seconds) [default: 600]
+      --misbehaving-pattern-peers <MISBEHAVING_PATTERN_PEERS>
+          Number of different peers reported for the same reason in the window before alerting [default: 2]
+      --misbehaving-pattern-window-secs <MISBEHAVING_PATTERN_WINDOW_SECS>
+          Sliding window size for misbehaving patterns (seconds) [default: 21600]
       --ping-wait-secs <PING_WAIT_SECS>
           A ping counts as waiting too long after this many seconds without a pong [default: 5]
       --ping-wait-peers <PING_WAIT_PEERS>

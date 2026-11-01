@@ -23,6 +23,7 @@ pub mod high_ping_wait;
 pub mod inbound_connection_drops;
 pub mod low_outbound_peers;
 pub mod misbehaving_burst;
+pub mod misbehaving_pattern;
 pub mod misbehaving_peer;
 pub mod netgroup_fleet;
 pub mod old_connection_drops;

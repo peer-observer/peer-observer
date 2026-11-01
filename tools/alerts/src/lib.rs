@@ -34,6 +34,7 @@ use crate::heuristics::inbound_connection_drops::{
 };
 use crate::heuristics::low_outbound_peers::{LowOutboundPeers, LowOutboundPeersArgs};
 use crate::heuristics::misbehaving_burst::{MisbehavingBurst, MisbehavingBurstArgs};
+use crate::heuristics::misbehaving_pattern::{MisbehavingPattern, MisbehavingPatternArgs};
 use crate::heuristics::misbehaving_peer::MisbehavingPeer;
 use crate::heuristics::netgroup_fleet::{NetgroupFleet, NetgroupFleetArgs};
 use crate::heuristics::old_connection_drops::{OldConnectionDrops, OldConnectionDropsArgs};
@@ -96,6 +97,9 @@ pub struct Args {
     pub misbehaving_burst: MisbehavingBurstArgs,
 
     #[command(flatten)]
+    pub misbehaving_pattern: MisbehavingPatternArgs,
+
+    #[command(flatten)]
     pub high_ping_wait: HighPingWaitArgs,
 
     #[command(flatten)]
@@ -154,6 +158,7 @@ impl Args {
             connection_cycling: ConnectionCyclingArgs::default(),
             address_harvester: AddressHarvesterArgs::default(),
             misbehaving_burst: MisbehavingBurstArgs::default(),
+            misbehaving_pattern: MisbehavingPatternArgs::default(),
             high_ping_wait: HighPingWaitArgs::default(),
             low_outbound_peers: LowOutboundPeersArgs::default(),
             netgroup_fleet: NetgroupFleetArgs::default(),
@@ -187,6 +192,7 @@ fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
         Box::new(ConnectionCycling::new(args.connection_cycling.clone())),
         Box::new(AddressHarvester::new(args.address_harvester.clone())),
         Box::new(MisbehavingBurst::new(args.misbehaving_burst.clone())),
+        Box::new(MisbehavingPattern::new(args.misbehaving_pattern.clone())),
         Box::new(HighPingWait::new(args.high_ping_wait.clone())),
         Box::new(LowOutboundPeers::new(args.low_outbound_peers.clone())),
         Box::new(NetgroupFleet::new(args.netgroup_fleet.clone())),
