@@ -416,6 +416,40 @@ and `alerts_flagged_peer_info` has one series per flagged peer, always 1. Both
 drop the peer when it disconnects or goes stale. Kinds that are not about a
 single peer stay at zero.
 
+## Grafana dashboards
+
+The `dashboards` directory contains Grafana dashboards for these metrics, laid
+out like the ones of the metrics tool. They expect Prometheus to scrape the
+alerts tool of each node with a `host` label, next to the metrics tool:
+
+```yaml
+scrape_configs:
+- job_name: peer-observer-alerts
+  scrape_interval: 15s
+  static_configs:
+  - labels:
+      host: alice
+    targets:
+    - [ip-of-alice]:8283
+  - labels:
+      host: bob
+    targets:
+    - [ip-of-bob]:8283
+```
+
+Every panel shows all hosts side by side. `alerts.json` is an overview with
+alerts fired per kind and per host, a timeline of when each kind fired, the
+peers flagged right now, how long ago each kind last fired, and the uptime of
+the tool. The `playlist` directory holds single-panel dashboards tagged
+`big-playlist` for the monitoring playlist of the metrics tool: alerts fired
+per kind, alerts fired per host, suspicious peer verdicts, and flagged peers
+per kind.
+
+Each dashboard carries its description as a link with the `doc` icon at the
+top, following the convention of the metrics tool dashboards. The dashboards
+use the Prometheus datasource of the metrics tool dashboards; change the
+datasource `uid` on import if yours differs.
+
 ## Usage
 
 ```
