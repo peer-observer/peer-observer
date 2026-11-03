@@ -11,7 +11,8 @@ use time::OffsetDateTime;
 use shared::anyhow::{Context, Result};
 use shared::clap;
 use shared::clap::Parser;
-use shared::futures::stream::StreamExt;
+use shared::futures::future;
+use shared::futures::stream::{self, StreamExt};
 use shared::log;
 use shared::nats_util;
 use shared::prost::Message;
@@ -184,6 +185,21 @@ pub struct Args {
     /// Arguments for the connection to the NATS server.
     #[command(flatten)]
     pub nats: nats_util::NatsArgs,
+
+    /// NATS subjects to subscribe to: single-token subjects, like "netmsg", or
+    /// "*". Replaces the default "*"; pass several subjects at once, e.g.
+    /// "--nats-subject netmsg rpc", or repeat the flag. Decides which events
+    /// are downloaded from the NATS server, while the event filters below
+    /// decide which of them are archived. Exact repeats are ignored. "*" can't
+    /// be combined with other subjects, as NATS would deliver their events
+    /// twice.
+    #[arg(
+        long = "nats-subject",
+        value_name = "SUBJECT",
+        num_args = 1..,
+        default_value = "*"
+    )]
+    pub nats_subjects: Vec<String>,
 
     /// Output directory for archive files.
     #[arg(short, long)]
@@ -366,16 +382,55 @@ impl ArchiveFilter {
     }
 }
 
-/// How long to wait for the NATS subscription to drain before shutting down
+/// How long to wait for the NATS subscriptions to drain before shutting down
 /// anyway. Draining never completes while the NATS server is unreachable, as
 /// the client reconnects instead of processing the unsubscribe.
 pub const DRAIN_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Validates the subjects passed with `--nats-subject` and returns the ones to
+/// subscribe to. Repeated subjects are subscribed to once.
+///
+/// Only single-token subjects are accepted, as all peer-observer subjects are
+/// single tokens for now. Multi-token wildcards, like ">" or "*.*", would
+/// also match NATS reply inboxes, like the readiness probe in [run], and other
+/// traffic that isn't peer-observer events. Multi-token subjects are to be
+/// revisited with the subject renaming in #313.
+///
+/// "*" can't be combined with other subjects: NATS delivers a message once
+/// per matching subscription, so events matched by both would be archived
+/// twice.
+fn subscription_subjects(subjects: &[String]) -> Result<Vec<String>> {
+    let mut unique: Vec<String> = Vec::with_capacity(subjects.len());
+    for subject in subjects {
+        shared::async_nats::Subject::validated(subject)
+            .with_context(|| format!("invalid --nats-subject {:?}", subject))?;
+        if subject == ">" || subject.contains('.') {
+            shared::anyhow::bail!(
+                "invalid --nats-subject {:?}: only single-token subjects and \"*\" are supported",
+                subject
+            );
+        }
+        if unique.contains(subject) {
+            log::warn!("ignoring repeated --nats-subject {:?}", subject);
+            continue;
+        }
+        unique.push(subject.clone());
+    }
+    if unique.len() > 1 && unique.iter().any(|subject| subject == "*") {
+        shared::anyhow::bail!(
+            "--nats-subject \"*\" can't be combined with other subjects, as their events would be archived twice"
+        );
+    }
+    Ok(unique)
+}
 
 pub async fn run(
     args: Args,
     mut shutdown_rx: watch::Receiver<bool>,
     ready_tx: Option<oneshot::Sender<()>>,
 ) -> Result<()> {
+    let subjects = subscription_subjects(&args.nats_subjects)?;
+
     if args.archive_all() {
         log::info!("archiving all events: {}", args.archive_all());
     } else {
@@ -417,11 +472,19 @@ pub async fn run(
         .await
         .with_context(|| format!("connecting to NATS at {}", args.nats.address))?;
 
-    let mut sub = nc
-        .subscribe("*")
-        .await
-        .context("subscribing to all NATS subjects")?;
+    let mut subscriptions = Vec::with_capacity(subjects.len());
+    for subject in &subjects {
+        subscriptions.push(
+            nc.subscribe(subject.clone())
+                .await
+                .with_context(|| format!("subscribing to NATS subject {:?}", subject))?,
+        );
+    }
+    // A drained subscription ends and leaves the merged stream, which itself
+    // only ends once all subscriptions have ended.
+    let mut subs = stream::select_all(subscriptions);
     log::info!("Connected to NATS-server at {}", args.nats.address);
+    log::info!("subscribed to NATS subjects: {}", subjects.join(", "));
 
     fs::create_dir_all(&args.output_dir)
         .with_context(|| format!("creating output directory {}", args.output_dir.display()))?;
@@ -435,12 +498,12 @@ pub async fn run(
 
     if let Some(ready_tx) = ready_tx {
         // A flush only empties the client's write buffer and does not wait for
-        // the server to have processed the subscription. Prove the subscription
-        // is registered by publishing a probe to an inbox subscribed on this
-        // same connection: the server handles the commands of a connection in
-        // order, so receiving the probe back implies the earlier "*"
-        // subscription is active. The probe inbox contains dots, so it's not
-        // matched by the single-token "*" subscription.
+        // the server to have processed the subscriptions. Prove they are
+        // registered by publishing a probe to an inbox subscribed on this same
+        // connection: the server handles the commands of a connection in
+        // order, so receiving the probe back implies all earlier subscriptions
+        // are active. The probe inbox contains dots, so it's not matched by
+        // any of the single-token subscriptions.
         let inbox = nc.new_inbox();
         let mut probe_sub = nc
             .subscribe(inbox.clone())
@@ -465,7 +528,7 @@ pub async fn run(
 
     loop {
         shared::tokio::select! {
-            maybe_msg = sub.next() => {
+            maybe_msg = subs.next() => {
                 if let Some(msg) = maybe_msg {
                     let mut event = match Event::decode(msg.payload.as_ref()) {
                         Ok(event) => event,
@@ -491,38 +554,48 @@ pub async fn run(
                         }
                     }
                 } else {
-                    break; // subscription ended
+                    break; // all subscriptions ended
                 }
             }
             res = shutdown_rx.changed(), if !draining => {
                 match res {
                     Ok(_) => {
                         if *shutdown_rx.borrow() {
-                            log::info!("archiver tool received shutdown signal. Draining the subscription.");
+                            log::info!("archiver tool received shutdown signal. Draining the subscriptions.");
                             draining = true;
                         }
                     }
                     Err(_) => {
                         // all senders dropped -> treat as shutdown
-                        log::warn!("The shutdown notification sender was dropped. Draining the subscription.");
+                        log::warn!("The shutdown notification sender was dropped. Draining the subscriptions.");
                         draining = true;
                     }
                 }
                 if draining {
-                    // Unsubscribes, but keeps the subscription open until all
-                    // in-flight messages have been yielded. Afterwards,
-                    // sub.next() returns None and the loop above breaks.
-                    if let Err(e) = sub.drain().await {
-                        log::warn!("failed to drain the NATS subscription: {}. Shutting down.", e);
-                        break;
-                    }
                     drain_deadline = Instant::now() + DRAIN_TIMEOUT;
+                    // Unsubscribes, but keeps each subscription open until all
+                    // its in-flight messages have been yielded. Once all of
+                    // them ended, subs.next() returns None and the loop above
+                    // breaks. Requesting the drains can block too, when the
+                    // client's command queue is full, so the deadline covers it.
+                    let drains = future::try_join_all(subs.iter_mut().map(|sub| sub.drain()));
+                    match shared::tokio::time::timeout_at(drain_deadline, drains).await {
+                        Ok(Ok(_)) => {}
+                        Ok(Err(e)) => {
+                            log::warn!("failed to drain the NATS subscriptions: {}. Shutting down.", e);
+                            break;
+                        }
+                        Err(_) => {
+                            log::warn!("draining the NATS subscriptions timed out. Shutting down anyway.");
+                            break;
+                        }
+                    }
                 }
             }
             // The deadline is absolute, so re-creating this future on every
             // loop iteration doesn't extend it.
             _ = shared::tokio::time::sleep_until(drain_deadline), if draining => {
-                log::warn!("draining the NATS subscription timed out. Shutting down anyway.");
+                log::warn!("draining the NATS subscriptions timed out. Shutting down anyway.");
                 break;
             }
         }
@@ -925,5 +998,45 @@ mod tests {
         strip_low_data(&mut event);
 
         assert_eq!(event.encode_to_vec(), before);
+    }
+
+    fn subjects(subjects: &[&str]) -> Result<Vec<String>> {
+        let subjects: Vec<String> = subjects.iter().map(|s| s.to_string()).collect();
+        subscription_subjects(&subjects)
+    }
+
+    #[test]
+    fn nats_subjects_repeated_are_subscribed_once() {
+        assert_eq!(
+            subjects(&["netmsg", "rpc", "netmsg", "rpc"]).unwrap(),
+            ["netmsg", "rpc"]
+        );
+        assert_eq!(subjects(&["*", "*"]).unwrap(), ["*"]);
+    }
+
+    #[test]
+    fn nats_subjects_wildcard_combined_with_others_is_rejected() {
+        for subjects_with_wildcard in [&["*", "rpc"], &["rpc", "*"]] {
+            let err = subjects(subjects_with_wildcard).unwrap_err().to_string();
+            assert!(
+                err.contains("can't be combined"),
+                "{:?}: {}",
+                subjects_with_wildcard,
+                err
+            );
+        }
+    }
+
+    #[test]
+    fn nats_subjects_invalid_are_rejected() {
+        for invalid in ["", "net msg", ">", "a.b", "_INBOX.*", "peer-observer.>"] {
+            let err = subjects(&[invalid]).unwrap_err();
+            assert!(
+                format!("{:#}", err).contains("invalid --nats-subject"),
+                "{:?}: {:#}",
+                invalid,
+                err
+            );
+        }
     }
 }

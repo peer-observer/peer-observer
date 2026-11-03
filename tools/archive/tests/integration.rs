@@ -65,6 +65,7 @@ fn make_test_args(nats_port: u16, output_dir: &std::path::Path) -> Args {
             password: None,
             password_file: None,
         },
+        nats_subjects: vec!["*".to_string()],
         output_dir: output_dir.to_path_buf(),
         base_name: "test".to_string(),
         max_file_size: 104_857_600,
