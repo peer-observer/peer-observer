@@ -1,6 +1,7 @@
 #![cfg(feature = "nats_integration_tests")]
 
 use archive::archiver::{run, Args, DRAIN_TIMEOUT};
+use shared::clap::Parser;
 
 use archive::read::ArchiveReader;
 use shared::{
@@ -552,6 +553,9 @@ async fn test_no_compression() {
 /// The archiver must shut down even when the NATS server is gone. Draining an
 /// unreachable subscription never completes: the client reconnects instead of
 /// processing the unsubscribe, so the subscription is never closed.
+/// With more subscriptions than the client's command queue holds (2,048 by
+/// default), even requesting the drains blocks, which must not outlast the
+/// drain timeout either.
 #[tokio::test]
 async fn test_shutdown_with_unreachable_nats() {
     setup();
@@ -567,7 +571,8 @@ async fn test_shutdown_with_unreachable_nats() {
 
     let dir = tmp_dir.clone();
     let mut archiver_handle = tokio::spawn(async move {
-        let args = make_test_args(nats_port, &dir);
+        let mut args = make_test_args(nats_port, &dir);
+        args.nats_subjects = (0..2_100).map(|i| format!("subject-{}", i)).collect();
         run(args, shutdown_rx, Some(ready_tx)).await.unwrap();
     });
 
@@ -924,4 +929,184 @@ fn msg_of(event: &Event) -> &Msg {
         },
         _ => panic!("expected an ebpf event"),
     }
+}
+
+/// The subjects the peer-observer extractors publish to.
+fn extractor_subjects() -> Vec<String> {
+    [
+        Subject::Mempool,
+        Subject::NetMsg,
+        Subject::NetConn,
+        Subject::Validation,
+        Subject::Rpc,
+        Subject::Ipc,
+        Subject::P2PExtractor,
+        Subject::LogExtractor,
+    ]
+    .iter()
+    .map(ToString::to_string)
+    .collect()
+}
+
+/// An event recording the subject it's published to.
+fn subject_marker(subject: &str) -> Event {
+    Event::new(PeerObserverEvent::LogExtractor(log_extractor::Log {
+        category: LogDebugCategory::Unknown.into(),
+        log_timestamp: 0,
+        threadname: String::new(),
+        log_level: log_extractor::LogLevel::Info.into(),
+        log_line_bytes: 0,
+        log_event: Some(log_extractor::log::LogEvent::UnknownLogMessage(
+            log_extractor::UnknownLogMessage {
+                raw_message: subject.to_string(),
+            },
+        )),
+    }))
+    .unwrap()
+}
+
+/// Returns the subject a [subject_marker] was published to, or "<empty>" for
+/// an event without content.
+fn marker_subject(event: &Event) -> String {
+    match event.peer_observer_event.as_ref() {
+        None => "<empty>".to_string(),
+        Some(PeerObserverEvent::LogExtractor(log)) => match log.log_event.as_ref() {
+            Some(log_extractor::log::LogEvent::UnknownLogMessage(m)) => m.raw_message.clone(),
+            _ => panic!("expected a subject marker"),
+        },
+        Some(_) => panic!("expected a subject marker"),
+    }
+}
+
+/// Runs an archiver started with `--nats-subject` followed by `nats_subjects`
+/// (no flag for an empty slice), publishes `per_subject`
+/// [subject_marker] events to each extractor subject right before shutting
+/// the archiver down, and returns the subjects of the archived events, sorted,
+/// and how long the shutdown took.
+async fn archive_markers(
+    nats_subjects: &[&str],
+    per_subject: usize,
+    tmp_dir: &std::path::Path,
+) -> (Vec<String>, Duration) {
+    setup();
+
+    let _ = std::fs::remove_dir_all(tmp_dir);
+
+    let nats_server = NatsServerForTesting::new(&[]).await;
+    let nats_publisher = NatsPublisherForTesting::new(nats_server.port).await;
+    let (shutdown_tx, shutdown_rx) = watch::channel(false);
+    let (ready_tx, ready_rx) = oneshot::channel();
+
+    let mut cli = vec![
+        "archiver".to_string(),
+        "--nats-address".to_string(),
+        format!("127.0.0.1:{}", nats_server.port),
+        "--output-dir".to_string(),
+        tmp_dir.display().to_string(),
+        "--compression-level".to_string(),
+        "3".to_string(),
+    ];
+    if !nats_subjects.is_empty() {
+        cli.push("--nats-subject".to_string());
+        cli.extend(nats_subjects.iter().map(|subject| subject.to_string()));
+    }
+    let args = Args::parse_from(cli);
+    let mut archiver_handle = tokio::spawn(async move {
+        run(args, shutdown_rx, Some(ready_tx)).await.unwrap();
+    });
+
+    wait_for_archiver_ready(ready_rx, &mut archiver_handle).await;
+
+    for _ in 0..per_subject {
+        for subject in extractor_subjects() {
+            nats_publisher
+                .publish(subject.clone(), subject_marker(&subject).encode_to_vec())
+                .await;
+        }
+    }
+
+    nats_publisher.sync().await;
+    let start = Instant::now();
+    shutdown_tx.send(true).unwrap();
+    tokio::time::timeout(DRAIN_TIMEOUT + Duration::from_secs(5), archiver_handle)
+        .await
+        .expect("archiver should shut down")
+        .unwrap();
+    let shutdown = start.elapsed();
+
+    let archive_path = find_files(tmp_dir, ".bin.zst")
+        .into_iter()
+        .next()
+        .expect("expected a .<timestamp>.bin.zst file");
+    let archive = ArchiveReader::open(&archive_path).unwrap();
+    let mut subjects: Vec<String> = archive
+        .map(|event| marker_subject(&event.unwrap()))
+        .collect();
+    subjects.sort();
+
+    let _ = std::fs::remove_dir_all(tmp_dir);
+    (subjects, shutdown)
+}
+
+fn sorted(subjects: &[&str]) -> Vec<String> {
+    let mut subjects: Vec<String> = subjects.iter().map(|s| s.to_string()).collect();
+    subjects.sort();
+    subjects
+}
+
+/// Without --nats-subject, the archiver keeps receiving every subject.
+#[tokio::test]
+async fn test_nats_subject_absent_receives_all_subjects() {
+    let tmp_dir = std::env::temp_dir().join("archiver_test_nats_subject_absent");
+    let (archived, _) = archive_markers(&[], 1, &tmp_dir).await;
+    let mut expected = extractor_subjects();
+    expected.sort();
+    assert_eq!(archived, expected);
+}
+
+#[tokio::test]
+async fn test_nats_subject_single() {
+    let tmp_dir = std::env::temp_dir().join("archiver_test_nats_subject_single");
+    let (archived, _) = archive_markers(&["netmsg"], 1, &tmp_dir).await;
+    assert_eq!(archived, sorted(&["netmsg"]));
+}
+
+#[tokio::test]
+async fn test_nats_subject_multiple() {
+    let tmp_dir = std::env::temp_dir().join("archiver_test_nats_subject_multiple");
+    let (archived, _) = archive_markers(&["netmsg", "rpc"], 1, &tmp_dir).await;
+    assert_eq!(archived, sorted(&["netmsg", "rpc"]));
+}
+
+/// A repeated subject is subscribed to once, so its events aren't archived
+/// twice.
+#[tokio::test]
+async fn test_nats_subject_repeated() {
+    let tmp_dir = std::env::temp_dir().join("archiver_test_nats_subject_repeated");
+    let (archived, _) = archive_markers(&["netmsg", "netmsg"], 1, &tmp_dir).await;
+    assert_eq!(archived, sorted(&["netmsg"]));
+}
+
+/// Shutting down drains every subscription: events published right before the
+/// shutdown signal are archived for all subscribed subjects, without waiting
+/// for the drain timeout.
+#[tokio::test]
+async fn test_nats_subject_shutdown_drains_all_subscriptions() {
+    const PER_SUBJECT: usize = 2_000;
+    let tmp_dir = std::env::temp_dir().join("archiver_test_nats_subject_shutdown");
+    let (archived, shutdown) =
+        archive_markers(&["netmsg", "rpc", "mempool"], PER_SUBJECT, &tmp_dir).await;
+    assert!(
+        shutdown < DRAIN_TIMEOUT,
+        "all subscriptions should drain before the drain timeout"
+    );
+    for subject in ["netmsg", "rpc", "mempool"] {
+        assert_eq!(
+            archived.iter().filter(|s| *s == subject).count(),
+            PER_SUBJECT,
+            "events archived for {}",
+            subject
+        );
+    }
+    assert_eq!(archived.len(), 3 * PER_SUBJECT);
 }
