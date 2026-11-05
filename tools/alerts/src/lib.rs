@@ -1,25 +1,57 @@
 #![cfg_attr(feature = "strict", deny(warnings))]
 
-use shared::anyhow::{Context, Result};
+use shared::anyhow::{Context as _, Result};
 use shared::clap;
 use shared::clap::Parser;
 use shared::futures::stream::StreamExt;
 use shared::log;
+use shared::metricserver;
 use shared::nats_subjects::Subject;
 use shared::nats_util;
 use shared::nats_util::NatsArgs;
 use shared::prost::Message;
 use shared::protobuf::ebpf_extractor::connection::connection_event;
-use shared::protobuf::ebpf_extractor::ebpf;
 use shared::protobuf::ebpf_extractor::message::message_event::Msg;
 use shared::protobuf::event::Event;
-use shared::tokio::sync::watch;
-use std::collections::{HashMap, VecDeque};
+use shared::tokio::sync::{oneshot, watch};
+use shared::util;
+use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
 pub mod alerter;
+pub mod heuristics;
+pub mod metrics;
 
 pub use crate::alerter::{Alert, Alerter, LoggingAlerter, SpammerKind};
+use crate::heuristics::addr_spammer::{AddrSpammer, AddrSpammerArgs};
+use crate::heuristics::address_harvester::{AddressHarvester, AddressHarvesterArgs};
+use crate::heuristics::connection_cycling::{ConnectionCycling, ConnectionCyclingArgs};
+use crate::heuristics::handshake_after_verack::HandshakeAfterVerack;
+use crate::heuristics::high_ping_wait::{HighPingWait, HighPingWaitArgs};
+use crate::heuristics::inbound_connection_drops::{
+    InboundConnectionDrops, InboundConnectionDropsArgs,
+};
+use crate::heuristics::low_outbound_peers::{LowOutboundPeers, LowOutboundPeersArgs};
+use crate::heuristics::misbehaving_burst::{MisbehavingBurst, MisbehavingBurstArgs};
+use crate::heuristics::misbehaving_pattern::{MisbehavingPattern, MisbehavingPatternArgs};
+use crate::heuristics::misbehaving_peer::MisbehavingPeer;
+use crate::heuristics::netgroup_fleet::{NetgroupFleet, NetgroupFleetArgs};
+use crate::heuristics::old_connection_drops::{OldConnectionDrops, OldConnectionDropsArgs};
+use crate::heuristics::ping_spammer::{PingSpammer, PingSpammerArgs};
+use crate::heuristics::repeated_getaddr::{RepeatedGetaddr, RepeatedGetaddrArgs};
+use crate::heuristics::slow_block::{SlowBlock, SlowBlockArgs};
+use crate::heuristics::small_ping_nonce::{SmallPingNonce, SmallPingNonceArgs};
+use crate::heuristics::stale_tip::{StaleTip, StaleTipArgs};
+use crate::heuristics::suspicious_peer::{SuspiciousPeer, SuspiciousPeerArgs};
+use crate::heuristics::tx_relay_mismatch::TxRelayMismatch;
+use crate::heuristics::tx_spy::{TxSpy, TxSpyArgs};
+use crate::heuristics::unknown_messages::{UnknownMessages, UnknownMessagesArgs};
+use crate::heuristics::version_time_offset::{VersionTimeOffset, VersionTimeOffsetArgs};
+use crate::heuristics::{connection_event, inbound_message, Context, Heuristic, Peer, Peers};
+
+/// How often heuristics get to act on time passing without any event.
+const TICK_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
@@ -28,21 +60,66 @@ pub struct Args {
     #[command(flatten)]
     pub nats: NatsArgs,
 
-    /// Number of pings in the window before alerting
-    #[arg(long, default_value_t = 3)]
-    pub ping_threshold: usize,
+    #[command(flatten)]
+    pub ping_spammer: PingSpammerArgs,
 
-    /// Sliding window size for ping detection (seconds)
-    #[arg(long, default_value_t = 120)]
-    pub ping_window_secs: u64,
+    #[command(flatten)]
+    pub addr_spammer: AddrSpammerArgs,
 
-    /// Number of addr/addrv2 messages in the window before alerting
-    #[arg(long, default_value_t = 6)]
-    pub addr_threshold: usize,
+    #[command(flatten)]
+    pub small_ping_nonce: SmallPingNonceArgs,
 
-    /// Sliding window size for addr detection (seconds)
-    #[arg(long, default_value_t = 60)]
-    pub addr_window_secs: u64,
+    #[command(flatten)]
+    pub unknown_messages: UnknownMessagesArgs,
+
+    #[command(flatten)]
+    pub version_time_offset: VersionTimeOffsetArgs,
+
+    #[command(flatten)]
+    pub tx_spy: TxSpyArgs,
+
+    #[command(flatten)]
+    pub repeated_getaddr: RepeatedGetaddrArgs,
+
+    #[command(flatten)]
+    pub slow_block: SlowBlockArgs,
+
+    #[command(flatten)]
+    pub stale_tip: StaleTipArgs,
+
+    #[command(flatten)]
+    pub connection_cycling: ConnectionCyclingArgs,
+
+    #[command(flatten)]
+    pub address_harvester: AddressHarvesterArgs,
+
+    #[command(flatten)]
+    pub misbehaving_burst: MisbehavingBurstArgs,
+
+    #[command(flatten)]
+    pub misbehaving_pattern: MisbehavingPatternArgs,
+
+    #[command(flatten)]
+    pub high_ping_wait: HighPingWaitArgs,
+
+    #[command(flatten)]
+    pub low_outbound_peers: LowOutboundPeersArgs,
+
+    #[command(flatten)]
+    pub netgroup_fleet: NetgroupFleetArgs,
+
+    #[command(flatten)]
+    pub inbound_connection_drops: InboundConnectionDropsArgs,
+
+    #[command(flatten)]
+    pub old_connection_drops: OldConnectionDropsArgs,
+
+    #[command(flatten)]
+    pub suspicious_peer: SuspiciousPeerArgs,
+
+    /// The metrics server address the tool should listen on
+    #[arg(short, long, default_value = "127.0.0.1:8283")]
+    pub metrics_address: String,
 
     #[arg(short, long, default_value_t = shared::log::Level::Debug)]
     pub log_level: shared::log::Level,
@@ -50,134 +127,232 @@ pub struct Args {
     /// Remove peers not seen for this many seconds (prevents OOM on missed Close events)
     #[arg(long, default_value_t = 300)]
     pub peer_stale_secs: u64,
+
+    /// Only report the disconnect of a flagged peer if it stayed at least this many seconds after being flagged
+    #[arg(long, default_value_t = 1)]
+    pub disconnect_min_active_secs: u64,
 }
 
-#[derive(Default)]
-struct AlertTypeState {
-    timestamps: VecDeque<Instant>,
-    alerted_at: Option<Instant>,
-}
-
-struct PeerState {
-    ping: AlertTypeState,
-    addr: AlertTypeState,
-    last_seen: Instant,
-    peer_addr: String,
-}
-
-impl PeerState {
-    fn new(peer_addr: String, now: Instant) -> Self {
-        PeerState {
-            ping: AlertTypeState::default(),
-            addr: AlertTypeState::default(),
-            last_seen: now,
-            peer_addr,
-        }
-    }
-
-    /// Records a hit for `kind` and returns an `Alert` the first time the
-    /// threshold is exceeded. After alerting once, subsequent hits are dropped
-    /// and the function returns `None` without growing the sliding window
-    fn check(
-        &mut self,
-        kind: SpammerKind,
-        peer_id: u64,
-        now: Instant,
-        args: &Args,
-    ) -> Option<Alert> {
-        let (state, window_secs, threshold) = match kind {
-            SpammerKind::Ping => (&mut self.ping, args.ping_window_secs, args.ping_threshold),
-            SpammerKind::Addr => (&mut self.addr, args.addr_window_secs, args.addr_threshold),
-        };
-
-        if state.alerted_at.is_some() {
-            return None;
-        }
-
-        state.timestamps.push_back(now);
-        let window = Duration::from_secs(window_secs);
-        while state
-            .timestamps
-            .front()
-            .is_some_and(|t| now.duration_since(*t) > window)
-        {
-            state.timestamps.pop_front();
-        }
-        if state.timestamps.len() <= threshold {
-            return None;
-        }
-        let count = state.timestamps.len();
-        state.alerted_at = Some(now);
-
-        Some(Alert::Spammer {
-            kind,
-            peer_id,
-            addr: self.peer_addr.clone(),
-            count,
-            window_secs,
-            threshold,
-        })
-    }
-}
-
-struct AlertState {
-    peers: HashMap<u64, PeerState>,
-}
-
-impl AlertState {
-    fn new() -> Self {
-        AlertState {
-            peers: HashMap::new(),
+#[cfg(any(test, feature = "nats_integration_tests"))]
+impl Args {
+    /// Arguments with all heuristics at their default settings, connecting to
+    /// the NATS server at `nats_address`. Tests start from this and change
+    /// the settings they care about.
+    pub fn for_tests(nats_address: &str) -> Self {
+        Args {
+            nats: NatsArgs {
+                address: nats_address.to_string(),
+                username: None,
+                password: None,
+                password_file: None,
+            },
+            ping_spammer: PingSpammerArgs::default(),
+            addr_spammer: AddrSpammerArgs::default(),
+            small_ping_nonce: SmallPingNonceArgs::default(),
+            unknown_messages: UnknownMessagesArgs::default(),
+            version_time_offset: VersionTimeOffsetArgs::default(),
+            tx_spy: TxSpyArgs::default(),
+            repeated_getaddr: RepeatedGetaddrArgs::default(),
+            slow_block: SlowBlockArgs::default(),
+            stale_tip: StaleTipArgs::default(),
+            connection_cycling: ConnectionCyclingArgs::default(),
+            address_harvester: AddressHarvesterArgs::default(),
+            misbehaving_burst: MisbehavingBurstArgs::default(),
+            misbehaving_pattern: MisbehavingPatternArgs::default(),
+            high_ping_wait: HighPingWaitArgs::default(),
+            low_outbound_peers: LowOutboundPeersArgs::default(),
+            netgroup_fleet: NetgroupFleetArgs::default(),
+            inbound_connection_drops: InboundConnectionDropsArgs::default(),
+            old_connection_drops: OldConnectionDropsArgs::default(),
+            suspicious_peer: SuspiciousPeerArgs::default(),
+            // Port 0 lets the system pick a free port. `run` reports it.
+            metrics_address: "127.0.0.1:0".to_string(),
+            log_level: shared::log::Level::Trace,
+            peer_stale_secs: 300,
+            disconnect_min_active_secs: 1,
         }
     }
 }
 
-/// Builds a `PeerDisconnected` alert for peers that were previously flagged as
-/// spammers, including how long they were active. Returns `None` for peers
-/// that were never flagged so non-flagged disconnects stay silent
-fn disconnect_alert(peer_id: u64, peer: &PeerState, now: Instant) -> Option<Alert> {
-    let first_alerted = [peer.ping.alerted_at, peer.addr.alerted_at]
-        .into_iter()
-        .flatten()
-        .min()?;
-    Some(Alert::PeerDisconnected {
-        peer_id,
-        addr: peer.peer_addr.clone(),
-        active_secs: now.duration_since(first_alerted).as_secs(),
-    })
+/// The heuristics to run, built from the command line arguments.
+fn build_heuristics(args: &Args) -> Vec<Box<dyn Heuristic>> {
+    vec![
+        Box::new(PingSpammer::new(args.ping_spammer.clone())),
+        Box::new(AddrSpammer::new(args.addr_spammer.clone())),
+        Box::new(MisbehavingPeer),
+        Box::new(HandshakeAfterVerack::default()),
+        Box::new(SmallPingNonce::new(args.small_ping_nonce.clone())),
+        Box::new(TxRelayMismatch::default()),
+        Box::new(UnknownMessages::new(args.unknown_messages.clone())),
+        Box::new(VersionTimeOffset::new(args.version_time_offset.clone())),
+        Box::new(TxSpy::new(args.tx_spy.clone())),
+        Box::new(RepeatedGetaddr::new(args.repeated_getaddr.clone())),
+        Box::new(SlowBlock::new(args.slow_block.clone())),
+        Box::new(StaleTip::new(args.stale_tip.clone(), Instant::now())),
+        Box::new(ConnectionCycling::new(args.connection_cycling.clone())),
+        Box::new(AddressHarvester::new(args.address_harvester.clone())),
+        Box::new(MisbehavingBurst::new(args.misbehaving_burst.clone())),
+        Box::new(MisbehavingPattern::new(args.misbehaving_pattern.clone())),
+        Box::new(HighPingWait::new(args.high_ping_wait.clone())),
+        Box::new(LowOutboundPeers::new(args.low_outbound_peers.clone())),
+        Box::new(NetgroupFleet::new(args.netgroup_fleet.clone())),
+        Box::new(InboundConnectionDrops::new(
+            args.inbound_connection_drops.clone(),
+        )),
+        Box::new(OldConnectionDrops::new(args.old_connection_drops.clone())),
+    ]
 }
 
-/// Removes peers that haven't sent any message in `stale_after`
-/// Emits a `PeerDisconnected` alert for any flagged peers evicted this way
-fn cleanup_stale_peers(
-    state: &mut AlertState,
-    stale_after: Duration,
-    now: Instant,
-    alerter: &impl Alerter,
-) {
-    let stale: Vec<u64> = state
-        .peers
-        .iter()
-        .filter(|(_, p)| now.duration_since(p.last_seen) > stale_after)
-        .map(|(id, _)| *id)
-        .collect();
-    for peer_id in stale {
-        if let Some(peer) = state.peers.remove(&peer_id) {
-            if let Some(alert) = disconnect_alert(peer_id, &peer, now) {
-                alerter.emit(alert);
+/// The peers we know about and the heuristics watching them.
+struct State {
+    peers: Peers,
+    heuristics: Vec<Box<dyn Heuristic>>,
+    /// The alert kinds that flagged each connected peer, with the address
+    /// used in the metrics, so the series can be removed when it leaves.
+    flagged: HashMap<u64, Vec<(&'static str, String)>>,
+    /// Combines the per-peer alerts into one verdict per address.
+    suspicious: SuspiciousPeer,
+    /// How long a flagged peer must have stayed for its disconnect to be
+    /// worth a notice. Crawlers leave in the same second they are flagged.
+    disconnect_min_active: Duration,
+    metrics: metrics::Metrics,
+}
+
+impl State {
+    fn new(args: &Args, metrics: metrics::Metrics) -> Self {
+        State {
+            peers: Peers::new(),
+            heuristics: build_heuristics(args),
+            flagged: HashMap::new(),
+            suspicious: SuspiciousPeer::new(args.suspicious_peer.clone()),
+            disconnect_min_active: Duration::from_secs(args.disconnect_min_active_secs),
+            metrics,
+        }
+    }
+
+    /// Counts the alerts on the metrics endpoint, remembers which peers they
+    /// flag, adds a `SuspiciousPeer` verdict when an address has collected
+    /// enough of them, and hands everything to the alerter.
+    fn emit(&mut self, mut alerts: Vec<Alert>, alerter: &impl Alerter, now: Instant) {
+        let verdicts: Vec<Alert> = alerts
+            .iter()
+            .filter_map(|alert| self.suspicious.on_alert(alert, &self.peers, now))
+            .collect();
+        alerts.extend(verdicts);
+        for alert in alerts {
+            self.metrics.count(&alert);
+            let mut peer = None;
+            if let Some((peer_id, addr)) = alert.flagged_peer() {
+                let kinds = self.flagged.entry(peer_id).or_default();
+                if !kinds.iter().any(|(name, _)| *name == alert.name()) {
+                    self.metrics.peer_flagged(alert.name(), peer_id, addr);
+                    kinds.push((alert.name(), addr.to_string()));
+                }
+                peer = self.peers.get(&peer_id);
             }
+            alerter.emit(alert, peer);
+        }
+    }
+
+    /// Remembers the peer an event came from and when we last heard from it.
+    /// Peers are picked up when their connection opens or when they send us
+    /// a message, so a peer is known by the time Bitcoin Core complains
+    /// about it.
+    fn track_peer(&mut self, event: &Event, now: Instant) {
+        let conn = match connection_event(event) {
+            Some(connection_event::Event::Inbound(c)) => Some(&c.conn),
+            Some(connection_event::Event::Outbound(c)) => Some(&c.conn),
+            _ => None,
+        };
+        let (peer_id, addr) = match (inbound_message(event), conn) {
+            (Some(msg), _) => (msg.meta.peer_id, &msg.meta.addr),
+            (None, Some(conn)) => (conn.peer_id, &conn.addr),
+            (None, None) => return,
+        };
+        let peer = self.peers.entry(peer_id).or_insert_with(|| Peer {
+            addr: addr.clone(),
+            last_seen: now,
+            user_agent: None,
+            network: None,
+        });
+        peer.last_seen = now;
+        if let Some(conn) = conn {
+            peer.network = Some(conn.network);
+        }
+        if let Some(msg) = inbound_message(event) {
+            if let Some(Msg::Version(version)) = &msg.msg {
+                peer.user_agent = Some(version.user_agent.clone());
+            }
+        }
+    }
+
+    /// Forgets `peer_id` everywhere. If a heuristic had flagged the peer, a
+    /// `PeerDisconnected` alert saying how long the peer stayed around after
+    /// the first flag is appended to `out`.
+    fn remove_peer(&mut self, peer_id: u64, addr: &str, now: Instant, out: &mut Vec<Alert>) {
+        let addr = match self.peers.remove(&peer_id) {
+            Some(peer) => peer.addr,
+            None => addr.to_string(),
+        };
+        for (name, flagged_addr) in self.flagged.remove(&peer_id).unwrap_or_default() {
+            self.metrics.peer_unflagged(name, peer_id, &flagged_addr);
+        }
+        let first_alerted = self
+            .heuristics
+            .iter_mut()
+            .filter_map(|h| h.on_peer_removed(peer_id))
+            .min();
+        if let Some(first_alerted) = first_alerted {
+            let active = now.duration_since(first_alerted);
+            if active >= self.disconnect_min_active {
+                out.push(Alert::PeerDisconnected {
+                    peer_id,
+                    addr,
+                    active_secs: active.as_secs(),
+                });
+            }
+        }
+    }
+
+    /// Lets every heuristic act on time passing.
+    fn tick(&mut self, now: Instant, out: &mut Vec<Alert>) {
+        let ctx = Context {
+            now,
+            peers: &self.peers,
+        };
+        for heuristic in self.heuristics.iter_mut() {
+            heuristic.on_tick(&ctx, out);
+        }
+        self.suspicious.prune(now);
+    }
+
+    /// Forgets peers we haven't heard from in `stale_after`.
+    fn remove_stale_peers(&mut self, stale_after: Duration, now: Instant, out: &mut Vec<Alert>) {
+        let stale: Vec<(u64, String)> = self
+            .peers
+            .iter()
+            .filter(|(_, p)| now.duration_since(p.last_seen) > stale_after)
+            .map(|(id, p)| (*id, p.addr.clone()))
+            .collect();
+        for (peer_id, addr) in stale {
+            self.remove_peer(peer_id, &addr, now, out);
         }
     }
 }
 
 /// Connects to NATS, subscribes to all subjects, and dispatches each
 /// received event to `handle_event`. Alerts are emitted through `alerter`
+/// and counted on the metrics endpoint. The address the metrics server
+/// bound to is sent to `bound_addr_tx`, which tests use with port 0.
 pub async fn run<A: Alerter>(
     args: Args,
     alerter: A,
     mut shutdown_rx: watch::Receiver<bool>,
+    bound_addr_tx: Option<oneshot::Sender<SocketAddr>>,
 ) -> Result<()> {
     log::info!("starting alerts with {:?}", args);
+
+    let metrics = metrics::Metrics::new();
 
     let nc = nats_util::prepare_connection(&args.nats)
         .context("preparing NATS connection")?
@@ -193,28 +368,57 @@ pub async fn run<A: Alerter>(
         .subscribe(Subject::NetConn.to_string())
         .await
         .context("subscribing to the NetConn subject")?;
-    let mut sub = shared::futures::stream::select(netmsg_sub, netconn_sub);
+    let validation_sub = nc
+        .subscribe(Subject::Validation.to_string())
+        .await
+        .context("subscribing to the Validation subject")?;
+    let rpc_sub = nc
+        .subscribe(Subject::Rpc.to_string())
+        .await
+        .context("subscribing to the Rpc subject")?;
+    let mut sub =
+        shared::futures::stream::select_all([netmsg_sub, netconn_sub, validation_sub, rpc_sub]);
     log::info!("Connected to NATS-server at {}", args.nats.address);
 
-    let mut state = AlertState::new();
+    let metrics_addr = metricserver::start(&args.metrics_address, Some(metrics.registry.clone()))
+        .context("starting metrics server")?;
+    if let Some(tx) = bound_addr_tx {
+        let _ = tx.send(metrics_addr);
+    }
+    metrics
+        .runtime_start_timestamp
+        .set(util::current_timestamp() as i64);
+
+    let mut state = State::new(&args, metrics);
 
     let stale_after = Duration::from_secs(args.peer_stale_secs);
     let mut cleanup_interval = shared::tokio::time::interval(stale_after);
     cleanup_interval.tick().await;
+    let mut tick_interval = shared::tokio::time::interval(TICK_INTERVAL);
+    tick_interval.tick().await;
 
     loop {
         shared::tokio::select! {
+            _ = tick_interval.tick() => {
+                let now = Instant::now();
+                let mut alerts = Vec::new();
+                state.tick(now, &mut alerts);
+                state.emit(alerts, &alerter, now);
+            }
             maybe_msg = sub.next() => {
                 match maybe_msg {
                     Some(msg) => match Event::decode(msg.payload) {
-                        Ok(event) => handle_event(event, &mut state, &args, &alerter),
+                        Ok(event) => handle_event(event, &mut state, &alerter),
                         Err(e) => log::warn!("dropping undecodable NATS payload: {e}"),
                     },
                     None => break,
                 }
             }
             _ = cleanup_interval.tick() => {
-                cleanup_stale_peers(&mut state, stale_after, Instant::now(), &alerter);
+                let now = Instant::now();
+                let mut alerts = Vec::new();
+                state.remove_stale_peers(stale_after, now, &mut alerts);
+                state.emit(alerts, &alerter, now);
             }
             res = shutdown_rx.changed() => {
                 match res {
@@ -235,242 +439,49 @@ pub async fn run<A: Alerter>(
     Ok(())
 }
 
-/// Routes a NATS event to the appropriate handler
-fn handle_event(event: Event, state: &mut AlertState, args: &Args, alerter: &impl Alerter) {
+/// Hands one event to every heuristic and forgets peers whose connection closed.
+fn handle_event(event: Event, state: &mut State, alerter: &impl Alerter) {
     let now = Instant::now();
-    if let Some(shared::protobuf::event::event::PeerObserverEvent::EbpfExtractor(ebpf)) =
-        event.peer_observer_event
-    {
-        match ebpf.ebpf_event {
-            Some(ebpf::EbpfEvent::Message(msg)) => handle_message(msg, state, args, alerter, now),
-            Some(ebpf::EbpfEvent::Connection(conn)) => handle_connection(conn, state, now, alerter),
-            _ => {}
-        }
-    }
-}
+    let mut alerts = Vec::new();
 
-/// Processes an inbound P2P message. Drops outbound messages and dispatches
-/// to ping or addr spammer detection based on the message type
-fn handle_message(
-    msg: shared::protobuf::ebpf_extractor::message::MessageEvent,
-    state: &mut AlertState,
-    args: &Args,
-    alerter: &impl Alerter,
-    now: Instant,
-) {
-    if !msg.meta.inbound {
-        return;
-    }
+    state.track_peer(&event, now);
 
-    let peer_id = msg.meta.peer_id;
-    let addr = &msg.meta.addr;
-
-    let peer = state
-        .peers
-        .entry(peer_id)
-        .or_insert_with(|| PeerState::new(addr.clone(), now));
-    peer.last_seen = now;
-
-    let kind = match msg.msg {
-        Some(Msg::Ping(_)) => SpammerKind::Ping,
-        Some(Msg::Addr(_)) | Some(Msg::Addrv2(_)) => SpammerKind::Addr,
-        _ => return,
+    let ctx = Context {
+        now,
+        peers: &state.peers,
     };
-
-    if let Some(alert) = peer.check(kind, peer_id, now, args) {
-        alerter.emit(alert);
+    for heuristic in state.heuristics.iter_mut() {
+        heuristic.on_event(&event, &ctx, &mut alerts);
     }
-}
 
-/// Cleans up peer state when a connection closes and emits a
-/// `PeerDisconnected` alert if the peer was previously flagged
-fn handle_connection(
-    conn: shared::protobuf::ebpf_extractor::connection::ConnectionEvent,
-    state: &mut AlertState,
-    now: Instant,
-    alerter: &impl Alerter,
-) {
-    if let Some(connection_event::Event::Closed(c)) = conn.event {
-        let peer_id = c.conn.peer_id;
-        if let Some(peer) = state.peers.remove(&peer_id) {
-            if let Some(alert) = disconnect_alert(peer_id, &peer, now) {
-                alerter.emit(alert);
-            }
-        }
+    if let Some(connection_event::Event::Closed(closed)) = connection_event(&event) {
+        state.remove_peer(closed.conn.peer_id, &closed.conn.addr, now, &mut alerts);
     }
+
+    state.emit(alerts, alerter, now);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn test_args(ping_threshold: usize, addr_threshold: usize, window_secs: u64) -> Args {
-        Args {
-            nats: NatsArgs {
-                address: "127.0.0.1:4222".to_string(),
-                username: None,
-                password: None,
-                password_file: None,
-            },
-            ping_threshold,
-            ping_window_secs: window_secs,
-            addr_threshold,
-            addr_window_secs: window_secs,
-            log_level: shared::log::Level::Trace,
-            peer_stale_secs: 300,
-        }
-    }
-
-    fn make_peer(now: Instant) -> PeerState {
-        PeerState::new("1.2.3.4:8333".to_string(), now)
-    }
-
-    fn unwrap_spammer(alert: Alert) -> (SpammerKind, u64, usize, u64, usize) {
-        match alert {
-            Alert::Spammer {
-                kind,
-                peer_id,
-                count,
-                window_secs,
-                threshold,
-                ..
-            } => (kind, peer_id, count, window_secs, threshold),
-            other => panic!("expected Alert::Spammer, got {other:?}"),
-        }
-    }
+    use crate::heuristics::test_util::{message, version, PEER_ADDR};
+    use shared::protobuf::ebpf_extractor::message::Ping;
 
     #[test]
-    fn below_threshold_no_alert() {
-        let args = test_args(3, 3, 60);
-        let t0 = Instant::now();
-        let mut peer = make_peer(t0);
+    fn the_peer_registry_remembers_the_user_agent() {
+        let args = Args::for_tests("127.0.0.1:4222");
+        let mut state = State::new(&args, metrics::Metrics::new());
+        let now = Instant::now();
 
-        // threshold=3 means "more than 3"; 3 hits must not fire
-        for i in 0..3 {
-            let now = t0 + Duration::from_millis(i);
-            assert!(peer.check(SpammerKind::Ping, 1, now, &args).is_none());
-        }
-    }
+        state.track_peer(&message(1, true, "ping", Msg::Ping(Ping { value: 1 })), now);
+        let peer = state.peers.get(&1).expect("peer is tracked");
+        assert_eq!(peer.addr, PEER_ADDR);
+        assert_eq!(peer.user_agent, None);
 
-    #[test]
-    fn above_threshold_fires_once() {
-        let args = test_args(3, 3, 60);
-        let t0 = Instant::now();
-        let mut peer = make_peer(t0);
-
-        for i in 0..3 {
-            peer.check(SpammerKind::Ping, 1, t0 + Duration::from_millis(i), &args);
-        }
-        let alert = peer
-            .check(SpammerKind::Ping, 1, t0 + Duration::from_millis(4), &args)
-            .expect("4th hit over threshold=3 must emit an alert");
-        let (kind, peer_id, count, _, threshold) = unwrap_spammer(alert);
-        assert_eq!(kind, SpammerKind::Ping);
-        assert_eq!(peer_id, 1);
-        assert_eq!(count, 4);
-        assert_eq!(threshold, 3);
-    }
-
-    #[test]
-    fn one_shot_no_retrigger() {
-        let args = test_args(3, 3, 60);
-        let t0 = Instant::now();
-        let mut peer = make_peer(t0);
-
-        // Cross the threshold
-        for i in 0..4 {
-            peer.check(SpammerKind::Ping, 1, t0 + Duration::from_millis(i), &args);
-        }
-        assert!(peer.ping.alerted_at.is_some());
-        let len_at_alert = peer.ping.timestamps.len();
-
-        // 10 more hits — none should alert, and the deque must not grow
-        for i in 4..14 {
-            assert!(peer
-                .check(SpammerKind::Ping, 1, t0 + Duration::from_millis(i), &args)
-                .is_none());
-        }
+        state.track_peer(&version(1, true), now);
         assert_eq!(
-            peer.ping.timestamps.len(),
-            len_at_alert,
-            "deque must not grow after the one-shot alert fires"
+            state.peers.get(&1).unwrap().user_agent.as_deref(),
+            Some("/test/")
         );
-    }
-
-    #[test]
-    fn out_of_window_hits_dropped() {
-        let args = test_args(3, 3, 60);
-        let t0 = Instant::now();
-        let mut peer = make_peer(t0);
-
-        // Two hits at t0
-        peer.check(SpammerKind::Ping, 1, t0, &args);
-        peer.check(SpammerKind::Ping, 1, t0 + Duration::from_secs(1), &args);
-
-        // Advance past the window (60s) so the first two fall out
-        let later = t0 + Duration::from_secs(90);
-        for i in 0..3 {
-            assert!(peer
-                .check(
-                    SpammerKind::Ping,
-                    1,
-                    later + Duration::from_millis(i),
-                    &args
-                )
-                .is_none());
-        }
-        assert_eq!(
-            peer.ping.timestamps.len(),
-            3,
-            "only the 3 recent hits should remain in the sliding window"
-        );
-    }
-
-    #[test]
-    fn separate_counters_per_kind() {
-        let args = test_args(3, 10, 60);
-        let t0 = Instant::now();
-        let mut peer = make_peer(t0);
-
-        // 4 addr messages — below addr_threshold=10 — must not alert
-        for i in 0..4 {
-            assert!(peer
-                .check(SpammerKind::Addr, 1, t0 + Duration::from_millis(i), &args)
-                .is_none());
-        }
-
-        // 4 pings — above ping_threshold=3 — the 4th one must alert
-        let mut ping_alerted = false;
-        for i in 1..=4 {
-            if peer
-                .check(SpammerKind::Ping, 1, t0 + Duration::from_secs(i), &args)
-                .is_some()
-            {
-                ping_alerted = true;
-            }
-        }
-        assert!(ping_alerted, "4 pings with threshold=3 must alert");
-
-        // Addr counter must still not have fired
-        assert!(peer.addr.alerted_at.is_none());
-    }
-
-    #[test]
-    fn addr_alert_carries_addr_window_fields() {
-        let args = test_args(100, 2, 60);
-        let t0 = Instant::now();
-        let mut peer = make_peer(t0);
-
-        for i in 0..2 {
-            peer.check(SpammerKind::Addr, 7, t0 + Duration::from_millis(i), &args);
-        }
-        let alert = peer
-            .check(SpammerKind::Addr, 7, t0 + Duration::from_millis(3), &args)
-            .expect("3rd hit with addr_threshold=2 must alert");
-        let (kind, _, count, window_secs, threshold) = unwrap_spammer(alert);
-        assert_eq!(kind, SpammerKind::Addr);
-        assert_eq!(window_secs, args.addr_window_secs);
-        assert_eq!(threshold, args.addr_threshold);
-        assert_eq!(count, 3);
     }
 }

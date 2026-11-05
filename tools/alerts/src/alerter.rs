@@ -1,3 +1,4 @@
+use crate::heuristics::Peer;
 use shared::log;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -24,6 +25,244 @@ pub enum Alert {
         addr: String,
         active_secs: u64,
     },
+    /// Bitcoin Core reported the peer as misbehaving and gave a reason
+    MisbehavingPeer {
+        peer_id: u64,
+        addr: String,
+        reason: String,
+    },
+    /// The peer sent a handshake message after its handshake was complete
+    HandshakeAfterVerack {
+        peer_id: u64,
+        addr: String,
+        command: String,
+    },
+    /// The peer sent too many pings with a nonce that fits into 32 bits
+    SmallPingNonce {
+        peer_id: u64,
+        addr: String,
+        count: usize,
+        threshold: usize,
+    },
+    /// The peer asked for no transaction relay but sent us transactions
+    TxRelayMismatch {
+        peer_id: u64,
+        addr: String,
+        command: String,
+    },
+    /// Bitcoin Core took longer than the threshold to connect a block
+    SlowBlock {
+        height: i32,
+        hash: String,
+        connection_time_ms: u64,
+        threshold_secs: u64,
+        transactions: i64,
+        inputs: i32,
+        sigops: i64,
+    },
+    /// No block has been connected for longer than the threshold
+    StaleTip {
+        since_secs: u64,
+        threshold_secs: u64,
+        last_height: Option<i32>,
+    },
+    /// A block connected after the tip had been reported as stale
+    TipRecovered { height: i32, stale_secs: u64 },
+    /// Many established inbound connections closed within the window,
+    /// evictions aside
+    InboundConnectionDrops {
+        count: usize,
+        window_secs: u64,
+        threshold: usize,
+        min_age_secs: u64,
+    },
+    /// Several long-lived connections closed within the window
+    OldConnectionDrops {
+        count: usize,
+        window_secs: u64,
+        threshold: usize,
+        min_age_secs: u64,
+    },
+    /// The peer sent too many messages we do not know
+    UnknownMessages {
+        peer_id: u64,
+        addr: String,
+        count: usize,
+        threshold: usize,
+        last_command: String,
+    },
+    /// The time in the peer's version message is far off ours
+    VersionTimeOffset {
+        peer_id: u64,
+        addr: String,
+        offset_secs: i64,
+        threshold_secs: u64,
+        user_agent: String,
+    },
+    /// Bitcoin Core reported many misbehaving peers within the window
+    MisbehavingBurst {
+        count: usize,
+        window_secs: u64,
+        threshold: usize,
+    },
+    /// Several different peers misbehaved in the same way over a long window
+    MisbehavingPattern {
+        reason: String,
+        peers: usize,
+        window_secs: u64,
+        threshold: usize,
+    },
+    /// Many peers have been waiting for a reply to our ping
+    HighPingWait {
+        peers: usize,
+        total_peers: usize,
+        wait_secs: u64,
+        threshold_peers: usize,
+    },
+    /// The node has had fewer full-relay outbound peers than it should for a while
+    LowOutboundPeers {
+        outbound: usize,
+        threshold: usize,
+        below_for_secs: u64,
+    },
+    /// The peer takes our transaction announcements but never sends any
+    TxSpy {
+        peer_id: u64,
+        addr: String,
+        connected_secs: u64,
+    },
+    /// The peer asked for addresses more than once
+    RepeatedGetaddr {
+        peer_id: u64,
+        addr: String,
+        count: usize,
+        threshold: usize,
+    },
+    /// Many short connections from one netgroup collected addresses and left
+    AddressHarvester {
+        netgroup: String,
+        count: usize,
+        window_secs: u64,
+        threshold: usize,
+        max_age_secs: u64,
+    },
+    /// One address keeps opening new connections to us
+    ConnectionCycling {
+        host: String,
+        count: usize,
+        window_secs: u64,
+        threshold: usize,
+    },
+    /// One netgroup holds many of our inbound connections
+    NetgroupFleet {
+        netgroup: String,
+        connections: usize,
+        inbound_total: usize,
+        threshold: usize,
+    },
+    /// Several different alert kinds fired against one address
+    SuspiciousPeer {
+        host: String,
+        flags: Vec<&'static str>,
+        window_secs: u64,
+    },
+}
+
+impl Alert {
+    /// The names of all alert kinds, as `name()` returns them. Used to create
+    /// a metric series for every kind up front.
+    pub const NAMES: [&'static str; 24] = [
+        "ping_spammer",
+        "addr_spammer",
+        "peer_disconnected",
+        "misbehaving_peer",
+        "handshake_after_verack",
+        "small_ping_nonce",
+        "tx_relay_mismatch",
+        "slow_block",
+        "stale_tip",
+        "tip_recovered",
+        "inbound_connection_drops",
+        "old_connection_drops",
+        "unknown_messages",
+        "version_time_offset",
+        "misbehaving_burst",
+        "misbehaving_pattern",
+        "high_ping_wait",
+        "low_outbound_peers",
+        "tx_spy",
+        "repeated_getaddr",
+        "address_harvester",
+        "connection_cycling",
+        "netgroup_fleet",
+        "suspicious_peer",
+    ];
+
+    /// A short, stable name for the kind of alert, used as metric label.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Alert::Spammer {
+                kind: SpammerKind::Ping,
+                ..
+            } => "ping_spammer",
+            Alert::Spammer {
+                kind: SpammerKind::Addr,
+                ..
+            } => "addr_spammer",
+            Alert::PeerDisconnected { .. } => "peer_disconnected",
+            Alert::MisbehavingPeer { .. } => "misbehaving_peer",
+            Alert::HandshakeAfterVerack { .. } => "handshake_after_verack",
+            Alert::SmallPingNonce { .. } => "small_ping_nonce",
+            Alert::TxRelayMismatch { .. } => "tx_relay_mismatch",
+            Alert::SlowBlock { .. } => "slow_block",
+            Alert::StaleTip { .. } => "stale_tip",
+            Alert::TipRecovered { .. } => "tip_recovered",
+            Alert::InboundConnectionDrops { .. } => "inbound_connection_drops",
+            Alert::OldConnectionDrops { .. } => "old_connection_drops",
+            Alert::UnknownMessages { .. } => "unknown_messages",
+            Alert::VersionTimeOffset { .. } => "version_time_offset",
+            Alert::MisbehavingBurst { .. } => "misbehaving_burst",
+            Alert::MisbehavingPattern { .. } => "misbehaving_pattern",
+            Alert::HighPingWait { .. } => "high_ping_wait",
+            Alert::LowOutboundPeers { .. } => "low_outbound_peers",
+            Alert::TxSpy { .. } => "tx_spy",
+            Alert::RepeatedGetaddr { .. } => "repeated_getaddr",
+            Alert::AddressHarvester { .. } => "address_harvester",
+            Alert::ConnectionCycling { .. } => "connection_cycling",
+            Alert::NetgroupFleet { .. } => "netgroup_fleet",
+            Alert::SuspiciousPeer { .. } => "suspicious_peer",
+        }
+    }
+
+    /// The peer this alert flags, if it is about a single peer. The
+    /// `PeerDisconnected` alert reports a flagged peer leaving and flags none.
+    pub fn flagged_peer(&self) -> Option<(u64, &str)> {
+        match self {
+            Alert::Spammer { peer_id, addr, .. }
+            | Alert::MisbehavingPeer { peer_id, addr, .. }
+            | Alert::HandshakeAfterVerack { peer_id, addr, .. }
+            | Alert::SmallPingNonce { peer_id, addr, .. }
+            | Alert::TxRelayMismatch { peer_id, addr, .. }
+            | Alert::UnknownMessages { peer_id, addr, .. }
+            | Alert::VersionTimeOffset { peer_id, addr, .. }
+            | Alert::TxSpy { peer_id, addr, .. }
+            | Alert::RepeatedGetaddr { peer_id, addr, .. } => Some((*peer_id, addr)),
+            Alert::PeerDisconnected { .. }
+            | Alert::SlowBlock { .. }
+            | Alert::StaleTip { .. }
+            | Alert::TipRecovered { .. }
+            | Alert::InboundConnectionDrops { .. }
+            | Alert::OldConnectionDrops { .. }
+            | Alert::MisbehavingBurst { .. }
+            | Alert::MisbehavingPattern { .. }
+            | Alert::HighPingWait { .. }
+            | Alert::LowOutboundPeers { .. }
+            | Alert::AddressHarvester { .. }
+            | Alert::ConnectionCycling { .. }
+            | Alert::NetgroupFleet { .. }
+            | Alert::SuspiciousPeer { .. } => None,
+        }
+    }
 }
 
 impl std::fmt::Display for Alert {
@@ -56,6 +295,224 @@ impl std::fmt::Display for Alert {
                 "PeerDisconnected | peer_id={} addr={} | active={}s",
                 peer_id, addr, active_secs
             ),
+            Alert::MisbehavingPeer {
+                peer_id,
+                addr,
+                reason,
+            } => write!(
+                f,
+                "MisbehavingPeer | peer_id={} addr={} | {}",
+                peer_id, addr, reason
+            ),
+            Alert::HandshakeAfterVerack {
+                peer_id,
+                addr,
+                command,
+            } => write!(
+                f,
+                "HandshakeAfterVerack | peer_id={} addr={} | received {} after verack",
+                peer_id, addr, command
+            ),
+            Alert::SmallPingNonce {
+                peer_id,
+                addr,
+                count,
+                threshold,
+            } => write!(
+                f,
+                "SmallPingNonce | peer_id={} addr={} | {} pings with a nonce below 2^32 (threshold: {})",
+                peer_id, addr, count, threshold
+            ),
+            Alert::TxRelayMismatch {
+                peer_id,
+                addr,
+                command,
+            } => write!(
+                f,
+                "TxRelayMismatch | peer_id={} addr={} | received {} with transactions after relay=false in its version message",
+                peer_id, addr, command
+            ),
+            Alert::SlowBlock {
+                height,
+                hash,
+                connection_time_ms,
+                threshold_secs,
+                transactions,
+                inputs,
+                sigops,
+            } => write!(
+                f,
+                "SlowBlock | height={} hash={} | connected in {:.1}s (threshold: {}s), {} transactions, {} inputs, {} sigops",
+                height,
+                hash,
+                *connection_time_ms as f64 / 1000.0,
+                threshold_secs,
+                transactions,
+                inputs,
+                sigops
+            ),
+            Alert::StaleTip {
+                since_secs,
+                threshold_secs,
+                last_height,
+            } => {
+                let last_height = match last_height {
+                    Some(height) => height.to_string(),
+                    None => "unknown".to_string(),
+                };
+                write!(
+                    f,
+                    "StaleTip | no block connected for {}s (threshold: {}s), last height: {}",
+                    since_secs, threshold_secs, last_height
+                )
+            }
+            Alert::TipRecovered { height, stale_secs } => write!(
+                f,
+                "TipRecovered | height={} | block connected after {}s without a block",
+                height, stale_secs
+            ),
+            Alert::InboundConnectionDrops {
+                count,
+                window_secs,
+                threshold,
+                min_age_secs,
+            } => write!(
+                f,
+                "InboundConnectionDrops | {} inbound connections older than {}s closed in last {}s (threshold: {}), evictions not counted",
+                count, min_age_secs, window_secs, threshold
+            ),
+            Alert::OldConnectionDrops {
+                count,
+                window_secs,
+                threshold,
+                min_age_secs,
+            } => write!(
+                f,
+                "OldConnectionDrops | {} connections older than {}s closed in last {}s (threshold: {})",
+                count, min_age_secs, window_secs, threshold
+            ),
+            Alert::UnknownMessages {
+                peer_id,
+                addr,
+                count,
+                threshold,
+                last_command,
+            } => write!(
+                f,
+                "UnknownMessages | peer_id={} addr={} | {} unknown messages (threshold: {}), last: {}",
+                peer_id, addr, count, threshold, last_command
+            ),
+            Alert::VersionTimeOffset {
+                peer_id,
+                addr,
+                offset_secs,
+                threshold_secs,
+                user_agent: _,
+            } => write!(
+                f,
+                "VersionTimeOffset | peer_id={} addr={} | version time off by {}s (threshold: {}s)",
+                peer_id, addr, offset_secs, threshold_secs
+            ),
+            Alert::MisbehavingBurst {
+                count,
+                window_secs,
+                threshold,
+            } => write!(
+                f,
+                "MisbehavingBurst | {} peers reported as misbehaving in last {}s (threshold: {})",
+                count, window_secs, threshold
+            ),
+            Alert::MisbehavingPattern {
+                reason,
+                peers,
+                window_secs,
+                threshold,
+            } => write!(
+                f,
+                "MisbehavingPattern | \"{}\" from {} different peers in last {}s (threshold: {})",
+                reason, peers, window_secs, threshold
+            ),
+            Alert::HighPingWait {
+                peers,
+                total_peers,
+                wait_secs,
+                threshold_peers,
+            } => write!(
+                f,
+                "HighPingWait | {} of {} peers waiting more than {}s for a pong (threshold: {} peers)",
+                peers, total_peers, wait_secs, threshold_peers
+            ),
+            Alert::LowOutboundPeers {
+                outbound,
+                threshold,
+                below_for_secs,
+            } => write!(
+                f,
+                "LowOutboundPeers | {} full-relay outbound peers connected, below {} for {}s",
+                outbound, threshold, below_for_secs
+            ),
+            Alert::TxSpy {
+                peer_id,
+                addr,
+                connected_secs,
+            } => write!(
+                f,
+                "TxSpy | peer_id={} addr={} | connected for {}s with transaction relay on, never sent an inv or tx",
+                peer_id, addr, connected_secs
+            ),
+            Alert::RepeatedGetaddr {
+                peer_id,
+                addr,
+                count,
+                threshold,
+            } => write!(
+                f,
+                "RepeatedGetaddr | peer_id={} addr={} | {} getaddr messages (threshold: {})",
+                peer_id, addr, count, threshold
+            ),
+            Alert::AddressHarvester {
+                netgroup,
+                count,
+                window_secs,
+                threshold,
+                max_age_secs,
+            } => write!(
+                f,
+                "AddressHarvester | {} connections from {} asked for addresses and left within {}s in last {}s (threshold: {})",
+                count, netgroup, max_age_secs, window_secs, threshold
+            ),
+            Alert::ConnectionCycling {
+                host,
+                count,
+                window_secs,
+                threshold,
+            } => write!(
+                f,
+                "ConnectionCycling | {} opened {} connections in last {}s (threshold: {})",
+                host, count, window_secs, threshold
+            ),
+            Alert::NetgroupFleet {
+                netgroup,
+                connections,
+                inbound_total,
+                threshold,
+            } => write!(
+                f,
+                "NetgroupFleet | {} of {} inbound peers are from {} (threshold: {})",
+                connections, inbound_total, netgroup, threshold
+            ),
+            Alert::SuspiciousPeer {
+                host,
+                flags,
+                window_secs,
+            } => write!(
+                f,
+                "SuspiciousPeer | host={} | {} alert kinds in last {}s: {}",
+                host,
+                flags.len(),
+                window_secs,
+                flags.join(", ")
+            ),
         }
     }
 }
@@ -65,16 +522,23 @@ impl std::fmt::Display for Alert {
 /// `emit` is called from the event loop and must not block. Sinks that do I/O
 /// (HTTP, NATS publish, Prometheus push, etc.) must own a background task and
 /// hand off the alert through a channel — do the network work there, not here
+///
+/// `peer` is what the tool knows about the peer an alert is about, if the
+/// alert is about a single peer and the peer is still known.
 pub trait Alerter: Send + Sync {
-    fn emit(&self, alert: Alert);
+    fn emit(&self, alert: Alert, peer: Option<&Peer>);
 }
 
-/// Default alerter: writes each alert to the logger at `info!` level
+/// Default alerter: writes each alert to the logger at `info!` level, with
+/// the peer's user agent when known
 pub struct LoggingAlerter;
 
 impl Alerter for LoggingAlerter {
-    fn emit(&self, alert: Alert) {
-        log::info!("{}", alert);
+    fn emit(&self, alert: Alert, peer: Option<&Peer>) {
+        match peer.and_then(|p| p.user_agent.as_deref()) {
+            Some(user_agent) => log::info!("{} | user agent: {}", alert, user_agent),
+            None => log::info!("{}", alert),
+        }
     }
 }
 
@@ -95,7 +559,7 @@ impl IntegrationTestAlerter {
 
 #[cfg(any(test, feature = "nats_integration_tests"))]
 impl Alerter for IntegrationTestAlerter {
-    fn emit(&self, alert: Alert) {
+    fn emit(&self, alert: Alert, _peer: Option<&Peer>) {
         let _ = self.tx.send(alert);
     }
 }
