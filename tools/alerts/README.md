@@ -26,6 +26,24 @@ Alert format (as rendered by `LoggingAlerter`):
 AddrSpammer | peer_id=<id> addr=<addr> | <count> addr/addrv2 messages in last <secs>s (threshold: <threshold>)
 ```
 
+### AddrEntriesSpammer
+
+Counts the address *entries* inside `addr`/`addrv2` messages, catching peers that stay under `AddrSpammer`
+by sending a few oversized messages.
+Uses a per-peer token bucket modeled on Bitcoin Core's addr rate limiting: the bucket starts at
+`--addr-entries-initial-tokens` (default `1`) and refills at `--addr-entries-rate-per-sec` entries/s up to
+`--addr-entries-bucket-capacity` (default `1000`, Core's `MAX_ADDR_PROCESSING_TOKEN_BUCKET`).
+Each entry spends a token and entries hitting an empty bucket count as *rate-limited*.
+Both message types share one bucket, and the alert fires once the cumulative rate-limited count exceeds `--addr-entries-threshold`.
+Each outbound `GETADDR` adds one capacity-sized allowance to cover the expected response, matching Core's bypass for requested address bursts.
+
+The metric is the count of entries that *exceed Core's rate limit*.
+
+Alert format (as rendered by `LoggingAlerter`):
+```
+AddrEntriesSpammer | peer_id=<id> addr=<addr> | <count> addr/addrv2 entries rate-limited (threshold: <threshold>, bucket: <capacity>, rate: <rate>/s, getaddr_sent: <count>)
+```
+
 Each peer/kind combination fires at most one alert per session (one-shot).
 
 ## Peer lifecycle
@@ -35,10 +53,8 @@ or by being evicted after `--peer-stale-secs` of inactivity), the same `Alerter`
 emits a `PeerDisconnected` alert with the duration of the spamming episode:
 
 ```
-PeerDisconnected | peer_id=<id> addr=<addr> | active=<duration>s
+PeerDisconnected | peer_id=<id> addr=<addr> | active=<duration>s | flags=[<reason>, ...]
 ```
-
-Non-flagged peers disconnect silently (no alert is emitted).
 
 ## Usage
 
@@ -70,6 +86,14 @@ Options:
           Number of addr/addrv2 messages in the window before alerting [default: 6]
       --addr-window-secs <ADDR_WINDOW_SECS>
           Sliding window size for addr detection (seconds) [default: 60]
+      --addr-entries-initial-tokens <ADDR_ENTRIES_INITIAL_TOKENS>
+          Initial token seed for a peer's addr/addrv2 entry bucket. Mirrors Core's per-peer starting bucket (1.0, "permit self-announcement") [default: 1]
+      --addr-entries-bucket-capacity <ADDR_ENTRIES_BUCKET_CAPACITY>
+          Token bucket capacity: the refill ceiling for addr/addrv2 entries. Mirrors Core's MAX_ADDR_PROCESSING_TOKEN_BUCKET (1000); the bucket refills up to this [default: 1000]
+      --addr-entries-rate-per-sec <ADDR_ENTRIES_RATE_PER_SEC>
+          Token refill rate for addr/addrv2 entries (entries per second). Mirrors Core's MAX_ADDR_RATE_PER_SECOND (0.1, i.e. one entry every 10 seconds) [default: 0.1]
+      --addr-entries-threshold <ADDR_ENTRIES_THRESHOLD>
+          Number of rate-limited addr/addrv2 entries before alerting [default: 20]
   -l, --log-level <LOG_LEVEL>
           [default: DEBUG]
       --peer-stale-secs <PEER_STALE_SECS>
@@ -89,12 +113,16 @@ cargo run -p alerts -- \
   --ping-threshold 3 \
   --ping-window-secs 30 \
   --addr-threshold 2 \
-  --addr-window-secs 60
+  --addr-window-secs 60 \
+  --addr-entries-initial-tokens 5 \
+  --addr-entries-bucket-capacity 5 \
+  --addr-entries-threshold 5
 ```
 
 Example output:
 ```
 INFO  [alerts::alerter] PingSpammer | peer_id=42 addr=1.2.3.4:8333 | 4 pings in last 30s (threshold: 3)
 INFO  [alerts::alerter] AddrSpammer | peer_id=7 addr=5.6.7.8:8333 | 3 addr/addrv2 messages in last 60s (threshold: 2)
-INFO  [alerts::alerter] PeerDisconnected | peer_id=42 addr=1.2.3.4:8333 | active=47s
+INFO  [alerts::alerter] AddrEntriesSpammer | peer_id=9 addr=8.8.8.8:8333 | 15 addr/addrv2 entries rate-limited (threshold: 5, bucket: 5, rate: 0.1/s, getaddr_sent: 0)
+INFO  [alerts::alerter] PeerDisconnected | peer_id=42 addr=1.2.3.4:8333 | active=47s | flags=[PingSpammer]
 ```
