@@ -120,6 +120,16 @@ release will be downloaded and used if `BITCOIND_SKIP_DOWNLOAD` is unset.
 $ cargo test --features nats_integration_tests --features node_integration_tests
 ```
 
+The ebpf-extractor tests are an exception. The extractor loads its tracing code
+into the Linux kernel, which only root can do, so these tests are marked as
+ignored and a plain `cargo test` lists them as skipped. CI runs them as root on
+a throwaway machine. There is no need to do that on your own machine, but if you
+want to:
+
+```bash
+$ sudo ./target/debug/deps/integration-<hash> --ignored
+```
+
 Test coverage can be generated with:
 
 ```bash

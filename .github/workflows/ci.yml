@@ -114,6 +114,31 @@ jobs:
     - name: Run tests and integration tests
       run: NATS_SERVER_BINARY=$(which nats-server) cargo test --all-features
 
+  # The ebpf-extractor loads tracing code into the Linux kernel, which only
+  # root can do. Its integration tests are marked as ignored so that a normal
+  # test run skips them, which means they need a job of their own.
+  ubuntu-test-ebpf:
+    runs-on: ubuntu-latest
+    needs: ubuntu-build
+    steps:
+    - uses: actions/checkout@v7
+    - uses: ./.github/actions/setup-ubuntu-action
+    - name: Install integration test dependecies
+      run: sudo apt-get install -y nats-server
+    - name: Build the tests
+      run: |
+        cargo test --package ebpf-extractor --all-features --no-run --message-format=json \
+          | jq -r 'select(.reason == "compiler-artifact") | select(.profile.test == true) | .executable | select(. != null)' \
+          > test-binaries.txt
+        cat test-binaries.txt
+    # Only the already built test binaries run as root, not cargo itself.
+    - name: Run the tests as root
+      run: |
+        set -e
+        while read -r binary; do
+          sudo env "NATS_SERVER_BINARY=$(which nats-server)" "$binary" --ignored --test-threads=1 --nocapture
+        done < test-binaries.txt
+
   ubuntu-test-detect-intermittent-failures:
     runs-on: ubuntu-latest
     needs: ubuntu-test

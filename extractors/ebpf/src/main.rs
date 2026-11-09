@@ -22,7 +22,7 @@ async fn main() -> Result<()> {
         }
     });
 
-    if let Err(e) = ebpf_extractor::run(args, shutdown_rx).await {
+    if let Err(e) = ebpf_extractor::run(args, shutdown_rx, None).await {
         log::error!("ebpf-extractor failed: {:#}", e);
         std::process::exit(1);
     }
