@@ -20,6 +20,20 @@ pub enum Subject {
     LogExtractor,
 }
 
+impl Subject {
+    /// All subjects the extractors publish to.
+    pub const ALL: [Subject; 8] = [
+        Subject::Mempool,
+        Subject::NetMsg,
+        Subject::NetConn,
+        Subject::Validation,
+        Subject::Rpc,
+        Subject::Ipc,
+        Subject::P2PExtractor,
+        Subject::LogExtractor,
+    ];
+}
+
 impl fmt::Display for Subject {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
