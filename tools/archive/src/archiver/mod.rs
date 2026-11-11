@@ -8,11 +8,12 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use time::macros::format_description;
 use time::OffsetDateTime;
 
-use shared::anyhow::{Context, Result};
+use shared::anyhow::{bail, Context, Result};
 use shared::clap;
 use shared::clap::Parser;
-use shared::futures::stream::StreamExt;
+use shared::futures::stream::{self, StreamExt};
 use shared::log;
+use shared::nats_subjects::Subject;
 use shared::nats_util;
 use shared::prost::Message;
 use shared::protobuf::archive::ArchiveHeader;
@@ -184,6 +185,18 @@ pub struct Args {
     /// Arguments for the connection to the NATS server.
     #[command(flatten)]
     pub nats: nats_util::NatsArgs,
+
+    /// NATS subjects to subscribe to: "*" or subjects the extractors publish
+    /// to, e.g. "--nats-subject netmsg rpc". Decides which events are
+    /// downloaded from the NATS server, while the event filters below decide
+    /// which of them are archived.
+    #[arg(
+        long = "nats-subject",
+        value_name = "SUBJECT",
+        num_args = 1..,
+        default_value = "*"
+    )]
+    pub nats_subjects: Vec<String>,
 
     /// Output directory for archive files.
     #[arg(short, long)]
@@ -371,11 +384,34 @@ impl ArchiveFilter {
 /// the client reconnects instead of processing the unsubscribe.
 pub const DRAIN_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Returns the subjects to subscribe to, without repeats, as NATS would
+/// deliver an event once per matching subscription. "*" already matches every
+/// subject, so it replaces any others.
+fn subscription_subjects(subjects: &[String]) -> Result<Vec<String>> {
+    let known: Vec<String> = Subject::ALL.iter().map(ToString::to_string).collect();
+    if let Some(unknown) = subjects.iter().find(|s| *s != "*" && !known.contains(s)) {
+        bail!(
+            "unknown --nats-subject {:?}, expected \"*\" or one of: {}",
+            unknown,
+            known.join(", ")
+        );
+    }
+    if subjects.iter().any(|s| s == "*") {
+        return Ok(vec!["*".to_string()]);
+    }
+    let mut subjects = subjects.to_vec();
+    subjects.sort();
+    subjects.dedup();
+    Ok(subjects)
+}
+
 pub async fn run(
     args: Args,
     mut shutdown_rx: watch::Receiver<bool>,
     ready_tx: Option<oneshot::Sender<()>>,
 ) -> Result<()> {
+    let subjects = subscription_subjects(&args.nats_subjects)?;
+
     if args.archive_all() {
         log::info!("archiving all events: {}", args.archive_all());
     } else {
@@ -417,11 +453,16 @@ pub async fn run(
         .await
         .with_context(|| format!("connecting to NATS at {}", args.nats.address))?;
 
-    let mut sub = nc
-        .subscribe("*")
-        .await
-        .context("subscribing to all NATS subjects")?;
+    let mut subs = stream::SelectAll::new();
+    for subject in &subjects {
+        subs.push(
+            nc.subscribe(subject.clone())
+                .await
+                .with_context(|| format!("subscribing to NATS subject {:?}", subject))?,
+        );
+    }
     log::info!("Connected to NATS-server at {}", args.nats.address);
+    log::info!("subscribed to NATS subjects: {}", subjects.join(", "));
 
     fs::create_dir_all(&args.output_dir)
         .with_context(|| format!("creating output directory {}", args.output_dir.display()))?;
@@ -435,12 +476,12 @@ pub async fn run(
 
     if let Some(ready_tx) = ready_tx {
         // A flush only empties the client's write buffer and does not wait for
-        // the server to have processed the subscription. Prove the subscription
-        // is registered by publishing a probe to an inbox subscribed on this
-        // same connection: the server handles the commands of a connection in
-        // order, so receiving the probe back implies the earlier "*"
-        // subscription is active. The probe inbox contains dots, so it's not
-        // matched by the single-token "*" subscription.
+        // the server to have processed the subscriptions. Prove they are
+        // registered by publishing a probe to an inbox subscribed on this same
+        // connection: the server handles the commands of a connection in
+        // order, so receiving the probe back implies all earlier subscriptions
+        // are active. The probe inbox contains dots, so it's not matched by
+        // "*" or any of the extractor subjects.
         let inbox = nc.new_inbox();
         let mut probe_sub = nc
             .subscribe(inbox.clone())
@@ -465,7 +506,7 @@ pub async fn run(
 
     loop {
         shared::tokio::select! {
-            maybe_msg = sub.next() => {
+            maybe_msg = subs.next() => {
                 if let Some(msg) = maybe_msg {
                     let mut event = match Event::decode(msg.payload.as_ref()) {
                         Ok(event) => event,
@@ -511,8 +552,8 @@ pub async fn run(
                 if draining {
                     // Unsubscribes, but keeps the subscription open until all
                     // in-flight messages have been yielded. Afterwards,
-                    // sub.next() returns None and the loop above breaks.
-                    if let Err(e) = sub.drain().await {
+                    // subs.next() returns None and the loop above breaks.
+                    if let Err(e) = nc.drain().await {
                         log::warn!("failed to drain the NATS subscription: {}. Shutting down.", e);
                         break;
                     }
@@ -925,5 +966,30 @@ mod tests {
         strip_low_data(&mut event);
 
         assert_eq!(event.encode_to_vec(), before);
+    }
+
+    fn subjects(subjects: &[&str]) -> Result<Vec<String>> {
+        let subjects: Vec<String> = subjects.iter().map(|s| s.to_string()).collect();
+        subscription_subjects(&subjects)
+    }
+
+    #[test]
+    fn nats_subjects_repeated_are_subscribed_once() {
+        assert_eq!(
+            subjects(&["rpc", "netmsg", "rpc", "netmsg"]).unwrap(),
+            ["netmsg", "rpc"]
+        );
+    }
+
+    #[test]
+    fn nats_subjects_wildcard_replaces_others() {
+        assert_eq!(subjects(&["rpc", "*", "netmsg", "*"]).unwrap(), ["*"]);
+    }
+
+    #[test]
+    fn nats_subjects_unknown_are_rejected() {
+        for unknown in ["netmgs", ">", "peer-observer.>"] {
+            subjects(&["netmsg", unknown]).unwrap_err();
+        }
     }
 }
