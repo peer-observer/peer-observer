@@ -5,7 +5,7 @@
 use shared::anyhow::{self, Context};
 use shared::clap::Parser;
 use shared::futures::StreamExt;
-use shared::log::{info, warn, Level};
+use shared::log::{debug, info, warn, Level};
 use shared::metricserver;
 use shared::nats_util;
 use shared::prost::Message;
@@ -189,18 +189,51 @@ fn handle_event(
     let unwrapped = Event::decode(msg.payload).context("decoding event")?;
     if let Some(event) = unwrapped.peer_observer_event {
         match event {
-            PeerObserverEvent::EbpfExtractor(ebpf) => match ebpf.ebpf_event.unwrap() {
-                ebpf::EbpfEvent::Message(msg) => {
+            // A oneof can be None, e.g. when the extractor uses a newer
+            // schema with a variant we don't know about. Skip these events.
+            PeerObserverEvent::EbpfExtractor(ebpf) => match ebpf.ebpf_event {
+                Some(ebpf::EbpfEvent::Message(msg)) => {
                     handle_p2p_message(&msg, unwrapped.timestamp, metrics);
                 }
-                ebpf::EbpfEvent::Connection(conn) => {
-                    handle_connection_event(&conn.event.unwrap(), unwrapped.timestamp, metrics);
+                Some(ebpf::EbpfEvent::Connection(conn)) => {
+                    if let Some(e) = conn.event {
+                        handle_connection_event(&e, unwrapped.timestamp, metrics);
+                    } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "skipping ebpf connection event on subject '{}': unknown or missing event variant",
+                            msg.subject
+                        );
+                    }
                 }
-                ebpf::EbpfEvent::Mempool(mempool) => {
-                    handle_mempool_event(&mempool.event.unwrap(), metrics);
+                Some(ebpf::EbpfEvent::Mempool(mempool)) => {
+                    if let Some(e) = mempool.event {
+                        handle_mempool_event(&e, metrics);
+                    } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "skipping ebpf mempool event on subject '{}': unknown or missing event variant",
+                            msg.subject
+                        );
+                    }
                 }
-                ebpf::EbpfEvent::Validation(validation) => {
-                    handle_validation_event(&validation.event.unwrap(), metrics);
+                Some(ebpf::EbpfEvent::Validation(validation)) => {
+                    if let Some(e) = validation.event {
+                        handle_validation_event(&e, metrics);
+                    } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "skipping ebpf validation event on subject '{}': unknown or missing event variant",
+                            msg.subject
+                        );
+                    }
+                }
+                None => {
+                    debug!(
+                        target: LOG_TARGET,
+                        "skipping ebpf event on subject '{}': unknown or missing ebpf_event variant",
+                        msg.subject
+                    );
                 }
             },
             PeerObserverEvent::RpcExtractor(r) => {
