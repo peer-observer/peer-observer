@@ -17,9 +17,11 @@ const MAX_MISBEHAVING_MESSAGE_LENGTH: usize = 128;
 /// Based on Bitcoin Core's MAX_PROTOCOL_MESSAGE_LENGTH. Longer messages are rejected.
 const MAX_P2P_MESSAGE_SIZE: usize = 4194304; // 4 MB
 
+// These must match the lengths in the BPF program, or reading its events
+// back into these structs reads past the end of them.
 const TXID_LENGTH: usize = 32;
 const REMOVAL_REASON_LENGTH: usize = 9;
-const REJECTION_REASON_LENGTH: usize = 118;
+const REJECTION_REASON_LENGTH: usize = 113;
 const HASH_LENGTH: usize = 32;
 
 /// The metadata for a P2P message.
@@ -84,25 +86,27 @@ impl fmt::Display for P2PMessageMetadata {
     }
 }
 
-pub struct P2PMessage {
+/// A P2P message as it was put into the ring buffer. The payload points
+/// straight at the ring buffer, so nothing is copied to read it.
+pub struct P2PMessage<'a> {
     pub meta: P2PMessageMetadata,
-    pub payload: Vec<u8>,
+    pub payload: &'a [u8],
 }
 
-impl P2PMessage {
-    pub fn from_bytes(x: &[u8]) -> P2PMessage {
+impl<'a> P2PMessage<'a> {
+    pub fn from_bytes(x: &'a [u8]) -> P2PMessage<'a> {
         const SIZEOF_METADATA_STRUCT: usize = mem::size_of::<P2PMessageMetadata>();
         let meta_bytes = &x[..SIZEOF_METADATA_STRUCT];
         let meta = unsafe { ptr::read_unaligned(meta_bytes.as_ptr() as *const P2PMessageMetadata) };
         let payload_size = cmp::min(meta.msg_size as usize, MAX_P2P_MESSAGE_SIZE);
-        let payload = x[SIZEOF_METADATA_STRUCT..SIZEOF_METADATA_STRUCT + payload_size].to_vec();
+        let payload = &x[SIZEOF_METADATA_STRUCT..SIZEOF_METADATA_STRUCT + payload_size];
         P2PMessage { meta, payload }
     }
 
     pub fn decode_to_protobuf_network_message(
         &self,
     ) -> Result<message::message_event::Msg, P2PMessageDecodeError> {
-        decode_network_message(&self.meta, &self.payload)
+        decode_network_message(&self.meta, self.payload)
     }
 }
 
@@ -443,20 +447,27 @@ fn decode_rust_bitcoin_network_message(
     meta: &P2PMessageMetadata,
     payload: &[u8],
 ) -> Result<NetworkMessage, P2PMessageDecodeError> {
-    let mut raw_message: Vec<u8> = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    for (i, b) in meta.msg_type.iter().enumerate() {
-        if *b == 0x00 {
-            break;
-        }
-        raw_message[4 + i] = *b;
-    }
-    let payload_hash = sha256d::Hash::hash(payload);
-    raw_message.append(&mut (meta.msg_size as u32).to_le_bytes().to_vec());
-    raw_message.append(&mut payload_hash[..4].to_vec());
-    raw_message.append(&mut payload.to_vec());
+    // 4 bytes of network magic, the message type padded to 12 bytes, the
+    // payload length and the first four bytes of the payload hash.
+    const HEADER_LENGTH: usize = 24;
+
+    // rust-bitcoin decodes whole messages, so we put a header back in front
+    // of the payload.
+    let mut raw_message: Vec<u8> = Vec::with_capacity(HEADER_LENGTH + payload.len());
+    raw_message.extend_from_slice(&[0u8; 4]);
+    let msg_type_length = meta
+        .msg_type
+        .iter()
+        .position(|b| *b == 0x00)
+        .unwrap_or(MAX_MSG_TYPE_LENGTH);
+    raw_message.extend_from_slice(&meta.msg_type[..msg_type_length]);
+    raw_message.resize(HEADER_LENGTH - 8, 0);
+    raw_message.extend_from_slice(&(meta.msg_size as u32).to_le_bytes());
+    raw_message.extend_from_slice(&sha256d::Hash::hash(payload)[..4]);
+    raw_message.extend_from_slice(payload);
 
     match RawNetworkMessage::consensus_decode(&mut raw_message.as_slice()) {
-        Ok(rnm) => Ok(rnm.payload().clone()),
+        Ok(rnm) => Ok(rnm.into_payload()),
         Err(e) => Err(P2PMessageDecodeError::new(meta.clone(), e)),
     }
 }

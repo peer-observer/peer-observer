@@ -9,6 +9,7 @@ const NATS_SUBJECT_IPC: &str = "ipc";
 const NATS_SUBJECT_P2P_EXTRACTOR: &str = "p2p-extractor";
 const NATS_SUBJECT_LOG_EXTRACTOR: &str = "log-extractor";
 
+#[derive(Clone, Copy)]
 pub enum Subject {
     Mempool,
     NetMsg,
@@ -20,17 +21,24 @@ pub enum Subject {
     LogExtractor,
 }
 
+impl Subject {
+    /// The subject name. Borrowed, so that using it doesn't allocate.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Subject::Mempool => NATS_SUBJECT_MEMPOOL,
+            Subject::NetConn => NATS_SUBJECT_NETCONN,
+            Subject::NetMsg => NATS_SUBJECT_NETMSG,
+            Subject::Validation => NATS_SUBJECT_VALIDATION,
+            Subject::Rpc => NATS_SUBJECT_RPC,
+            Subject::Ipc => NATS_SUBJECT_IPC,
+            Subject::P2PExtractor => NATS_SUBJECT_P2P_EXTRACTOR,
+            Subject::LogExtractor => NATS_SUBJECT_LOG_EXTRACTOR,
+        }
+    }
+}
+
 impl fmt::Display for Subject {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Subject::Mempool => write!(f, "{}", NATS_SUBJECT_MEMPOOL),
-            Subject::NetConn => write!(f, "{}", NATS_SUBJECT_NETCONN),
-            Subject::NetMsg => write!(f, "{}", NATS_SUBJECT_NETMSG),
-            Subject::Validation => write!(f, "{}", NATS_SUBJECT_VALIDATION),
-            Subject::Rpc => write!(f, "{}", NATS_SUBJECT_RPC),
-            Subject::Ipc => write!(f, "{}", NATS_SUBJECT_IPC),
-            Subject::P2PExtractor => write!(f, "{}", NATS_SUBJECT_P2P_EXTRACTOR),
-            Subject::LogExtractor => write!(f, "{}", NATS_SUBJECT_LOG_EXTRACTOR),
-        }
+        f.write_str(self.as_str())
     }
 }
