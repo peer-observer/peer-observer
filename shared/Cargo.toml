@@ -28,7 +28,7 @@ zstd = "0.14"
 # When updating the Bitcoin Core version used, grep for CORE_VERSION_GREP
 # and update the corepc_regtest_client::types::v* to the new version.
 bitcoind = { version = "0.43.2", features = ["download", "31_0"] }
-corepc-regtest-client = { version = "0.18.0" }
+corepc-regtest-client = { version = "0.19.0" }
 
 [build-dependencies]
 prost-build = "0.14"
